@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import styles from './Reciplier.module.css'; // Import the CSS module
 
 const RecipeScaler = () => {
   const [recipeText, setRecipeText] = useState('');
@@ -262,7 +263,7 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
         onFocus={() => handleFocus(segment.id, scaledValue)}
         onBlur={handleBlur}
         onKeyPress={handleKeyPress}
-        className="w-20 p-1 border rounded text-center mx-1"
+        className={`${styles['w-20']} ${styles['p-1']} ${styles.border} ${styles.rounded} ${styles['text-center']} ${styles['mx-1']}`}
       />
     );
   };
@@ -270,19 +271,19 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
   // Render a constant (non-scaling) number with a subtle highlight
   const renderConstant = (segment) => {
     return (
-      <span className="bg-gray-100 text-gray-700 px-1 py-0.5 rounded">{segment.text}</span>
+      <span className={`${styles.constant} ${styles['px-1']} ${styles['py-0.5']}`} >{segment.text}</span>
     );
   };
 
   return (
-    <div className="p-4 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Reciplier</h1>
+    <div className={styles['reciplier-container']}> 
+      <h1 className={`${styles['text-2xl']} ${styles['font-bold']} ${styles['mb-4']}`}>Reciplier</h1>
       
-      <div className="mb-6">
-        <div className="flex justify-between items-center mb-2">
+      <div className={styles['mb-6']}>
+        <div className={`${styles.flex} ${styles['justify-between']} ${styles['items-center']} ${styles['mb-2']}`}>
           <select 
             onChange={handleExampleChange}
-            className="p-2 border rounded text-gray-700"
+            className={`${styles['p-2']} ${styles.border} ${styles.rounded} ${styles['text-gray-700']}`}
             value=""
           >
             <option value="">Example Recipes</option>
@@ -292,27 +293,27 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
           
           <button 
             onClick={resetScaling}
-            className={`text-sm px-3 py-2 rounded ${scalingFactor !== 1 ? 'bg-gray-100 hover:bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+            className={`${styles['text-sm']} ${styles['px-3']} ${styles['py-2']} ${styles.rounded} ${styles['ml-2']} ${styles['bg-gray-100']} ${styles['hover:bg-gray-200']} ${styles['text-gray-800']}`}
             disabled={scalingFactor === 1}
           >
             Reset Scaling
           </button>
         </div>
         <textarea 
-          className="w-full p-3 border rounded h-40"
+          className={`${styles['w-full']} ${styles['p-3']} ${styles.border} ${styles.rounded} ${styles['h-40']}`}
           value={recipeText}
           onChange={(e) => setRecipeText(e.target.value)}
           placeholder="Paste your recipe here... (Tip: Add = before numbers that shouldn't scale, like =350 for oven temperature)"
         />
       </div>
       
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium">Scale Recipe:</span>
-          <span className="text-sm font-bold">{scalingFactor.toFixed(1)}x</span>
+      <div className={styles['mb-4']}>
+        <div className={`${styles.flex} ${styles['items-center']} ${styles['justify-between']} ${styles['mb-2']}`}>
+          <span className={`${styles['text-sm']} ${styles['font-medium']}`}>Scale Recipe:</span>
+          <span className={`${styles['text-sm']} ${styles['font-bold']}`}>{scalingFactor.toFixed(1)}x</span>
         </div>
-        <div className="flex items-center">
-          <span className="text-xs mr-2">0.1x</span>
+        <div className={`${styles.flex} ${styles['items-center']}`}>
+          <span className={`${styles['text-xs']} ${styles['mr-2']}`}>0.1x</span>
           <input
             type="range"
             min="0.1"
@@ -320,24 +321,24 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
             step="0.1"
             value={scalingFactor}
             onChange={(e) => setScalingFactor(parseFloat(e.target.value))}
-            className="flex-grow h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            className={`${styles['flex-grow']} ${styles['h-2']} ${styles['bg-gray-200']} ${styles['rounded-lg']} ${styles['appearance-none']} ${styles['cursor-pointer']}`}
           />
-          <span className="text-xs ml-2">10x</span>
+          <span className={`${styles['text-xs']} ${styles['ml-2']}`}>10x</span>
         </div>
       </div>
       
       {parsedRecipe.length > 0 && (
-        <div className="bg-gray-50 p-4 rounded">
+        <div className={`${styles['bg-gray-50']} ${styles['p-4']} ${styles.rounded} ${styles['recipe-output']}`}>
           {parsedRecipe.map((line) => (
-            <div key={line.id} className="mb-2">
-              <span className="font-mono text-base">
+            <div key={line.id} className={styles['mb-2']}>
+              <span className={`${styles['font-mono']} ${styles['text-base']}`}>
                 {line.segments.map((segment, i) => (
                   segment.isNumber ? (
-                    <span key={i} className="inline-flex items-center">
+                    <span key={i} className={`${styles['inline-flex']} ${styles['items-center']}`}>
                       {renderNumberField(segment)}
                     </span>
                   ) : segment.isConstant ? (
-                    <span key={i} className="inline-flex items-center">
+                    <span key={i} className={`${styles['inline-flex']} ${styles['items-center']}`}>
                       {renderConstant(segment)}
                     </span>
                   ) : (
