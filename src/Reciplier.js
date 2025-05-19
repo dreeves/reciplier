@@ -10,20 +10,40 @@ const RecipeScaler = () => {
   const [editingValue, setEditingValue] = useState('');
   
   // Default recipe and examples
-  const defaultRecipe = `Basic Pancakes
+  const defaultRecipe = `Shortcake
 
-1 cup all-purpose flour
-2 tablespoons sugar
-2 teaspoons baking powder
-1/2 teaspoon salt
-1 cup milk
-1 large egg
-2 tablespoons vegetable oil
+Preheat oven to =325°F. Line bottom of =9x9 square pan with parchment paper.
 
-Mix dry ingredients. Combine wet ingredients separately, then add to dry. 
-Cook on a greased griddle at =350°F for about =2 minutes per side until golden.
+* 2   C   flour (can do half/half cake flour)
+* 1   C   sugar
+* 1/2 C   butter (1 stick)
+* 2   tsp baking powder
+* 1/2 tsp salt
+* 3/4 C   milk
+* 1   tsp vanilla
 
-Makes 8 pancakes, =120 calories each.`;
+Mix together dry ingredients. Add cold butter cut up into pieces and then cut into the flour as for making pastry, until it resembles coarse crumbs.
+
+Add milk and vanilla and mix well.
+
+Pour into the prepared cake pan, spread evenly. 
+
+Bake =30 to =40 minutes @ =325°F`;
+
+// Pancakes (according to Claude)
+//
+// 1 cup all-purpose flour
+// 2 tablespoons sugar
+// 2 teaspoons baking powder
+// 1/2 teaspoon salt
+// 1 cup milk
+// 1 large egg
+// 2 tablespoons vegetable oil
+// 
+// Mix dry ingredients. Combine wet ingredients separately, then add to dry. 
+// Cook on a greased griddle at =350°F for about =2 minutes per side until golden.
+// 
+// Makes 8 pancakes, =120 calories each.`;
 
   // Example recipes
   const exampleRecipes = {
