@@ -1,6 +1,6 @@
 {
   "files": {
-    "main.css": "/reciplier/static/css/main.075bc62a.chunk.css",
+    "main.css": "/reciplier/static/css/main.aee0b5d3.chunk.css",
     "main.js": "/reciplier/static/js/main.768498e6.chunk.js",
     "main.js.map": "/reciplier/static/js/main.768498e6.chunk.js.map",
     "runtime~main.js": "/reciplier/static/js/runtime~main.07e1c579.js",
@@ -10,9 +10,9 @@
     "static/js/3.ba8b7f13.chunk.js": "/reciplier/static/js/3.ba8b7f13.chunk.js",
     "static/js/3.ba8b7f13.chunk.js.map": "/reciplier/static/js/3.ba8b7f13.chunk.js.map",
     "index.html": "/reciplier/index.html",
-    "precache-manifest.8592db0da3b11188dc0a3f388a0d3446.js": "/reciplier/precache-manifest.8592db0da3b11188dc0a3f388a0d3446.js",
+    "precache-manifest.29703cc20f45eaf6b552ba2077cde724.js": "/reciplier/precache-manifest.29703cc20f45eaf6b552ba2077cde724.js",
     "service-worker.js": "/reciplier/service-worker.js",
-    "static/css/main.075bc62a.chunk.css.map": "/reciplier/static/css/main.075bc62a.chunk.css.map",
+    "static/css/main.aee0b5d3.chunk.css.map": "/reciplier/static/css/main.aee0b5d3.chunk.css.map",
     "static/media/logo.svg": "/reciplier/static/media/logo.06e73328.svg"
   }
 }
