@@ -48,14 +48,16 @@ Bake =30 to =40 minutes @ =325°F`;
   // Example recipes
   const exampleRecipes = {
     "": "",
-    "Crepes": `* eggs: 12 large ones
-* milk: 5.333 cups (1.2618 liters = 1282.19 grams whole milk or 1301.75 grams lactaid)
-* flour: 3 cups scooped (440 grams for years, 420 grams most recently, 360 most likely intended, up to 375)
+    "Soule-Reeves Crepes": `\
+* eggs: 12 large ones
+* milk: 5.333 cups (1.2618 liters = 1300 grams)
+* flour: 3 cups (400 grams)
 * butter: 8 tbsp melted (112 grams)
 * salt: 2 tsp (14 grams) 
 
 Yield: roughly 29 crepes`,
-    "Chocolate Chip Cookies": `* 1 cup granulated sugar
+    "Camelot Chocolate Chip Cookies": `\
+* 1 cup granulated sugar
 * 1 cup brown sugar
 * 1 cup butter, softened
 * 2 eggs
@@ -191,7 +193,12 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
   // Focus handler for input fields
   const handleFocus = (segmentId, value) => {
     setActiveField(segmentId);
-    setEditingValue(value.toString());
+    // Format the value to a maximum of 4 decimal places for editing
+    let formattedValue = value.toFixed(4).replace(/\.?0+$/, '');
+    if (formattedValue.endsWith('.')) {
+      formattedValue = formattedValue.slice(0, -1);
+    }
+    setEditingValue(formattedValue);
   };
 
   // Blur handler for input fields
