@@ -43,14 +43,14 @@ Bake =30 to =40 minutes @ =325°F`;
 // Mix dry ingredients. Combine wet ingredients separately, then add to dry. 
 // Cook on a greased griddle at =350°F for about =2 minutes per side until golden.
 // 
-// Makes 8 pancakes, =120 calories each.`;
+// Makes 8 pancakes, =120 calories each.
 
   // Example recipes
   const exampleRecipes = {
     "": "",
     "Soule-Reeves Crepes": `\
 * eggs: 12 large ones
-* milk: 5.333 cups (1.2618 liters = 1300 grams)
+* milk: 5.333 cups (1.2618 liters or 1300 grams)
 * flour: 3 cups (400 grams)
 * butter: 8 tbsp melted (112 grams)
 * salt: 2 tsp (14 grams) 
@@ -193,6 +193,7 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
   // Focus handler for input fields
   const handleFocus = (segmentId, value) => {
     setActiveField(segmentId);
+    //setEditingValue(value.toString());
     // Format the value to a maximum of 4 decimal places for editing
     let formattedValue = value.toFixed(4).replace(/\.?0+$/, '');
     if (formattedValue.endsWith('.')) {
@@ -314,8 +315,8 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
             value=""
           >
             <option value="">Example Recipes</option>
-            <option value="Crepes">Crepes</option>
-            <option value="Chocolate Chip Cookies">Chocolate Chip Cookies</option>
+            <option value="Soule-Reeves Crepes">Soule-Reeves Crepes</option>
+            <option value="Camelot Chocolate Chip Cookies">Chocolate Chip Cookies</option>
           </select>
           
           <button 
