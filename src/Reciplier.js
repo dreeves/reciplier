@@ -40,8 +40,6 @@ const RecipeScaler = () => {
   // Example recipes
   const exampleRecipes = {
     "Shortcake": `\
-Shortcake
-
 Preheat oven to =325°F. Line bottom of =9x9 square pan with parchment paper.
 
 * 2   C   flour (can do half/half cake flour)
