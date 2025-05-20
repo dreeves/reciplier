@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import styles from './Reciplier.module.css'; // Import the CSS module
 
+// Helper function to format numbers for display
+const formatDisplayNumber = (num) => {
+  if (typeof num !== 'number' || isNaN(num)) {
+    return ''; // Or some other placeholder for invalid numbers
+  }
+  let formatted = num.toFixed(4).replace(/\.?0+$/, '');
+  if (formatted.endsWith('.')) {
+    formatted = formatted.slice(0, -1);
+  }
+  return formatted;
+};
+
 const RecipeScaler = () => {
   const [recipeText, setRecipeText] = useState('');
   const [parsedRecipe, setParsedRecipe] = useState([]);
@@ -8,28 +20,8 @@ const RecipeScaler = () => {
   const [scalingFactor, setScalingFactor] = useState(1);
   const [activeField, setActiveField] = useState(null);
   const [editingValue, setEditingValue] = useState('');
+  const [currentExampleKey, setCurrentExampleKey] = useState("Shortcake"); // To track selected example
   
-  // Default recipe and examples
-  const defaultRecipe = `Shortcake
-
-Preheat oven to =325°F. Line bottom of =9x9 square pan with parchment paper.
-
-* 2   C   flour (can do half/half cake flour)
-* 1   C   sugar
-* 1/2 C   butter (1 stick)
-* 2   tsp baking powder
-* 1/2 tsp salt
-* 3/4 C   milk
-* 1   tsp vanilla
-
-Mix together dry ingredients. Add cold butter cut up into pieces and then cut into the flour as for making pastry, until it resembles coarse crumbs.
-
-Add milk and vanilla and mix well.
-
-Pour into the prepared cake pan, spread evenly. 
-
-Bake =30 to =40 minutes @ =325°F`;
-
 // Pancakes (according to Claude)
 //
 // 1 cup all-purpose flour
@@ -47,7 +39,26 @@ Bake =30 to =40 minutes @ =325°F`;
 
   // Example recipes
   const exampleRecipes = {
-    "": "",
+    "Shortcake": `\
+Shortcake
+
+Preheat oven to =325°F. Line bottom of =9x9 square pan with parchment paper.
+
+* 2   C   flour (can do half/half cake flour)
+* 1   C   sugar
+* 1/2 C   butter (1 stick)
+* 2   tsp baking powder
+* 1/2 tsp salt
+* 3/4 C   milk
+* 1   tsp vanilla
+
+Mix together dry ingredients. Add cold butter cut up into pieces and then cut into the flour as for making pastry, until it resembles coarse crumbs.
+
+Add milk and vanilla and mix well.
+
+Pour into the prepared cake pan, spread evenly. 
+
+Bake =30 to =40 minutes @ =325°F`,
     "Soule-Reeves Crepes": `\
 * eggs: 12 large ones
 * milk: 5.333 cups (1.2618 liters or 1300 grams)
@@ -73,15 +84,18 @@ Turn to Stir Speed. Gradually add baking soda, salt, and flour to sugar mixture 
 
 Drop rounded teaspoonfuls onto greased baking sheets, about =2 inches apart. Bake at =375 F for =10 to =12 minutes. Remove from backing sheets *immediately* and cool on wire racks. 
 
-Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
+Yield: 54 cookies, =117 cal (=17g carb) per cookie.`,
+    "Blank": "",
   };
 
   // Set default recipe on initial load
   useEffect(() => {
-    if (!recipeText && defaultRecipe) {
-      setRecipeText(defaultRecipe);
+    // Load Shortcake by default
+    if (!recipeText && exampleRecipes["Shortcake"]) { // Check if Shortcake exists
+      setRecipeText(exampleRecipes["Shortcake"]);
+      setCurrentExampleKey("Shortcake");
     }
-  }, []);
+  }, []); // Empty dependency array means this runs once on mount
 
   // Helper function to convert fraction strings to decimal
   const parseFraction = (fractionStr) => {
@@ -97,11 +111,16 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
     if (!recipeText.trim()) {
       setParsedRecipe([]);
       setOriginalValues([]);
+      // If recipeText is blank, update dropdown to show "Blank" or placeholder
+      const blankKey = Object.keys(exampleRecipes).find(key => exampleRecipes[key] === recipeText.trim());
+      if (blankKey) {
+        setCurrentExampleKey(blankKey);
+      } else {
+        setCurrentExampleKey(""); // Set to placeholder if custom text not matching "Blank"
+      }
       return;
     }
     
-    // Regular expression to find numbers (including fractions like 1/4) and numbers with = prefix
-    // First group is the optional '=' prefix, second group is the number
     const numberRegex = /(?:(\=)?)(\d+(?:\.\d+)?(?:\/\d+)?)/g;
     
     const lines = recipeText.split('\n');
@@ -119,7 +138,6 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
       let match;
       let matchIndex = 0;
       
-      // Use exec for better control over capturing groups
       const regex = new RegExp(numberRegex);
       while ((match = regex.exec(line)) !== null) {
         const fullMatch = match[0];
@@ -128,7 +146,6 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
         const startPos = match.index;
         const isConstant = equalsPrefix === '=';
         
-        // Add text before the number
         if (startPos > lastIndex) {
           segments.push({ 
             text: line.substring(lastIndex, startPos), 
@@ -136,18 +153,15 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
           });
         }
         
-        // Handle the number (either as editable field or constant)
         const value = parseFraction(numberStr);
         if (!isNaN(value)) {
           if (isConstant) {
-            // Constant value (non-scaling) - render as text with the equals sign removed
             segments.push({
               text: numberStr,
               isNumber: false,
               isConstant: true
             });
           } else {
-            // Regular scaling number - make it editable
             const id = `num-${lineIndex}-${matchIndex}`;
             segments.push({ 
               id,
@@ -159,7 +173,6 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
             original.push(value);
           }
         } else {
-          // Not a valid number - render as text
           segments.push({ 
             text: fullMatch, 
             isNumber: false 
@@ -170,7 +183,6 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
         matchIndex++;
       }
       
-      // Add any remaining text after the last number
       if (lastIndex < line.length) {
         segments.push({ 
           text: line.substring(lastIndex), 
@@ -188,24 +200,27 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
     setParsedRecipe(parsedLines);
     setOriginalValues(original);
     setScalingFactor(1);
+
+    let matchingKey = "";
+    for (const key in exampleRecipes) {
+      if (exampleRecipes[key] === recipeText) {
+        matchingKey = key;
+        break;
+      }
+    }
+    setCurrentExampleKey(matchingKey);
+
   }, [recipeText]);
 
   // Focus handler for input fields
   const handleFocus = (segmentId, value) => {
     setActiveField(segmentId);
-    //setEditingValue(value.toString());
-    // Format the value to a maximum of 4 decimal places for editing
-    let formattedValue = value.toFixed(4).replace(/\.?0+$/, '');
-    if (formattedValue.endsWith('.')) {
-      formattedValue = formattedValue.slice(0, -1);
-    }
-    setEditingValue(formattedValue);
+    setEditingValue(formatDisplayNumber(value)); // Use helper
   };
 
   // Blur handler for input fields
   const handleBlur = () => {
     if (activeField && editingValue) {
-      // Apply the edit when leaving the field
       const numValue = parseFloat(editingValue);
       if (!isNaN(numValue) && numValue > 0) {
         handleNumberChange(activeField, numValue);
@@ -231,11 +246,9 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
     const numValue = parseFloat(newValue);
     if (isNaN(numValue) || numValue <= 0) return;
     
-    // Find the original value of this number to calculate scaling factor
     let originalIndex = -1;
     let originalValue = 0;
     
-    // Find the segment in our parsed recipe
     for (const line of parsedRecipe) {
       for (const segment of line.segments) {
         if (segment.id === segmentId) {
@@ -246,10 +259,36 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
       if (originalIndex !== -1) break;
     }
     
-    if (originalIndex === -1) return;
+    if (originalIndex === -1 || originalIndex >= originalValues.length) return; // Added boundary check
     originalValue = originalValues[originalIndex];
     
-    // Calculate new scaling factor
+    if (originalValue === 0 && numValue !== 0) { // Avoid division by zero if original is 0 but new is not
+        // Decide how to handle this case, e.g., set scaling factor to a default or based on other numbers
+        // For now, let's just prevent division by zero and not scale
+        console.warn("Original value is 0, cannot calculate scaling factor.");
+        // Optionally, update the specific number directly without scaling others
+        // This part needs careful consideration based on desired behavior
+        const newParsedRecipe = parsedRecipe.map(line => ({
+            ...line,
+            segments: line.segments.map(seg => {
+                if (seg.id === segmentId) {
+                    return { ...seg, value: numValue }; // Directly update value
+                }
+                return seg;
+            })
+        }));
+        setParsedRecipe(newParsedRecipe);
+        // Update originalValues as well if this change should be the new base
+        const newOriginalValues = [...originalValues];
+        newOriginalValues[originalIndex] = numValue;
+        setOriginalValues(newOriginalValues);
+        return; 
+    } else if (originalValue === 0 && numValue === 0) {
+        // If both are zero, scaling factor remains unchanged (or 1 if it was reset)
+        return;
+    }
+
+
     const newScalingFactor = numValue / originalValue;
     setScalingFactor(newScalingFactor);
   };
@@ -261,8 +300,11 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
 
   // Load example recipe
   const handleExampleChange = (e) => {
-    const selectedRecipe = e.target.value;
-    setRecipeText(exampleRecipes[selectedRecipe]);
+    const selectedKey = e.target.value;
+    setCurrentExampleKey(selectedKey);
+    if (exampleRecipes.hasOwnProperty(selectedKey)) {
+      setRecipeText(exampleRecipes[selectedKey]);
+    }
   };
 
   // Render a number field, handling active editing state
@@ -270,17 +312,11 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
     const scaledValue = segment.value * scalingFactor;
     const isActive = activeField === segment.id;
     
-    // Display the editing value if this field is active, otherwise format the scaled value
     let displayValue;
     if (isActive) {
       displayValue = editingValue;
     } else {
-      // Simply use toFixed(4) - it will always limit to exactly 4 decimal places
-      displayValue = scaledValue.toFixed(4).replace(/\.?0+$/, '');
-      // If we ended up with just a decimal point at the end, remove it
-      if (displayValue.endsWith('.')) {
-        displayValue = displayValue.slice(0, -1);
-      }
+      displayValue = formatDisplayNumber(scaledValue); // Use helper
     }
     
     return (
@@ -311,18 +347,21 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
         <div className={`${styles.flex} ${styles['justify-between']} ${styles['items-center']} ${styles['mb-2']}`}>
           <select 
             onChange={handleExampleChange}
+            value={currentExampleKey} 
             className={`${styles['p-2']} ${styles.border} ${styles.rounded} ${styles['text-gray-700']}`}
-            value=""
           >
-            <option value="">Example Recipes</option>
-            <option value="Soule-Reeves Crepes">Soule-Reeves Crepes</option>
-            <option value="Camelot Chocolate Chip Cookies">Chocolate Chip Cookies</option>
+            {currentExampleKey === "" && <option value="" disabled>Example Recipes</option>}
+            {Object.keys(exampleRecipes).map(key => (
+              <option key={key} value={key}>
+                {key === "Blank" ? "Blank -- paste any recipe below!" : key}
+              </option>
+            ))}
           </select>
           
           <button 
             onClick={resetScaling}
             className={`${styles['text-sm']} ${styles['px-3']} ${styles['py-2']} ${styles.rounded} ${styles['ml-2']} ${styles['bg-gray-100']} ${styles['hover:bg-gray-200']} ${styles['text-gray-800']}`}
-            disabled={scalingFactor === 1}
+            disabled={scalingFactor === 1 && currentExampleKey !== "" && exampleRecipes[currentExampleKey] === recipeText}
           >
             Reset Scaling
           </button>
@@ -338,7 +377,8 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`
       <div className={styles['mb-4']}>
         <div className={`${styles.flex} ${styles['items-center']} ${styles['justify-between']} ${styles['mb-2']}`}>
           <span className={`${styles['text-sm']} ${styles['font-medium']}`}>Scale Recipe:</span>
-          <span className={`${styles['text-sm']} ${styles['font-bold']}`}>{scalingFactor.toFixed(1)}x</span>
+          {/* Use the helper function for scalingFactor display */}
+          <span className={`${styles['text-sm']} ${styles['font-bold']}`}>{formatDisplayNumber(scalingFactor)}x</span>
         </div>
         <div className={`${styles.flex} ${styles['items-center']}`}>
           <span className={`${styles['text-xs']} ${styles['mr-2']}`}>0.1x</span>
