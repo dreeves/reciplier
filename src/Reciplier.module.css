@@ -122,6 +122,10 @@
   color: #1f2937;
 }
 
+.text-gray-300 {
+  color: #d1d5db;
+}
+
 /* Flexbox */
 .flex {
   display: flex;
@@ -260,4 +264,48 @@ button:disabled {
 
 .h-40 {
   height: 10rem;
+}
+
+/* Add new styles for the copy button */
+.bg-blue-500 {
+  background-color: #3b82f6;
+}
+
+.hover\:bg-blue-600:hover {
+  background-color: #2563eb;
+}
+
+.text-white {
+  color: white;
+}
+
+/* Add notification styles */
+.notification {
+  background-color: #f3f4f6;
+  color: #1f2937;
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  text-align: center;
+  animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Add hover styles for links */
+.hover\:text-gray-600:hover {
+  color: #4b5563;
+  text-decoration: underline;
+}
+
+.mt-1 {
+  margin-top: 0.25rem;
 }

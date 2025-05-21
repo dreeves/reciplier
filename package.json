@@ -1,6 +1,6 @@
 {
   "name": "reciplier",
-  "version": "2025.05.20a",
+  "version": "2025.05.21-b",
   "homepage": "https://reciplier.dreev.es/",
   "dependencies": {
     "@testing-library/dom": "^10.4.0",

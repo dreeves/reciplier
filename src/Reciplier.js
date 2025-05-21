@@ -13,15 +13,6 @@ const formatDisplayNumber = (num) => {
   return formatted;
 };
 
-const RecipeScaler = () => {
-  const [recipeText, setRecipeText] = useState('');
-  const [parsedRecipe, setParsedRecipe] = useState([]);
-  const [originalValues, setOriginalValues] = useState([]);
-  const [scalingFactor, setScalingFactor] = useState(1);
-  const [activeField, setActiveField] = useState(null);
-  const [editingValue, setEditingValue] = useState('');
-  const [currentExampleKey, setCurrentExampleKey] = useState("Shortcake"); // To track selected example
-  
 // Pancakes (according to Claude)
 //
 // 1 cup all-purpose flour
@@ -37,6 +28,7 @@ const RecipeScaler = () => {
 // 
 // Makes 8 pancakes, =120 calories each.
 
+const RecipeScaler = () => {
   // Example recipes
   const exampleRecipes = {
     "Shortcake": `\
@@ -86,14 +78,33 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`,
     "Blank": "",
   };
 
+  const [recipeText, setRecipeText] = useState('');
+  const [parsedRecipe, setParsedRecipe] = useState([]);
+  const [originalValues, setOriginalValues] = useState([]);
+  const [scalingFactor, setScalingFactor] = useState(1);
+  const [activeField, setActiveField] = useState(null);
+  const [editingValue, setEditingValue] = useState('');
+  const [currentExampleKey, setCurrentExampleKey] = useState("Shortcake");
+  const [notification, setNotification] = useState('');
+  const [notificationTimeout, setNotificationTimeout] = useState(null);
+
   // Set default recipe on initial load
   useEffect(() => {
     // Load Shortcake by default
-    if (!recipeText && exampleRecipes["Shortcake"]) { // Check if Shortcake exists
+    if (!recipeText && exampleRecipes["Shortcake"]) {
       setRecipeText(exampleRecipes["Shortcake"]);
-      setCurrentExampleKey("Shortcake");
     }
   }, []); // Empty dependency array means this runs once on mount
+
+  // Show a temporary notification
+  const showNotification = (message) => {
+    setNotification(message);
+    if (notificationTimeout) {
+      clearTimeout(notificationTimeout);
+    }
+    const timeout = setTimeout(() => setNotification(''), 2000);
+    setNotificationTimeout(timeout);
+  };
 
   // Helper function to convert fraction strings to decimal
   const parseFraction = (fractionStr) => {
@@ -305,6 +316,39 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`,
     }
   };
 
+  // Generate scaled recipe text for copying
+  const getScaledRecipeText = () => {
+    return parsedRecipe.map(line => {
+      return line.segments.map(segment => {
+        if (segment.isNumber) {
+          return formatDisplayNumber(segment.value * scalingFactor);
+        }
+        if (segment.isConstant) {
+          return '=' + segment.text;
+        }
+        return segment.text;
+      }).join('');
+    }).join('\n');
+  };
+
+  // Handle copy to clipboard
+  const handleCopyToClipboard = () => {
+    if (!navigator.clipboard) {
+      showNotification('Clipboard access not available');
+      return;
+    }
+
+    const scaledText = getScaledRecipeText();
+    navigator.clipboard.writeText(scaledText)
+      .then(() => {
+        showNotification('Recipe copied!');
+      })
+      .catch(err => {
+        console.error('Failed to copy text: ', err);
+        showNotification('Failed to copy recipe');
+      });
+  };
+
   // Render a number field, handling active editing state
   const renderNumberField = (segment) => {
     const scaledValue = segment.value * scalingFactor;
@@ -339,6 +383,12 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`,
 
   return (
     <div className={styles['reciplier-container']}> 
+      {notification && (
+        <div className={`${styles['notification']} ${styles['mb-4']}`}>
+          {notification}
+        </div>
+      )}
+      
       <h1 className={`${styles['text-2xl']} ${styles['font-bold']} ${styles['mb-4']}`}>Reciplier</h1>
       
       <div className={styles['mb-6']}>
@@ -394,28 +444,61 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`,
       </div>
       
       {parsedRecipe.length > 0 && (
-        <div className={`${styles['bg-gray-50']} ${styles['p-4']} ${styles.rounded} ${styles['recipe-output']}`}>
-          {parsedRecipe.map((line) => (
-            <div key={line.id} className={styles['mb-2']}>
-              <span className={`${styles['font-mono']} ${styles['text-base']}`}>
-                {line.segments.map((segment, i) => (
-                  segment.isNumber ? (
-                    <span key={i} className={`${styles['inline-flex']} ${styles['items-center']}`}>
-                      {renderNumberField(segment)}
-                    </span>
-                  ) : segment.isConstant ? (
-                    <span key={i} className={`${styles['inline-flex']} ${styles['items-center']}`}>
-                      {renderConstant(segment)}
-                    </span>
-                  ) : (
-                    <span key={i}>{segment.text}</span>
-                  )
-                ))}
-              </span>
-            </div>
-          ))}
+        <div>
+          <div className={`${styles['bg-gray-50']} ${styles['p-4']} ${styles.rounded} ${styles['recipe-output']} ${styles['mb-4']}`}>
+            {parsedRecipe.map((line) => (
+              <div key={line.id} className={styles['mb-2']}>
+                <span className={`${styles['font-mono']} ${styles['text-base']}`}>
+                  {line.segments.map((segment, i) => (
+                    segment.isNumber ? (
+                      <span key={i} className={`${styles['inline-flex']} ${styles['items-center']}`}>
+                        {renderNumberField(segment)}
+                      </span>
+                    ) : segment.isConstant ? (
+                      <span key={i} className={`${styles['inline-flex']} ${styles['items-center']}`}>
+                        {renderConstant(segment)}
+                      </span>
+                    ) : (
+                      <span key={i}>{segment.text}</span>
+                    )
+                  ))}
+                </span>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={handleCopyToClipboard}
+            className={`${styles['w-full']} ${styles['bg-gray-100']} ${styles['hover:bg-gray-200']} ${styles['text-gray-800']} ${styles['py-2']} ${styles.rounded} ${styles['mb-4']}`}
+          >
+            Copy Scaled Recipe to Clipboard
+          </button>
         </div>
       )}
+      
+      <div className={`${styles['text-center']} ${styles['text-gray-400']} ${styles['text-sm']}`}>
+        Vibe-coded by Cantor Soule-Reeves and Daniel Reeves in{' '}
+        <a 
+          href="https://claude.ai" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className={styles['hover:text-gray-600']}
+        >
+          Claude
+        </a>
+        {' '}and{' '}
+        <a 
+          href="https://codebuff.com/referrals/ref-146ce36c-53e8-435c-a7f6-e180206dd0ee" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className={styles['hover:text-gray-600']}
+          title="Referral link that gets you (and me, dreev) free credits"
+        >
+          Codebuff
+        </a>
+        <div className={`${styles['text-gray-300']} ${styles['text-xs']} ${styles['mt-1']}`}>
+          v{require('../package.json').version}
+        </div>
+      </div>
     </div>
   );
 };
