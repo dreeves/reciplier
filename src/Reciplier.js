@@ -383,12 +383,6 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`,
 
   return (
     <div className={styles['reciplier-container']}> 
-      {notification && (
-        <div className={`${styles['notification']} ${styles['mb-4']}`}>
-          {notification}
-        </div>
-      )}
-      
       <h1 className={`${styles['text-2xl']} ${styles['font-bold']} ${styles['mb-4']}`}>Reciplier</h1>
       
       <div className={styles['mb-6']}>
@@ -466,16 +460,23 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`,
               </div>
             ))}
           </div>
-          <button
-            onClick={handleCopyToClipboard}
-            className={`${styles['w-full']} ${styles['bg-gray-100']} ${styles['hover:bg-gray-200']} ${styles['text-gray-800']} ${styles['py-2']} ${styles.rounded} ${styles['mb-4']}`}
-          >
-            Copy Scaled Recipe to Clipboard
-          </button>
+          <div className={styles['relative']}>
+            <button
+              onClick={handleCopyToClipboard}
+              className={`${styles['w-full']} ${styles['bg-gray-100']} ${styles['hover:bg-gray-200']} ${styles['text-gray-800']} ${styles['py-2']} ${styles.rounded} ${styles['mb-2']}`}
+            >
+              Copy Scaled Recipe to Clipboard
+            </button>
+            {notification && (
+              <div className={`${styles['notification']} ${styles['text-center']}`}>
+                {notification}
+              </div>
+            )}
+          </div>
         </div>
       )}
       
-      <div className={`${styles['text-center']} ${styles['text-gray-400']} ${styles['text-sm']}`}>
+      <div className={`${styles['text-center']} ${styles['text-gray-400']} ${styles['text-sm']} ${styles['mt-4']}`}>
         Vibe-coded by Cantor Soule-Reeves and Daniel Reeves in{' '}
         <a 
           href="https://claude.ai" 

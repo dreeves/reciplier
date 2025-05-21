@@ -309,3 +309,7 @@ button:disabled {
 .mt-1 {
   margin-top: 0.25rem;
 }
+
+.relative {
+  position: relative;
+}
