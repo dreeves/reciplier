@@ -263,8 +263,15 @@ function renderRecipe() {
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'w-20 p-1 border rounded text-center mx-1';
-        input.value = formatDisplayNumber(segment.value * scalingFactor);
         input.dataset.segmentId = segment.id;
+        
+        // If this is the active field, preserve the editing value and focus
+        const isActiveField = activeField === segment.id;
+        if (isActiveField) {
+          input.value = editingValue;
+        } else {
+          input.value = formatDisplayNumber(segment.value * scalingFactor);
+        }
         
         input.addEventListener('focus', () => {
           activeField = segment.id;
@@ -272,17 +279,16 @@ function renderRecipe() {
         });
         
         input.addEventListener('blur', () => {
-          if (activeField && editingValue) {
-            const numValue = parseFloat(editingValue);
-            if (!isNaN(numValue) && numValue > 0) {
-              handleNumberChange(activeField, numValue);
-            }
-          }
           activeField = null;
         });
         
         input.addEventListener('input', (e) => {
           editingValue = e.target.value;
+          // Scale on every keystroke, but don't re-render the active field
+          const numValue = parseFloat(editingValue);
+          if (!isNaN(numValue) && numValue > 0) {
+            handleNumberChangeWithoutRerender(segment.id, numValue);
+          }
         });
         
         input.addEventListener('keypress', (e) => {
@@ -292,6 +298,14 @@ function renderRecipe() {
         });
         
         lineSpan.appendChild(input);
+        
+        // Restore focus and cursor position if this was the active field
+        if (isActiveField) {
+          setTimeout(() => {
+            input.focus();
+            input.setSelectionRange(input.value.length, input.value.length);
+          }, 0);
+        }
       } else if (segment.isConstant) {
         const constantSpan = document.createElement('span');
         constantSpan.className = 'constant px-1 py-0-5';
@@ -311,7 +325,57 @@ function renderRecipe() {
   copySection.style.display = 'block';
 }
 
-// Handle number change and scale all other numbers
+// Handle number change and scale all other numbers without re-rendering
+function handleNumberChangeWithoutRerender(segmentId, newValue) {
+  const numValue = parseFloat(newValue);
+  if (isNaN(numValue) || numValue <= 0) return;
+  
+  let originalIndex = -1;
+  let originalValue = 0;
+  
+  for (const line of parsedRecipe) {
+    for (const segment of line.segments) {
+      if (segment.id === segmentId) {
+        originalIndex = segment.originalIndex;
+        break;
+      }
+    }
+    if (originalIndex !== -1) break;
+  }
+  
+  if (originalIndex === -1 || originalIndex >= originalValues.length) return;
+  originalValue = originalValues[originalIndex];
+  
+  if (originalValue === 0 && numValue !== 0) {
+    console.warn("Original value is 0, cannot calculate scaling factor.");
+    return; 
+  } else if (originalValue === 0 && numValue === 0) {
+    return;
+  }
+
+  const newScalingFactor = numValue / originalValue;
+  scalingFactor = newScalingFactor;
+  updateScalingDisplay();
+  
+  // Update only the non-active input fields
+  const inputs = recipeOutput.querySelectorAll('input[type="text"]');
+  inputs.forEach(input => {
+    const inputSegmentId = input.dataset.segmentId;
+    if (inputSegmentId !== activeField) {
+      // Find the segment to get its value
+      for (const line of parsedRecipe) {
+        for (const segment of line.segments) {
+          if (segment.id === inputSegmentId && segment.isNumber) {
+            input.value = formatDisplayNumber(segment.value * scalingFactor);
+            break;
+          }
+        }
+      }
+    }
+  });
+}
+
+// Handle number change and scale all other numbers (used for non-keystroke events)
 function handleNumberChange(segmentId, newValue) {
   const numValue = parseFloat(newValue);
   if (isNaN(numValue) || numValue <= 0) return;
