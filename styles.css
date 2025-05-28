@@ -85,6 +85,12 @@ input[type="text"] {
     width: 5rem;
     padding: 0.25rem;
     text-align: center;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input[type="text"].invalid {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
 }
 
 input[type="range"] {

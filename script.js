@@ -277,10 +277,22 @@ function renderRecipe() {
         
         input.addEventListener('input', (e) => {
           editingValue = e.target.value;
-          // Scale on every keystroke by updating other fields directly
-          const numValue = parseFloat(editingValue);
-          if (!isNaN(numValue) && numValue > 0) {
+          
+          // Check if input is valid (purely numeric and positive)
+          const trimmedValue = editingValue.trim();
+          const numValue = parseFloat(trimmedValue);
+          const isValid = !isNaN(numValue) && 
+                         numValue > 0 && 
+                         trimmedValue !== '' &&
+                         trimmedValue === numValue.toString();
+          
+          // Add/remove invalid class for visual feedback
+          if (isValid) {
+            input.classList.remove('invalid');
+            // Scale on every keystroke by updating other fields directly
             updateScalingFromInput(segment.id, numValue);
+          } else {
+            input.classList.add('invalid');
           }
         });
         
