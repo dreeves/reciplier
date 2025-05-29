@@ -10,7 +10,7 @@ const recipesShown = {
 // Recipe data keyed consistently with recipesShown
 const recipeHash = {
 // -----------------------------------------------------------------------------
-"shortcake": `\
+'shortcake': `\
 Preheat oven to =325°F. Line bottom of =9x9 square pan with parchment paper.
 
 * 2   C   flour (can do half/half cake flour)
@@ -29,7 +29,7 @@ Pour into the prepared cake pan, spread evenly.
 
 Bake =30 to =40 minutes @ =325°F`,
 // -----------------------------------------------------------------------------
-"crepes": `\
+'crepes': `\
 * eggs: 12 large ones
 * milk: 5.333 cups (1.2618 liters or 1300 grams)
 * flour: 3 cups (400 grams)
@@ -38,7 +38,7 @@ Bake =30 to =40 minutes @ =325°F`,
 
 Yield: roughly 29 crepes`,
 // -----------------------------------------------------------------------------
-"cookies": `\
+'cookies': `\
 * 1 cup granulated sugar
 * 1 cup brown sugar
 * 1 cup butter, softened
@@ -57,7 +57,7 @@ Drop rounded teaspoonfuls onto greased baking sheets, about =2 inches apart. Bak
 
 Yield: 54 cookies, =117 cal (=17g carb) per cookie.`,
 // -----------------------------------------------------------------------------
-"pancakes": `\
+'pancakes': `\
 1 cup all-purpose flour
 2 tablespoons sugar
 2 teaspoons baking powder
@@ -71,7 +71,7 @@ Cook on a greased griddle at =350°F for about =2 minutes per side until golden.
 
 Makes 8 pancakes, =120 calories each.`,
 // -----------------------------------------------------------------------------
-"blank": "",
+'blank': "",
 };
 
 // Convenience functions
@@ -87,10 +87,6 @@ let activeField = null;
 let editingValue = '';
 let currentRecipeKey = "";
 let notificationTimeout = null;
-
-// DOM elements
-let recipeTextarea, recipeSelect, resetButton, scalingSlider, scalingDisplay;
-let recipeOutput, copySection, copyButton, notification;
 
 // Helper function to format numbers for display
 function formatDisplayNumber(num) {
@@ -115,19 +111,19 @@ function parseFraction(fractionStr) {
 
 // Show a temporary notification
 function showNotification(message) {
-  notification.textContent = message;
-  notification.style.display = 'block';
+  $('notification').textContent = message;
+  $('notification').style.display = 'block';
   if (notificationTimeout) {
     clearTimeout(notificationTimeout);
   }
   notificationTimeout = setTimeout(() => {
-    notification.style.display = 'none';
+    $('notification').style.display = 'none';
   }, 2000);
 }
 
 // Update reset button disabled state
 function updateResetButtonState() {
-  resetButton.disabled = scalingFactor === 1;
+  $('resetButton').disabled = scalingFactor === 1;
 }
 
 // Parse the recipe text to identify all numbers
@@ -135,14 +131,14 @@ function parseRecipe() {
   if (!recipeText.trim()) {
     parsedRecipe = [];
     originalValues = [];
-    recipeOutput.style.display = 'none';
-    copySection.style.display = 'none';
+    $('recipeOutput').style.display = 'none';
+    $('copySection').style.display = 'none';
     
     // Update dropdown to show "Blank" if text is empty
     const blankKey = Object.keys(recipeHash).find(key => recipeHash[key] === recipeText.trim());
     if (blankKey) {
       currentRecipeKey = blankKey;
-      recipeSelect.value = blankKey;
+      $('recipeSelect').value = blankKey;
     }
     updateResetButtonState();
     return;
@@ -241,27 +237,27 @@ function parseRecipe() {
     }
   }
   currentRecipeKey = matchingKey;
-  recipeSelect.value = matchingKey;
+  $('recipeSelect').value = matchingKey;
 
   renderRecipe();
 }
 
 // Update scaling display and button state
 function updateScalingDisplay() {
-  scalingDisplay.textContent = formatDisplayNumber(scalingFactor) + 'x';
-  scalingSlider.value = scalingFactor;
+  $('scalingDisplay').textContent = formatDisplayNumber(scalingFactor) + 'x';
+  $('scalingSlider').value = scalingFactor;
   updateResetButtonState();
 }
 
 // Render the parsed recipe with interactive number fields
 function renderRecipe() {
   if (parsedRecipe.length === 0) {
-    recipeOutput.style.display = 'none';
-    copySection.style.display = 'none';
+    $('recipeOutput').style.display = 'none';
+    $('copySection').style.display = 'none';
     return;
   }
 
-  recipeOutput.innerHTML = '';
+  $('recipeOutput').innerHTML = '';
   
   parsedRecipe.forEach((line) => {
     const lineDiv = document.createElement('div');
@@ -329,11 +325,11 @@ function renderRecipe() {
     });
     
     lineDiv.appendChild(lineSpan);
-    recipeOutput.appendChild(lineDiv);
+    $('recipeOutput').appendChild(lineDiv);
   });
   
-  recipeOutput.style.display = 'block';
-  copySection.style.display = 'block';
+  $('recipeOutput').style.display = 'block';
+  $('copySection').style.display = 'block';
 }
 
 // Update scaling and other input values without re-rendering
@@ -362,7 +358,7 @@ function updateScalingFromInput(segmentId, newValue) {
   updateScalingDisplay();
   
   // Update all other input fields directly
-  const inputs = recipeOutput.querySelectorAll('input[type="text"]');
+  const inputs = $('recipeOutput').querySelectorAll('input[type="text"]');
   inputs.forEach(input => {
     const inputSegmentId = input.dataset.segmentId;
     if (inputSegmentId !== activeField) {
@@ -415,11 +411,11 @@ function resetScaling() {
 
 // Load recipe
 function handleRecipeChange() {
-  const selectedKey = recipeSelect.value;
+  const selectedKey = $('recipeSelect').value;
   currentRecipeKey = selectedKey;
   if (recipeHash.hasOwnProperty(selectedKey)) {
     recipeText = recipeHash[selectedKey];
-    recipeTextarea.value = recipeText;
+    $('recipeTextarea').value = recipeText;
     parseRecipe();
   }
 }
@@ -459,47 +455,36 @@ function handleCopyToClipboard() {
 
 // Initialize the app
 function init() {
-  // Get DOM elements
-  recipeTextarea = $('recipeTextarea');
-  recipeSelect   = $('recipeSelect');
-  resetButton    = $('resetButton');
-  scalingSlider  = $('scalingSlider');
-  scalingDisplay = $('scalingDisplay');
-  recipeOutput   = $('recipeOutput');
-  copySection    = $('copySection');
-  copyButton     = $('copyButton');
-  notification   = $('notification');
-
   // Populate dropdown options from recipesShown
   Object.keys(recipesShown).forEach(key => {
     const option = document.createElement('option');
     option.value = key;
     option.textContent = recipesShown[key];
-    recipeSelect.appendChild(option);
+    $('recipeSelect').appendChild(option);
   });
 
   // Set up event listeners
-  recipeTextarea.addEventListener('input', (e) => {
+  $('recipeTextarea').addEventListener('input', (e) => {
     recipeText = e.target.value;
     parseRecipe();
   });
 
-  recipeSelect.addEventListener('change', handleRecipeChange);
-  resetButton.addEventListener('click', resetScaling);
+  $('recipeSelect').addEventListener('change', handleRecipeChange);
+  $('resetButton').addEventListener('click', resetScaling);
   
-  scalingSlider.addEventListener('input', (e) => {
+  $('scalingSlider').addEventListener('input', (e) => {
     scalingFactor = parseFloat(e.target.value);
     updateScalingDisplay();
     renderRecipe();
   });
 
-  copyButton.addEventListener('click', handleCopyToClipboard);
+  $('copyButton').addEventListener('click', handleCopyToClipboard);
 
   // Load default recipe (first one in recipesShown)
   const firstRecipeKey = Object.keys(recipesShown)[0];
   if (!recipeText && recipeHash[firstRecipeKey]) {
     recipeText = recipeHash[firstRecipeKey];
-    recipeTextarea.value = recipeText;
+    $('recipeTextarea').value = recipeText;
     parseRecipe();
   }
 }
