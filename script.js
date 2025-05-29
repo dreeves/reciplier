@@ -85,7 +85,7 @@ let originalValues = [];
 let scalingFactor = 1;
 let activeField = null;
 let editingValue = '';
-let currentExampleKey = "shortcake";
+let currentRecipeKey = "";
 let notificationTimeout = null;
 
 // DOM elements
@@ -128,8 +128,8 @@ function showNotification(message) {
 // Update reset button disabled state
 function updateResetButtonState() {
   const shouldDisable = scalingFactor === 1 && 
-             currentExampleKey !== "" && 
-             recipeHash[currentExampleKey] === recipeText;
+             currentRecipeKey !== "" && 
+             recipeHash[currentRecipeKey] === recipeText;
   resetButton.disabled = shouldDisable;
 }
 
@@ -144,7 +144,7 @@ function parseRecipe() {
     // Update dropdown to show "Blank" if text is empty
     const blankKey = Object.keys(recipeHash).find(key => recipeHash[key] === recipeText.trim());
     if (blankKey) {
-      currentExampleKey = blankKey;
+      currentRecipeKey = blankKey;
       exampleSelect.value = blankKey;
     }
     updateResetButtonState();
@@ -243,7 +243,7 @@ function parseRecipe() {
       break;
     }
   }
-  currentExampleKey = matchingKey;
+  currentRecipeKey = matchingKey;
   exampleSelect.value = matchingKey;
 
   renderRecipe();
@@ -305,12 +305,10 @@ function renderRecipe() {
           
           // Add/remove invalid class for visual feedback
           if (isValidNumber) {
-            //remClass(input, 'invalid'); #SCHDEL
             input.classList.remove('invalid');
             // Scale on every keystroke by updating other fields directly
             updateScalingFromInput(segment.id, numValue);
           } else {
-            //addClass(input, 'invalid'); #SCHDEL
             input.classList.add('invalid');
           }
         });
@@ -435,7 +433,7 @@ function resetScaling() {
 // Load example recipe
 function handleExampleChange() {
   const selectedKey = exampleSelect.value;
-  currentExampleKey = selectedKey;
+  currentRecipeKey = selectedKey;
   if (recipeHash.hasOwnProperty(selectedKey)) {
     recipeText = recipeHash[selectedKey];
     recipeTextarea.value = recipeText;
@@ -514,9 +512,10 @@ function init() {
 
   copyButton.addEventListener('click', handleCopyToClipboard);
 
-  // Load default recipe (Shortcake)
-  if (!recipeText && recipeHash["shortcake"]) {
-    recipeText = recipeHash["shortcake"];
+  // Load default recipe (first one in recipesShown)
+  const firstRecipeKey = Object.keys(recipesShown)[0];
+  if (!recipeText && recipeHash[firstRecipeKey]) {
+    recipeText = recipeHash[firstRecipeKey];
     recipeTextarea.value = recipeText;
     parseRecipe();
   }
