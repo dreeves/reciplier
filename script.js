@@ -185,7 +185,7 @@ function parseRecipe() {
       
       const value = parseFraction(numberStr);
       if (!isNaN(value)) {
-        if (isConstant) {
+        if (isConstant || value === 0) {
           segments.push({
             text: numberStr,
             isNumber: false,
@@ -356,13 +356,6 @@ function updateScalingFromInput(segmentId, newValue) {
   
   if (originalIndex === -1 || originalIndex >= originalValues.length) return;
   originalValue = originalValues[originalIndex];
-  
-  if (originalValue === 0 && numValue !== 0) {
-    console.warn("Original value is 0, cannot calculate scaling factor.");
-    return; 
-  } else if (originalValue === 0 && numValue === 0) {
-    return;
-  }
 
   const newScalingFactor = numValue / originalValue;
   scalingFactor = newScalingFactor;
@@ -406,13 +399,6 @@ function handleNumberChange(segmentId, newValue) {
   
   if (originalIndex === -1 || originalIndex >= originalValues.length) return;
   originalValue = originalValues[originalIndex];
-  
-  if (originalValue === 0 && numValue !== 0) {
-    console.warn("Original value is 0, cannot calculate scaling factor.");
-    return; 
-  } else if (originalValue === 0 && numValue === 0) {
-    return;
-  }
 
   const newScalingFactor = numValue / originalValue;
   scalingFactor = newScalingFactor;
