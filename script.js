@@ -1,4 +1,15 @@
-const exampleRecipes = {
+// not used yet; for refactoring
+// Specifies recipes to include in the dropdown
+const recipesShown = {
+  'shortcake': "Shortcake",
+  'crepes':    "Soule-Reeves Crepes",
+  'cookies':   "Camelot Chocolate Chip Cookies",
+  'pancakes':  "Pancakes according to Claude (can't vouch for this)",
+  'blank':     "Blank -- paste any recipe below!",
+}
+
+// refactor this to be keyed on the same keys as those in recipesShown
+const recipeHash = {
 // -----------------------------------------------------------------------------
 "Shortcake": `\
 Preheat oven to =325°F. Line bottom of =9x9 square pan with parchment paper.
@@ -47,24 +58,26 @@ Drop rounded teaspoonfuls onto greased baking sheets, about =2 inches apart. Bak
 
 Yield: 54 cookies, =117 cal (=17g carb) per cookie.`,
 // -----------------------------------------------------------------------------
+"Pancakes according to Claude": `\
+1 cup all-purpose flour
+2 tablespoons sugar
+2 teaspoons baking powder
+1/2 teaspoon salt
+1 cup milk
+1 large egg
+2 tablespoons vegetable oil
+
+Mix dry ingredients. Combine wet ingredients separately, then add to dry. 
+Cook on a greased griddle at =350°F for about =2 minutes per side until golden.
+
+Makes 8 pancakes, =120 calories each.`,
+// -----------------------------------------------------------------------------
 "Blank": "",
 };
 
-// Pancakes (according to Claude)
-//
-// 1 cup all-purpose flour
-// 2 tablespoons sugar
-// 2 teaspoons baking powder
-// 1/2 teaspoon salt
-// 1 cup milk
-// 1 large egg
-// 2 tablespoons vegetable oil
-// 
-// Mix dry ingredients. Combine wet ingredients separately, then add to dry. 
-// Cook on a greased griddle at =350°F for about =2 minutes per side until golden.
-// 
-// Makes 8 pancakes, =120 calories each.
-
+// Convenience functions
+function $(id) { return document.getElementById(id) } // jQuery-esque selector
+function tonum(x) { const n = parseFloat(x); return isNaN(n) ? null : n }
 
 // State variables
 let recipeText = '';
@@ -117,7 +130,7 @@ function showNotification(message) {
 function updateResetButtonState() {
   const shouldDisable = scalingFactor === 1 && 
              currentExampleKey !== "" && 
-             exampleRecipes[currentExampleKey] === recipeText;
+             recipeHash[currentExampleKey] === recipeText;
   resetButton.disabled = shouldDisable;
 }
 
@@ -130,7 +143,7 @@ function parseRecipe() {
     copySection.style.display = 'none';
     
     // Update dropdown to show "Blank" if text is empty
-    const blankKey = Object.keys(exampleRecipes).find(key => exampleRecipes[key] === recipeText.trim());
+    const blankKey = Object.keys(recipeHash).find(key => recipeHash[key] === recipeText.trim());
     if (blankKey) {
       currentExampleKey = blankKey;
       exampleSelect.value = blankKey;
@@ -147,7 +160,10 @@ function parseRecipe() {
   
   lines.forEach((line, lineIndex) => {
     if (!line.trim()) {
-      parsedLines.push({ id: `line-${lineIndex}`, content: line, segments: [{ text: line, isNumber: false }] });
+      parsedLines.push({ 
+        id: `line-${lineIndex}`, 
+        content: line, 
+        segments: [{ text: line, isNumber: false }] });
       return;
     }
     
@@ -222,8 +238,8 @@ function parseRecipe() {
 
   // Check if current text matches any example recipe
   let matchingKey = "";
-  for (const key in exampleRecipes) {
-    if (exampleRecipes[key] === recipeText) {
+  for (const key in recipeHash) {
+    if (recipeHash[key] === recipeText) {
       matchingKey = key;
       break;
     }
@@ -280,18 +296,22 @@ function renderRecipe() {
           
           // Check if input is valid (purely numeric and positive)
           const trimmedValue = editingValue.trim();
-          const numValue = parseFloat(trimmedValue);
-          const isValid = !isNaN(numValue) && 
-                         numValue > 0 && 
-                         trimmedValue !== '' &&
-                         trimmedValue === numValue.toString();
+          const numValue = tonum(trimmedValue);
+          
+          // Check if it's a valid number format
+          const isValidNumber = numValue !== null && 
+                               numValue > 0 && 
+                               trimmedValue !== '' &&
+                               /^\.?\d*\.?\d+$/.test(trimmedValue);
           
           // Add/remove invalid class for visual feedback
-          if (isValid) {
+          if (isValidNumber) {
+            //remClass(input, 'invalid'); #SCHDEL
             input.classList.remove('invalid');
             // Scale on every keystroke by updating other fields directly
             updateScalingFromInput(segment.id, numValue);
           } else {
+            //addClass(input, 'invalid'); #SCHDEL
             input.classList.add('invalid');
           }
         });
@@ -417,8 +437,8 @@ function resetScaling() {
 function handleExampleChange() {
   const selectedKey = exampleSelect.value;
   currentExampleKey = selectedKey;
-  if (exampleRecipes.hasOwnProperty(selectedKey)) {
-    recipeText = exampleRecipes[selectedKey];
+  if (recipeHash.hasOwnProperty(selectedKey)) {
+    recipeText = recipeHash[selectedKey];
     recipeTextarea.value = recipeText;
     parseRecipe();
   }
@@ -460,15 +480,15 @@ function handleCopyToClipboard() {
 // Initialize the app
 function init() {
   // Get DOM elements
-  recipeTextarea = document.getElementById('recipeTextarea');
-  exampleSelect = document.getElementById('exampleSelect');
-  resetButton = document.getElementById('resetButton');
-  scalingSlider = document.getElementById('scalingSlider');
-  scalingDisplay = document.getElementById('scalingDisplay');
-  recipeOutput = document.getElementById('recipeOutput');
-  copySection = document.getElementById('copySection');
-  copyButton = document.getElementById('copyButton');
-  notification = document.getElementById('notification');
+  recipeTextarea = $('recipeTextarea');
+  exampleSelect  = $('exampleSelect');
+  resetButton    = $('resetButton');
+  scalingSlider  = $('scalingSlider');
+  scalingDisplay = $('scalingDisplay');
+  recipeOutput   = $('recipeOutput');
+  copySection    = $('copySection');
+  copyButton     = $('copyButton');
+  notification   = $('notification');
 
   // Set up event listeners
   recipeTextarea.addEventListener('input', (e) => {
@@ -488,8 +508,8 @@ function init() {
   copyButton.addEventListener('click', handleCopyToClipboard);
 
   // Load default recipe (Shortcake)
-  if (!recipeText && exampleRecipes["Shortcake"]) {
-    recipeText = exampleRecipes["Shortcake"];
+  if (!recipeText && recipeHash["Shortcake"]) {
+    recipeText = recipeHash["Shortcake"];
     recipeTextarea.value = recipeText;
     parseRecipe();
   }
