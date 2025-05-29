@@ -1,4 +1,3 @@
-// not used yet; for refactoring
 // Specifies recipes to include in the dropdown
 const recipesShown = {
   'shortcake': "Shortcake",
@@ -8,10 +7,10 @@ const recipesShown = {
   'blank':     "Blank -- paste any recipe below!",
 }
 
-// refactor this to be keyed on the same keys as those in recipesShown
+// Recipe data keyed consistently with recipesShown
 const recipeHash = {
 // -----------------------------------------------------------------------------
-"Shortcake": `\
+"shortcake": `\
 Preheat oven to =325°F. Line bottom of =9x9 square pan with parchment paper.
 
 * 2   C   flour (can do half/half cake flour)
@@ -30,7 +29,7 @@ Pour into the prepared cake pan, spread evenly.
 
 Bake =30 to =40 minutes @ =325°F`,
 // -----------------------------------------------------------------------------
-"Soule-Reeves Crepes": `\
+"crepes": `\
 * eggs: 12 large ones
 * milk: 5.333 cups (1.2618 liters or 1300 grams)
 * flour: 3 cups (400 grams)
@@ -39,7 +38,7 @@ Bake =30 to =40 minutes @ =325°F`,
 
 Yield: roughly 29 crepes`,
 // -----------------------------------------------------------------------------
-"Camelot Chocolate Chip Cookies": `\
+"cookies": `\
 * 1 cup granulated sugar
 * 1 cup brown sugar
 * 1 cup butter, softened
@@ -58,7 +57,7 @@ Drop rounded teaspoonfuls onto greased baking sheets, about =2 inches apart. Bak
 
 Yield: 54 cookies, =117 cal (=17g carb) per cookie.`,
 // -----------------------------------------------------------------------------
-"Pancakes according to Claude": `\
+"pancakes": `\
 1 cup all-purpose flour
 2 tablespoons sugar
 2 teaspoons baking powder
@@ -72,7 +71,7 @@ Cook on a greased griddle at =350°F for about =2 minutes per side until golden.
 
 Makes 8 pancakes, =120 calories each.`,
 // -----------------------------------------------------------------------------
-"Blank": "",
+"blank": "",
 };
 
 // Convenience functions
@@ -86,7 +85,7 @@ let originalValues = [];
 let scalingFactor = 1;
 let activeField = null;
 let editingValue = '';
-let currentExampleKey = "Shortcake";
+let currentExampleKey = "shortcake";
 let notificationTimeout = null;
 
 // DOM elements
@@ -508,8 +507,8 @@ function init() {
   copyButton.addEventListener('click', handleCopyToClipboard);
 
   // Load default recipe (Shortcake)
-  if (!recipeText && recipeHash["Shortcake"]) {
-    recipeText = recipeHash["Shortcake"];
+  if (!recipeText && recipeHash["shortcake"]) {
+    recipeText = recipeHash["shortcake"];
     recipeTextarea.value = recipeText;
     parseRecipe();
   }
