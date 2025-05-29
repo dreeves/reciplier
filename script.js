@@ -138,12 +138,12 @@ function parseRecipe() {
     $('recipeOutput').style.display = 'none';
     $('copySection').style.display = 'none';
     
-    // Update dropdown to show "Blank" if text is empty
-    const blankKey = 
-      Object.keys(recipeHash).find(key => recipeHash[key]===recipeText.trim());
-    if (blankKey) {
-      currentRecipeKey = blankKey;
-      $('recipeSelect').value = blankKey;
+    // Update dropdown to show matching recipe (will be "Blank" for empty text)
+    const matchingKey = 
+      Object.keys(recipeHash).find(key => recipeHash[key] === recipeText.trim());
+    if (matchingKey) {
+      currentRecipeKey = matchingKey;
+      $('recipeSelect').value = matchingKey;
     }
     updateResetButtonState();
     return;
