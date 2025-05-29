@@ -489,6 +489,14 @@ function init() {
   copyButton     = $('copyButton');
   notification   = $('notification');
 
+  // Populate dropdown options from recipesShown
+  Object.keys(recipesShown).forEach(key => {
+    const option = document.createElement('option');
+    option.value = key;
+    option.textContent = recipesShown[key];
+    exampleSelect.appendChild(option);
+  });
+
   // Set up event listeners
   recipeTextarea.addEventListener('input', (e) => {
     recipeText = e.target.value;
