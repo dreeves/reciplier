@@ -89,7 +89,7 @@ let currentRecipeKey = "";
 let notificationTimeout = null;
 
 // DOM elements
-let recipeTextarea, exampleSelect, resetButton, scalingSlider, scalingDisplay;
+let recipeTextarea, recipeSelect, resetButton, scalingSlider, scalingDisplay;
 let recipeOutput, copySection, copyButton, notification;
 
 // Helper function to format numbers for display
@@ -127,10 +127,7 @@ function showNotification(message) {
 
 // Update reset button disabled state
 function updateResetButtonState() {
-  const shouldDisable = scalingFactor === 1 && 
-             currentRecipeKey !== "" && 
-             recipeHash[currentRecipeKey] === recipeText;
-  resetButton.disabled = shouldDisable;
+  resetButton.disabled = scalingFactor === 1;
 }
 
 // Parse the recipe text to identify all numbers
@@ -145,12 +142,12 @@ function parseRecipe() {
     const blankKey = Object.keys(recipeHash).find(key => recipeHash[key] === recipeText.trim());
     if (blankKey) {
       currentRecipeKey = blankKey;
-      exampleSelect.value = blankKey;
+      recipeSelect.value = blankKey;
     }
     updateResetButtonState();
     return;
   }
-  
+
   const numberRegex = /(?:(\=)?)(\d+(?:\.\d+)?(?:\/\d+)?)/g;
   
   const lines = recipeText.split('\n');
@@ -235,7 +232,7 @@ function parseRecipe() {
   scalingFactor = 1;
   updateScalingDisplay();
 
-  // Check if current text matches any example recipe
+  // Check if current text matches any recipe
   let matchingKey = "";
   for (const key in recipeHash) {
     if (recipeHash[key] === recipeText) {
@@ -244,7 +241,7 @@ function parseRecipe() {
     }
   }
   currentRecipeKey = matchingKey;
-  exampleSelect.value = matchingKey;
+  recipeSelect.value = matchingKey;
 
   renderRecipe();
 }
@@ -430,9 +427,9 @@ function resetScaling() {
   renderRecipe();
 }
 
-// Load example recipe
-function handleExampleChange() {
-  const selectedKey = exampleSelect.value;
+// Load recipe
+function handleRecipeChange() {
+  const selectedKey = recipeSelect.value;
   currentRecipeKey = selectedKey;
   if (recipeHash.hasOwnProperty(selectedKey)) {
     recipeText = recipeHash[selectedKey];
@@ -478,7 +475,7 @@ function handleCopyToClipboard() {
 function init() {
   // Get DOM elements
   recipeTextarea = $('recipeTextarea');
-  exampleSelect  = $('exampleSelect');
+  recipeSelect   = $('recipeSelect');
   resetButton    = $('resetButton');
   scalingSlider  = $('scalingSlider');
   scalingDisplay = $('scalingDisplay');
@@ -492,7 +489,7 @@ function init() {
     const option = document.createElement('option');
     option.value = key;
     option.textContent = recipesShown[key];
-    exampleSelect.appendChild(option);
+    recipeSelect.appendChild(option);
   });
 
   // Set up event listeners
@@ -501,7 +498,7 @@ function init() {
     parseRecipe();
   });
 
-  exampleSelect.addEventListener('change', handleExampleChange);
+  recipeSelect.addEventListener('change', handleRecipeChange);
   resetButton.addEventListener('click', resetScaling);
   
   scalingSlider.addEventListener('input', (e) => {
