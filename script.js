@@ -27,7 +27,8 @@ Add milk and vanilla and mix well.
 
 Pour into the prepared cake pan, spread evenly. 
 
-Bake =30 to =40 minutes @ =325°F`,
+Bake =30 to =40 minutes @ =325°F
+`,
 // -----------------------------------------------------------------------------
 'crepes': `\
 * eggs: 12 large ones
@@ -36,7 +37,8 @@ Bake =30 to =40 minutes @ =325°F`,
 * butter: 8 tbsp melted (112 grams)
 * salt: 2 tsp (14 grams) 
 
-Yield: roughly 29 crepes`,
+Yield: roughly 29 crepes
+`,
 // -----------------------------------------------------------------------------
 'cookies': `\
 * 1 cup granulated sugar
@@ -55,7 +57,8 @@ Turn to Stir Speed. Gradually add baking soda, salt, and flour to sugar mixture 
 
 Drop rounded teaspoonfuls onto greased baking sheets, about =2 inches apart. Bake at =375 F for =10 to =12 minutes. Remove from backing sheets *immediately* and cool on wire racks. 
 
-Yield: 54 cookies, =117 cal (=17g carb) per cookie.`,
+Yield: 54 cookies, =117 cal (=17g carb) per cookie.
+`,
 // -----------------------------------------------------------------------------
 'pancakes': `\
 1 cup all-purpose flour
@@ -69,7 +72,8 @@ Yield: 54 cookies, =117 cal (=17g carb) per cookie.`,
 Mix dry ingredients. Combine wet ingredients separately, then add to dry. 
 Cook on a greased griddle at =350°F for about =2 minutes per side until golden.
 
-Makes 8 pancakes, =120 calories each.`,
+Makes 8 pancakes, =120 calories each.
+`,
 // -----------------------------------------------------------------------------
 'blank': "",
 };
@@ -135,7 +139,8 @@ function parseRecipe() {
     $('copySection').style.display = 'none';
     
     // Update dropdown to show "Blank" if text is empty
-    const blankKey = Object.keys(recipeHash).find(key => recipeHash[key] === recipeText.trim());
+    const blankKey = 
+      Object.keys(recipeHash).find(key => recipeHash[key]===recipeText.trim());
     if (blankKey) {
       currentRecipeKey = blankKey;
       $('recipeSelect').value = blankKey;
@@ -242,6 +247,114 @@ function parseRecipe() {
   renderRecipe();
 }
 
+// Helper function to find original value for a segment
+function findOriginalValue(segmentId) {
+  for (const line of parsedRecipe) {
+    for (const segment of line.segments) {
+      if (segment.id === segmentId) {
+        const originalIndex = segment.originalIndex;
+        if (originalIndex >= 0 && originalIndex < originalValues.length) {
+          return originalValues[originalIndex];
+        }
+        break;
+      }
+    }
+  }
+  return null;
+}
+
+// Update scaling factor based on a changed input value
+function updateScalingFactor(segmentId, newValue) {
+  const numValue = parseFloat(newValue);
+  if (isNaN(numValue) || numValue <= 0) return false;
+  
+  const originalValue = findOriginalValue(segmentId);
+  if (originalValue === null) return false;
+
+  scalingFactor = numValue / originalValue;
+  updateScalingDisplay();
+  return true;
+}
+
+// Update scaling and other input values without re-rendering
+function updateScalingFromInput(segmentId, newValue) {
+  if (!updateScalingFactor(segmentId, newValue)) return;
+  
+  // Update all other input fields directly
+  const inputs = $('recipeOutput').querySelectorAll('input[type="text"]');
+  inputs.forEach(input => {
+    const inputSegmentId = input.dataset.segmentId;
+    if (inputSegmentId !== activeField) {
+      // Find the segment to get its value
+      for (const line of parsedRecipe) {
+        for (const segment of line.segments) {
+          if (segment.id === inputSegmentId && segment.isNumber) {
+            input.value = formatDisplayNumber(segment.value * scalingFactor);
+            break;
+          }
+        }
+      }
+    }
+  });
+}
+
+// Handle number change, scale all other numbers (used for non-keystroke events)
+function handleNumberChange(segmentId, newValue) {
+  if (!updateScalingFactor(segmentId, newValue)) return;
+  renderRecipe();
+}
+
+// Reset to original values
+function resetScaling() {
+  scalingFactor = 1;
+  updateScalingDisplay();
+  renderRecipe();
+}
+
+// Load recipe
+function handleRecipeChange() {
+  const selectedKey = $('recipeSelect').value;
+  currentRecipeKey = selectedKey;
+  if (recipeHash.hasOwnProperty(selectedKey)) {
+    recipeText = recipeHash[selectedKey];
+    $('recipeTextarea').value = recipeText;
+    parseRecipe();
+  }
+}
+
+// Generate scaled recipe text for copying
+function getScaledRecipeText() {
+  return parsedRecipe.map(line => {
+    return line.segments.map(segment => {
+      if (segment.isNumber) {
+        return formatDisplayNumber(segment.value * scalingFactor);
+      }
+      if (segment.isConstant) {
+        return '=' + segment.text;
+      }
+      return segment.text;
+    }).join('');
+  }).join('\n');
+}
+
+// Handle copy to clipboard
+function handleCopyToClipboard() {
+  if (!navigator.clipboard) {
+    showNotification('Clipboard access not available');
+    return;
+  }
+
+  const scaledText = getScaledRecipeText();
+  navigator.clipboard.writeText(scaledText)
+    .then(() => {
+      showNotification('Recipe copied!');
+    })
+    .catch(err => {
+      console.error('Failed to copy text: ', err);
+      showNotification('Failed to copy recipe');
+    });
+}
+
 // Update scaling display and button state
 function updateScalingDisplay() {
   $('scalingDisplay').textContent = formatDisplayNumber(scalingFactor) + 'x';
@@ -330,127 +443,6 @@ function renderRecipe() {
   
   $('recipeOutput').style.display = 'block';
   $('copySection').style.display = 'block';
-}
-
-// Update scaling and other input values without re-rendering
-function updateScalingFromInput(segmentId, newValue) {
-  const numValue = parseFloat(newValue);
-  if (isNaN(numValue) || numValue <= 0) return;
-  
-  let originalIndex = -1;
-  let originalValue = 0;
-  
-  for (const line of parsedRecipe) {
-    for (const segment of line.segments) {
-      if (segment.id === segmentId) {
-        originalIndex = segment.originalIndex;
-        break;
-      }
-    }
-    if (originalIndex !== -1) break;
-  }
-  
-  if (originalIndex === -1 || originalIndex >= originalValues.length) return;
-  originalValue = originalValues[originalIndex];
-
-  const newScalingFactor = numValue / originalValue;
-  scalingFactor = newScalingFactor;
-  updateScalingDisplay();
-  
-  // Update all other input fields directly
-  const inputs = $('recipeOutput').querySelectorAll('input[type="text"]');
-  inputs.forEach(input => {
-    const inputSegmentId = input.dataset.segmentId;
-    if (inputSegmentId !== activeField) {
-      // Find the segment to get its value
-      for (const line of parsedRecipe) {
-        for (const segment of line.segments) {
-          if (segment.id === inputSegmentId && segment.isNumber) {
-            input.value = formatDisplayNumber(segment.value * scalingFactor);
-            break;
-          }
-        }
-      }
-    }
-  });
-}
-
-// Handle number change and scale all other numbers (used for non-keystroke events)
-function handleNumberChange(segmentId, newValue) {
-  const numValue = parseFloat(newValue);
-  if (isNaN(numValue) || numValue <= 0) return;
-  
-  let originalIndex = -1;
-  let originalValue = 0;
-  
-  for (const line of parsedRecipe) {
-    for (const segment of line.segments) {
-      if (segment.id === segmentId) {
-        originalIndex = segment.originalIndex;
-        break;
-      }
-    }
-    if (originalIndex !== -1) break;
-  }
-  
-  if (originalIndex === -1 || originalIndex >= originalValues.length) return;
-  originalValue = originalValues[originalIndex];
-
-  const newScalingFactor = numValue / originalValue;
-  scalingFactor = newScalingFactor;
-  updateScalingDisplay();
-  renderRecipe();
-}
-
-// Reset to original values
-function resetScaling() {
-  scalingFactor = 1;
-  updateScalingDisplay();
-  renderRecipe();
-}
-
-// Load recipe
-function handleRecipeChange() {
-  const selectedKey = $('recipeSelect').value;
-  currentRecipeKey = selectedKey;
-  if (recipeHash.hasOwnProperty(selectedKey)) {
-    recipeText = recipeHash[selectedKey];
-    $('recipeTextarea').value = recipeText;
-    parseRecipe();
-  }
-}
-
-// Generate scaled recipe text for copying
-function getScaledRecipeText() {
-  return parsedRecipe.map(line => {
-    return line.segments.map(segment => {
-      if (segment.isNumber) {
-        return formatDisplayNumber(segment.value * scalingFactor);
-      }
-      if (segment.isConstant) {
-        return '=' + segment.text;
-      }
-      return segment.text;
-    }).join('');
-  }).join('\n');
-}
-
-// Handle copy to clipboard
-function handleCopyToClipboard() {
-  if (!navigator.clipboard) {
-    showNotification('Clipboard access not available');
-    return;
-  }
-
-  const scaledText = getScaledRecipeText();
-  navigator.clipboard.writeText(scaledText)
-    .then(() => {
-      showNotification('Recipe copied!');
-    })
-    .catch(err => {
-      console.error('Failed to copy text: ', err);
-      showNotification('Failed to copy recipe');
-    });
 }
 
 // Initialize the app
