@@ -110,6 +110,7 @@ input[type="range"]::-webkit-slider-thumb {
   height: 1rem;
   background-color: #3b82f6;
   border-radius: 50%;
+  transition: background-color 0.2s ease;
 }
 
 input[type="range"]::-moz-range-thumb {
@@ -118,6 +119,16 @@ input[type="range"]::-moz-range-thumb {
   background-color: #3b82f6;
   border-radius: 50%;
   border: none;
+  transition: background-color 0.2s ease;
+}
+
+/* Green thumb when at 1x */
+input[type="range"].at-one-x::-webkit-slider-thumb {
+  background-color: #10b981;
+}
+
+input[type="range"].at-one-x::-moz-range-thumb {
+  background-color: #10b981;
 }
 
 /* Buttons */

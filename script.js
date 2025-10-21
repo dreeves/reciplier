@@ -32,8 +32,8 @@ Bake =30 to =40 minutes @ =325°F
 // -----------------------------------------------------------------------------
 'crepes': `\
 * eggs: 12 large ones
-* milk: 5.333 cups (1.2618 liters or 1300 grams)
-* flour: 3 cups (400 grams)
+* milk: 5.333 cups (1.262 liters or 1301 grams)
+* flour: 3 cups (380 grams)
 * butter: 8 tbsp melted (112 grams)
 * salt: 2 tsp (14 grams) 
 
@@ -125,9 +125,14 @@ function showNotification(message) {
   }, 2000);
 }
 
-// Update reset button disabled state
-function updateResetButtonState() {
-  $('resetButton').disabled = scalingFactor === 1;
+// Update slider thumb color based on scaling factor
+function updateSliderThumbColor() {
+  const slider = $('scalingSlider');
+  if (Math.abs(scalingFactor - 1) < 0.005) {
+    slider.classList.add('at-one-x');
+  } else {
+    slider.classList.remove('at-one-x');
+  }
 }
 
 // Parse the recipe text to identify all numbers
@@ -145,7 +150,7 @@ function parseRecipe() {
       currentRecipeKey = matchingKey;
       $('recipeSelect').value = matchingKey;
     }
-    updateResetButtonState();
+    updateSliderThumbColor();
     return;
   }
 
@@ -273,6 +278,7 @@ function updateScalingFactor(segmentId, newValue) {
 
   scalingFactor = numValue / originalValue;
   updateScalingDisplay();
+  updateSliderThumbColor();
   return true;
 }
 
@@ -304,12 +310,7 @@ function handleNumberChange(segmentId, newValue) {
   renderRecipe();
 }
 
-// Reset to original values
-function resetScaling() {
-  scalingFactor = 1;
-  updateScalingDisplay();
-  renderRecipe();
-}
+
 
 // Load recipe
 function handleRecipeChange() {
@@ -355,11 +356,11 @@ function handleCopyToClipboard() {
     });
 }
 
-// Update scaling display and button state
+// Update scaling display
 function updateScalingDisplay() {
   $('scalingDisplay').textContent = formatDisplayNumber(scalingFactor) + 'x';
   $('scalingSlider').value = scalingFactor;
-  updateResetButtonState();
+  updateSliderThumbColor();
 }
 
 // Render the parsed recipe with interactive number fields
@@ -462,7 +463,6 @@ function init() {
   });
 
   $('recipeSelect').addEventListener('change', handleRecipeChange);
-  $('resetButton').addEventListener('click', resetScaling);
   
   $('scalingSlider').addEventListener('input', (e) => {
     scalingFactor = parseFloat(e.target.value);
