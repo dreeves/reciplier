@@ -1,8 +1,8 @@
 // Specifies recipes to include in the dropdown
 const recipesShown = {
-  'shortcake': "Shortcake",
   'crepes':    "Soule-Reeves Crepes",
   'cookies':   "Camelot Chocolate Chip Cookies",
+  'shortcake': "Shortcake",
   'pancakes':  "Pancakes according to Claude (can't vouch for this)",
   'blank':     "Blank -- paste any recipe below!",
 }
