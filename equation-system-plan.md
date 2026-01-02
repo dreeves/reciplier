@@ -1,29 +1,3 @@
-The idea is to have reciplier subsume my "calculator calculator" aka Sheeq where
-you can have arbitrary expressions with variables.
-
-A canonical example would be something like:
-
-```
-1 egg and 2 wheels of cheese in a @{d = 9}-inch diameter pan (so a surface area 
-of {A = 3.14*(d/2)^2}) heated at @350 degrees.
-```
-
-That's saying that the area should scale with the other numbers and the diameter
-of the pan should not (note the @ symbol in front of values that should not 
-scale). But not scaling is different from not changing. If you 10x the number of
-eggs then you'll also 10x the number of wheels of cheese and the area of the pan
-which means the current diameter of 9 should get multiplied by 3.16.
-
-And then you could cover all the use cases for Sheeq. For example:
-
-```
-@{a = 3}, @{b = 4}, @{c = sqrt(a^2 + b^2)} is a Pythagorean triple.
-```
-
-Although a cool thing about Sheeq is you don't have to solve the equation for
-one of the variables.
-
-So more planning needed to Pareto-dominate it...
 
 -- Begin AI-generated text --
 
