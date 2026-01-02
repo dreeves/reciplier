@@ -151,7 +151,7 @@ So if the break does {vb:40}km/h ({0.621371vb}mph) then the peloton needs to do
 {vp: pd/t}km/h ({0.621371vp}mph) to catch them at the line.
 
 Scratchpad:
-* Gap in hours: {gt: m/60+s/3600} (ie, {m+s/60}m or {60m+s}s or {gt/24}d)
+* Gap in hours: {gt: m/60+s/3600} (ie, {m+s/60}m or {60m+s}s or, heck, {gt/24}d)
 * Gap distance: {gd: vb*gt}km ({0.621371gd}mi) (I think vb not vp for this?)
 * Breakaway's time till finish: {t: d/vb}
 * Peloton's distance to the line: {pd: d+gd}
@@ -190,7 +190,7 @@ Searching for variable assignments that satisfy the equations is easy for things
 like scaled recipes but it would be cool for this to be super general. 
 Mathematica's NMinimize could be a place to start.
 
-I think currently we just pick a variable and do a binary search to find an 
+I think currently we just pick a variable and do a binary search to find a valid
 assignment for it. But if we try that for every variable and nothing works it's 
 possible there's a solution that can only be found by changing more than one 
 variable at once.
