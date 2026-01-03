@@ -11,134 +11,175 @@
 8. We [call them quals](https://blog.beeminder.com/quals), not tests.
 
 ---
+Humans above, robots below
+---
 
 # Scratchpad / Implementation Plan
 
 ## Overview
 
-Transform Reciplier from simple linear scaling to a generalized constraint-based system supporting arbitrary mathematical relationships between variables.
+Transform Reciplier from simple linear scaling to a generalized constraint-based 
+system supporting arbitrary mathematical relationships between variables.
 
-**Current state:** Numbers auto-detected and scaled linearly; `=` prefix marks constants.  
-**Target state:** Full `{expr}` syntax with labels, constraints, and constraint solving.
+**Current state:** Numbers auto-detected and scaled linearly; `=` prefix marks 
+constants.  
+**Target state:** Full `{...}` expression syntax with labels, constraints, and 
+constraint solving.
 
-## Phase 1: New Expression Parser
+## Syntax Specification
 
-### 1.1 Parse `{...}` expressions
-- Regex to find all `{...}` blocks in recipe text
-- Leave non-braced text as literal segments (not auto-scaled)
-- Handle nested parens inside braces correctly
+Every `{...}` block contains: an optional label (before a colon), then one or 
+more expressions separated by `=` signs. Expressions separated by `=` are 
+constraints: they must all evaluate to the same value. The field displays that 
+common value.
 
-### 1.2 Expression syntax parsing
-Within each `{...}` block, parse these forms:
-- `{expr}` → anonymous expression (auto-generate nonce label like `var01`)
-- `{label: expr}` → labeled expression
-- `{expr1 = expr2 = ...}` → constraint (multiple expressions that must be equal)
-- `{label: expr1 = expr2}` → labeled constraint
+### Raw input forms:
+- `{3x}` — expression: 3 times x. Displays the value of 3x.
+- `{d:9}` — defines variable d with value 9. Displays 9.
+- `{w:}` — defines variable w with no initial value (solver picks one).
+- `{r: d/2}` — defines variable r as expression d/2. Displays d/2.
+- `{d = 2r}` — references d and 2r, constrains them equal. Displays that value.
+- `{A: 1/2*tau*r^2 = w*h}` — defines A, constrains both expressions equal. 
+  Displays the common value.
+- `{a^2 + b^2 = c^2}` — constraint (Pythagorean). Displays the common value.
 
-### 1.3 Mathematica-style syntax support
-- `2x` → `2*x` (implicit multiplication)
-- `x^2` → `Math.pow(x, 2)` (exponentiation)
-- Support `sqrt()`, basic trig if needed
+### Key distinction:
+- LABEL (before colon): defines a NEW variable name
+- EXPRESSION (after colon, or whole thing if no colon): references existing 
+  variables, gets evaluated to produce the displayed value
 
-### 1.4 Variable extraction
-- Build symbol table: for each label, track its defining expression
-- Build dependency graph: which variables reference which others
-- Detect undefined variable references → fail loudly
-- Detect duplicate label definitions → fail loudly
+### After preprocessing:
+Add nonce labels to unlabeled blocks: `{3x}` → `{var01: 3x}`
 
-## Phase 2: Constraint Solver
+Result: all blocks have format `label: expr1 = expr2 = ...`
 
-### 2.1 Simple evaluation
-- Given current variable assignments, evaluate any expression
-- Use `util.js`'s `laxeval()` as foundation (handles deoctalization)
+### Mathematica-style syntax:
+- `2x` means `2*x` (implicit multiplication)
+- `x^2` means `x` squared (exponentiation) 
+- Support `sqrt()` and basic math functions
 
-### 2.2 Initial value assignment
-- Variables with explicit values (e.g., `{d:9}`) get those values
-- Variables without values (e.g., `{w:}`) start at some default (1? 0.01?)
+### HTML comments:
+Expressions inside HTML comments define variables/constraints but do NOT render
+visible fields. Use for hidden intermediate calculations:
+```
+<!-- {s: h+m/60} & {s = e-d/u} -->
+```
+This defines s and adds a constraint, but shows no field. (The `&` is just 
+comment text; multiple `{...}` blocks can appear in one comment.)
+
+## Phase 1: Expression Parser
+
+### 1.1 Extract `{...}` blocks
+- Regex to find all `{...}` in recipe text
+- Non-braced text stays as literal (no auto-scaling)
+- Handle nested parens inside braces
+
+### 1.2 Parse each block's internals
+- Split on first `:` to get optional label
+- Split remainder on `=` to get list of expressions that must be equal
+- If no label, auto-generate nonce (var01, var02, ...)
+
+### 1.3 Build symbol table
+- For each label, record: defining expression(s), initial value (if any)
+- Track which variables each expression references
+
+### 1.4 Validation (fail loudly)
+- Undefined variable referenced → error
+- Duplicate label defined → error  
+- Bare number like `{5}` with no variable → error
+- Disconnected variable (defined but never referenced elsewhere) → error
+  - Workaround: `{tau: 6.28} <!-- {tau} not currently used -->`
+
+## Phase 2: Expression Evaluator
+
+### 2.1 Convert to JavaScript
+- `2x` → `2*x`
+- `x^2` → `Math.pow(x,2)`
+- Use `util.js` `laxeval()` as foundation
+
+### 2.2 Evaluate with current variable assignments
+- Given map of {varName: value}, evaluate any expression
+- Return numeric result or error
+
+## Phase 3: Constraint Solver
+
+### 3.1 Initial values
+- Variables with explicit values: use those (e.g., `{d:9}` → d=9)
+- Variables without values: solver picks (favor small positive numbers)
 - Scale factor `x` defaults to 1
 
-### 2.3 Constraint satisfaction
-- For each constraint `{expr1 = expr2 = ...}`, all expressions must evaluate equal
-- Use binary search to find valid assignment when one variable changes
-- Start simple: when user changes field F, find new values for non-fixed fields
+### 3.2 Satisfy constraints
+- For each constraint `{expr1 = expr2 = ...}`, all must evaluate equal
+- When user edits a field, use binary search to find new values for unfixed 
+  variables that satisfy all constraints
 
-### 2.4 Multi-variable solving (future)
-- Current approach: binary search on one variable at a time
-- Note in README: "We'll worry about [multi-variable] when we find use cases where it matters"
+### 3.3 Contradiction detection
+- If initial template has no valid solution → fail loudly, don't render
+- Point to the problematic constraint
 
-## Phase 3: UI Rendering
+## Phase 4: UI Rendering
 
-### 3.1 Field rendering
-- Each `{...}` becomes an editable input field showing computed value
-- Non-braced text rendered as-is (no longer auto-scaled)
+### 4.1 Field display
+- Each `{...}` becomes an editable numeric input showing computed value
+- Non-braced text rendered literally
 
-### 3.2 Fixed/unfixed toggle
-- Click or UI gesture to mark a field as "fixed"
-- Fixed fields don't change when other fields are edited
-- Visual indicator for fixed vs unfixed
+### 4.2 Fixed/unfixed toggle
+- UI to mark fields as "fixed" (won't change when others edited)
+- Visual indicator for fixed state
+- Can't mark field fixed if constraints currently violated
 
-### 3.3 Constraint violation feedback
-- When constraints violated, show affected fields in red
-- On blur from invalid state, recompute to valid values
-- Show violated equation (e.g., "25 != 36")
+### 4.3 Constraint violation feedback
+- While typing invalid value: field turns red
+- Show violated equation (e.g., "25 ≠ 36")
+- On blur: auto-recompute to valid value
 
-### 3.4 Error display
-- Parse errors, undefined variables, contradictions → don't render fields
-- Show clear error message pointing to the problem
+### 4.4 HTML/Markdown support
+- Render recipe as markdown
+- Support HTML comments for hidden constraints:
+  `<!-- {s: h+m/60} -->` defines s but doesn't display a field
 
-## Phase 4: Migration & Compatibility
+## Phase 5: Migration
 
-### 4.1 Update existing recipes
-- Convert old `=` constant syntax to new `{...}` syntax as needed
-- Keep old recipes working or convert them explicitly
+### 5.1 Convert existing recipes
+- Old `=325` constant syntax → handled differently or deprecated
+- Recipes already using new `{...}` syntax in script.js
 
-### 4.2 Backward compatibility decisions
-- Do we still support bare numbers scaling? (Probably not — require `{...}`)
-- Do we still support `=` prefix? (Probably deprecate in favor of expressions)
-
-## Phase 5: Extended Features
-
-### 5.1 Markdown support
-- Render recipe text as markdown
-- Support HTML comments for hidden constraints
-
-### 5.2 Additional use cases
-- "Breakaway Biscuits" bike racing calculator
+### 5.2 New use cases
+- Breakaway Biscuits (bike race calculator)
 - Bike tour timing calculator
 - Pythagorean triple demo
 
 ## Error Cases (Anti-Postel: Fail Loudly)
 
-1. **Undefined variable** — referenced but never labeled
-2. **Contradictory constraints** — no solution exists
-3. **Syntax error** — malformed expression
-4. **Duplicate labels** — same label defined twice
-5. **Bare number** — `{5}` without variable reference (maybe error?)
-6. **Disconnected field** — defined but never used (warn or error)
-
-## Open Questions
-
-- Should `{5}` (bare number, no variable) be an error? README says probably yes.
-- Should disconnected variables be errors or warnings?
-- What default value for uninitialized variables like `{w:}`?
-- How to handle circular dependencies? (Fail loudly)
+1. **Undefined variable** — referenced in expression but never defined via a 
+   label. E.g., `{foo*2}` where foo was never defined.
+2. **Contradictory constraints** — initial template has no valid solution. 
+   E.g., `{a:3}, {b:4}, {c:6}` with hidden constraint `{a^2+b^2=c^2}`.
+3. **Syntax error** — malformed expression.
+4. **Duplicate label** — same variable name defined twice.
+5. **Bare number, no label** — `{5}` is an error because it affects nothing and 
+   can't be referenced. Give it a label: `{foo:5}`.
+6. **Disconnected variable** — defined but never referenced elsewhere. E.g., 
+   `{tau:6.28}` where tau never appears in any other expression. Workaround: 
+   `{tau:6.28} <!-- {tau} not used yet -->`
 
 ## Files to Modify
 
 - `script.js` — main parsing and rendering logic
-- `util.js` — expression evaluation utilities
-- `styles.css` — styling for fixed fields, errors, etc.
-- `index.html` — possibly add error display area
+- `util.js` — expression evaluation utilities  
+- `styles.css` — fixed fields, error states
+- `index.html` — error display area
 
-## Next Immediate Steps
+## Next Steps
 
-1. [ ] Implement `{...}` regex parser (extract expressions from recipe text)
-2. [ ] Parse expression internals (label, expressions, constraints)
-3. [ ] Build symbol table and dependency graph
-4. [ ] Implement expression evaluator with Mathematica-style syntax
-5. [ ] Render fields for new syntax
-6. [ ] Wire up basic constraint solving (binary search)
-7. [ ] Add fixed/unfixed toggle UI
-8. [ ] Add error states and constraint violation display
-9. [ ] Convert existing recipes to new syntax
-10. [ ] Add new use cases (Breakaway Biscuits, etc.)
+1. [x] Implement `{...}` regex extraction
+2. [x] Parse block internals (label, expressions, constraints)
+3. [x] Preprocessing pass to add nonce labels
+4. [x] Build symbol table and validate (undefined vars, duplicates, etc.)
+5. [x] Expression evaluator with Mathematica-style syntax
+6. [x] Basic constraint solver (binary search)
+7. [x] Render fields for new syntax
+8. [x] Fixed/unfixed toggle (double-click)
+9. [x] Constraint violation UI (red fields, auto-recompute on blur)
+10. [x] HTML comment support for hidden constraints
+11. [x] Add README examples to dropdown (Pythagorean, Breakaway, Bike Tour)

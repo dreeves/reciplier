@@ -1,0 +1,9 @@
+{
+  "name": "reciplier",
+  "version": "2026.01.02-a",
+  "description": "Recipe Multiplier and Calculator Calculator",
+
+  "devDependencies": {
+    "puppeteer": "^24.34.0"
+  }
+}
