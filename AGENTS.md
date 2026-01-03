@@ -7,8 +7,9 @@
 4. Never say "you're absolutely right" or any other form of sycophancy or even mild praise. Really zero personality of any kind. 
 5. Follow Beeminder's [Pareto Dominance Principle (PDP)](https://blog.beeminder.com/pdp). Get explicit approval if any change would not be a Pareto improvement.
 6. Follow Beeminder's [Anti-Magic Principle](https://blog.beeminder.com/magic). Don't fix problems by adding if-statements. Even if you're fixing a bug like "when X happens the app does Y instead of Z", resist the urge to add "if X then Z". If you're sure an if-statement is needed, make the case to me, the human.
-7. Follow Beeminder's [Anti-Robustness Principle](https://blog.beeminder.com/postel) aka Anti-Postel. Fail loudly and immediately. Never silently fix inputs. See also the branch of defensive programming known as offensive programming.
-8. We [call them quals](https://blog.beeminder.com/quals), not tests.
+7. **Minimize code paths.** Every if-statement, ternary, or conditional filter is a code path. Prefer additive changes over conditional branches. Example: instead of "if error then show error page ELSE show normal page", do "always show normal page, and if error ALSO show error banner". The goal is one main code path with optional additions, not forking paths. This reduces complexity and makes debugging easier since everything always renders.
+8. Follow Beeminder's [Anti-Robustness Principle](https://blog.beeminder.com/postel) aka Anti-Postel. Fail loudly and immediately. Never silently fix inputs. See also the branch of defensive programming known as offensive programming.
+9. We [call them quals](https://blog.beeminder.com/quals), not tests.
 
 ---
 Humans above, robots below

@@ -41,15 +41,15 @@ Scaled by a factor of {x:1}
 `,
 // -----------------------------------------------------------------------------
 'cookies': `\
-* {1x} cup granulated sugar
-* {1x} cup brown sugar
-* {1x} cup butter, softened
-* {2x} eggs
-* {1.5x} teaspoons vanilla
-* {1x} teaspoon baking soda
-* {1x} teaspoon salt
-* {3x} cups all purpose flour
-* {12x} ounces semi-sweet chocolate chips (danthany version: half semi-sweet and half milk chocolate)
+* {1x} cup ({200x}g) granulated sugar
+* {1x} cup ({206x}g) brown sugar (up to {220x}g)
+* {1x} cup ({227x}g) butter, softened
+* {2x} eggs ({109x}g)
+* {1.5x} teaspoons vanilla or {10x}g vanilla paste
+* {1x} teaspoon ({6x}g) baking soda
+* {1x} teaspoon ({5x}g) salt
+* {3x} cups ({376x}g) all purpose flour (as low as {360x}g; we've done much higher via packed cups, most recently tried {376x}g)
+* {12x} ounces ({338x}g) semi-sweet chocolate chips (danthany version: half semi-sweet and half milk chocolate)
 
 Place sugar, butter, eggs, and vanilla in mixer bowl. Attach bowl and flat beater to mixer. Turn to speed 2 and mix about 30 seconds. Stop and scrape bowl.
 
@@ -122,23 +122,36 @@ Scaled by a factor of {x:1}
 `,
 // -----------------------------------------------------------------------------
 'pythagorean': `\
-{a:3}, {b:4}, {c: sqrt(a^2 + b^2)} is a Pythagorean triple.
+{a:3}, {b:4}, {c:} is a Pythagorean triple.
 
 Sanity check: {a^2 + b^2 = c^2}
 `,
 // -----------------------------------------------------------------------------
 'breakaway': `\
-The riders in the break have a {m:1}:{s:30} gap with {d:20}km to go.
+The riders in the break have a {m:1}:{s:30}s gap with {d:20}km ({0.621371d}mi) to go.
 So if the break does {vb:40}km/h ({0.621371vb}mph) then the peloton needs to do {vp: pd/t}km/h ({0.621371vp}mph) to catch them at the line.
 
 Scratchpad:
-* Gap in hours: {gt: m/60+s/3600} (ie, {m+s/60}m or {60m+s}s or, heck, {gt/24}d)
+* Gap in hours: {gt: m/60+s/3600} (ie, {m+s/60 = gt*60}m or {60m+s = gt*3600}s)
 * Gap distance: {gd: vb*gt}km ({0.621371gd}mi) (I think vb not vp for this?)
 * Breakaway's time till finish: {t: d/vb}
 * Peloton's distance to the line: {pd: d+gd}
 `,
 // -----------------------------------------------------------------------------
 'biketour': `\
+Distance:        {d:66} miles
+Start time:      {h:6}:{m:45}am             ({s: h+m/60} as decimal hours)
+End time:        {H:12}:{M:52} (24H format) ({e: H+M/60} as decimal hours)
+Break 1:         {b1h:0}h{b1m:26}m          ({b1: b1h+b1m/60}h)
+Break 2:         {b2h:0}h{b2m:37}m          ({b2: b2h+b2m/60}h)
+Break 3:         {b3h:0}h{b3m:0}m           ({b3: b3h+b3m/60}h)
+Total breaks:    {b: b1+b2+b3} hours
+Wall clock time: {w: e-s} hours = {wh: floor(w)}h{wm: (w-floor(w))*60}m
+Riding time:     {t: w-b} hours = {th: floor(t)}h{tm: (t-floor(t))*60}m
+Avg speed:       {v: d/t} mph
+Unadjusted spd:  {u: d/w} mph
+`,
+/*
 Distance:        {d:66} miles               <!-- {d = v*t}                 -->
 Start time:      {h:6}:{m:45}am             <!-- {s: h+m/60} & {s = e-d/u} -->
 End time:        {H:12}:{M:52} (24H format) <!-- {e: H+M/60} & {e = s+d/u} -->
@@ -150,7 +163,7 @@ Avg speed:       {v: d/t}                   <!-- {v = d/(e-s-b)}           -->
 Unadjusted spd:  {u: d/w}                   <!-- {u = d/(e-s)}             -->
 Wall clock time: {wh:}h{wm:}m               <!-- {w: wh+wm/60 = e-s}       -->
 Riding time:     {th:}h{tm:}m               <!-- {t: th+tm/60 = e-s-b}     -->
-`,
+*/
 // -----------------------------------------------------------------------------
 'blank': "",
 };
@@ -265,53 +278,29 @@ function preprocessLabels(blocks) {
 // Mathematica-style Syntax Conversion
 // ============================================================================
 
-// Convert Mathematica-style expression to JavaScript
+// Convert expression syntax to JavaScript
+// Supports: implicit multiplication (2x -> 2*x), ^ for exponentiation, math functions, pi
 function toJavaScript(expr) {
-  // Guard against undefined/null/empty
-  if (!expr || typeof expr !== 'string') {
-    return '0'
-  }
+  if (!expr || typeof expr !== 'string') return '0'
   
   let js = expr
   
-  // Handle implicit multiplication FIRST (before other transformations)
-  // Pattern: number followed directly by letter (variable)
-  js = js.replace(/(\d)([a-zA-Z_])/g, '$1*$2')  // 2x -> 2*x
+  // Implicit multiplication: number followed by letter (but not inside identifiers)
+  // We need to be careful: 2x -> 2*x, but b3h stays b3h
+  // Strategy: only match when digit is NOT preceded by a letter
+  js = js.replace(/(?<![a-zA-Z_])(\d+\.?\d*)([a-zA-Z_])/g, '$1*$2')
   
-  // Handle sqrt() -> Math.sqrt()
-  js = js.replace(/\bsqrt\s*\(/g, 'Math.sqrt(')
-  
-  // Handle sin, cos, tan, etc.
-  js = js.replace(/\b(sin|cos|tan|asin|acos|atan|log|exp|abs)\s*\(/g, 'Math.$1(')
-  
-  // Handle pi
+  // Math functions
+  js = js.replace(/\b(sqrt|floor|ceil|round|min|max|sin|cos|tan|asin|acos|atan|log|exp|abs)\s*\(/g, 'Math.$1(')
   js = js.replace(/\bpi\b/gi, 'Math.PI')
   
-  // Handle exponentiation: x^2 -> Math.pow(x,2)
-  // Multiple passes to handle nested exponents
+  // Exponentiation: x^2 -> Math.pow(x,2)
   for (let i = 0; i < 10; i++) {
     const before = js
-    // Match: (word or number or )) ^ (word or number or (balanced parens))
-    js = js.replace(/(\w+|\d+\.?\d*|\))\s*\^\s*(\w+|\d+\.?\d*|\([^()]*\))/g, (match, base, exp) => {
-      return `Math.pow(${base},${exp})`
-    })
+    js = js.replace(/(\w+|\d+\.?\d*|\))\s*\^\s*(\w+|\d+\.?\d*|\([^()]*\))/g, 
+      (_, base, exp) => `Math.pow(${base},${exp})`)
     if (js === before) break
   }
-  
-  // Handle remaining implicit multiplication cases
-  js = js.replace(/(\))(\()/g, '$1*$2')          // )( -> )*(
-  js = js.replace(/(\))([a-zA-Z_])/g, '$1*$2')   // )x -> )*x
-  
-  // Don't add * before ( if it's a function call
-  // This regex is tricky - we want to add * for things like "x(" but not "Math.pow("
-  js = js.replace(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g, (match, name) => {
-    // Don't add * if it's a known function
-    if (name === 'Math' || name.startsWith('Math') || 
-        ['sqrt', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'exp', 'abs', 'pow'].includes(name)) {
-      return match
-    }
-    return `${name}*(`
-  })
   
   return js
 }
@@ -343,25 +332,15 @@ function evaluate(expr, vars) {
 // ============================================================================
 
 // Find all variable names referenced in an expression
+// Works on the ORIGINAL expression (before toJavaScript transform) to preserve variable names
 function findVariables(expr) {
-  // Handle undefined or empty expressions
-  if (!expr || expr.trim() === '') {
-    return new Set()
-  }
+  if (!expr || expr.trim() === '') return new Set()
   
-  // Match identifiers that aren't part of Math.xxx or numbers
-  const jsExpr = toJavaScript(expr)
-  const vars = new Set()
+  const reserved = new Set(['sqrt', 'floor', 'ceil', 'round', 'min', 'max', 
+    'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'exp', 'abs', 'pi'])
   
-  // Remove Math.xxx calls and numbers, then find remaining identifiers
-  const cleaned = jsExpr
-    .replace(/Math\.\w+/g, '')
-    .replace(/\d+\.?\d*/g, '')
-  
-  const matches = cleaned.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || []
-  matches.forEach(v => vars.add(v))
-  
-  return vars
+  const matches = expr.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || []
+  return new Set(matches.filter(v => !reserved.has(v)))
 }
 
 // Build symbol table from parsed blocks
@@ -448,14 +427,23 @@ function buildSymbolTable(blocks) {
 function computeInitialValues(blocks, symbols) {
   const values = {}
   const errors = []
+  const emptyExprVars = new Set() // Track variables with empty expressions like {c:}
   
   // Sort blocks by dependency order (simple topological sort attempt)
   // Variables that only reference already-computed vars should be computed first
   
   // Start with explicit values: {d:9} means d=9
+  // Also track variables with empty expressions that need solving
   for (const block of blocks) {
     if (block.expressions.length === 1) {
       const expr = block.expressions[0]
+      
+      // Check for empty expression like {c:}
+      if (!expr || expr.trim() === '') {
+        emptyExprVars.add(block.label)
+        continue
+      }
+      
       const vars = findVariables(expr)
       
       // If the expression has no variables, it's a literal value
@@ -467,6 +455,8 @@ function computeInitialValues(blocks, symbols) {
           values[block.label] = result.value
         }
       }
+    } else if (block.expressions.length === 0) {
+      emptyExprVars.add(block.label)
     }
   }
   
@@ -482,9 +472,12 @@ function computeInitialValues(blocks, symbols) {
     
     for (const block of blocks) {
       if (values[block.label] !== undefined) continue // Already computed
+      if (emptyExprVars.has(block.label)) continue // Skip empty-expr vars for now
       
       // Try to evaluate the first expression with current values
       const expr = block.expressions[0]
+      if (!expr || expr.trim() === '') continue
+      
       const vars = findVariables(expr)
       
       // Check if all required variables are available
@@ -498,117 +491,117 @@ function computeInitialValues(blocks, symbols) {
         }
       }
     }
+    
+    // Also try to solve empty-expr vars in each iteration (they may become solvable)
+    for (const varName of emptyExprVars) {
+      if (values[varName] !== undefined) continue
+      const solved = solveFromConstraints(varName, blocks, values)
+      if (solved !== null) {
+        values[varName] = solved
+        changed = true
+      }
+    }
+  }
+  
+  // Now try to solve for empty-expression variables using constraints
+  for (const varName of emptyExprVars) {
+    if (values[varName] !== undefined) continue
+    
+    const solved = solveFromConstraints(varName, blocks, values)
+    if (solved !== null) {
+      values[varName] = solved
+    } else {
+      values[varName] = 1 // Default fallback
+    }
   }
   
   // For any remaining undefined variables, set default value
   for (const block of blocks) {
     if (values[block.label] === undefined) {
-      // Check if it's an empty definition like {w:}
-      if (block.expressions.length === 0 || 
-          (block.expressions.length === 1 && block.expressions[0] === '')) {
-        values[block.label] = 1 // Default value for undefined
-      } else {
-        // Try with current partial values
-        const result = evaluate(block.expressions[0], values)
+      // Try with current partial values
+      const expr = block.expressions[0]
+      if (expr && expr.trim() !== '') {
+        const result = evaluate(expr, values)
         if (!result.error && result.value !== null && isFinite(result.value)) {
           values[block.label] = result.value
-        } else {
-          values[block.label] = 1 // Fallback default
+          continue
         }
       }
+      values[block.label] = 1 // Fallback default
     }
   }
   
-  return { values, errors }
+  return { values, errors, emptyExprVars }
 }
 
 // ============================================================================
 // Constraint Solver
 // ============================================================================
 
-// Check if all constraints are satisfied with given values
-function checkConstraints(blocks, values) {
-  const violations = []
+// The ONE solver function: find value of varName such that expr evaluates to target
+// Tries smart guesses first (handles non-monotonic cases like c^2), then binary search
+function solve(expr, varName, target, values) {
+  const test = { ...values }
+  const tol = Math.abs(target) * 1e-9 + 1e-9
   
-  for (const block of blocks) {
-    if (block.expressions.length > 1) {
-      // This is a constraint - all expressions should evaluate equal
-      const results = block.expressions.map(expr => {
-        const r = evaluate(expr, values)
-        return r.error ? null : r.value
-      })
-      
-      if (results.some(r => r === null)) {
-        violations.push({ block, message: 'Expression evaluation error' })
-        continue
-      }
-      
-      // Check if all results are approximately equal
-      const first = results[0]
-      const tolerance = Math.abs(first) * 1e-9 + 1e-9
-      for (let i = 1; i < results.length; i++) {
-        if (Math.abs(results[i] - first) > tolerance) {
-          violations.push({
-            block,
-            message: `${formatNum(results[0])} ≠ ${formatNum(results[i])}`,
-            values: results
-          })
-          break
-        }
-      }
+  // Helper to check if a guess works
+  function tryGuess(guess) {
+    if (!isFinite(guess)) return null
+    test[varName] = guess
+    const r = evaluate(expr, test)
+    if (!r.error && isFinite(r.value) && Math.abs(r.value - target) < tol) {
+      return guess
+    }
+    return null
+  }
+  
+  // Smart guesses - handles non-monotonic cases like x^2 = 25 -> try sqrt(25) = 5
+  const guesses = [
+    target,                              // direct
+    Math.sqrt(Math.abs(target)),         // for squared expressions
+    -Math.sqrt(Math.abs(target)),        // negative root
+    Math.cbrt(target),                   // for cubed expressions  
+    1, 0, -1,                            // common values
+    target / 2, target * 2,              // nearby
+  ]
+  
+  // Prefer positive solutions (try positive guesses first)
+  for (const g of guesses) {
+    if (g >= 0) {
+      const result = tryGuess(g)
+      if (result !== null) return result
+    }
+  }
+  for (const g of guesses) {
+    if (g < 0) {
+      const result = tryGuess(g)
+      if (result !== null) return result
     }
   }
   
-  return violations
-}
-
-// Binary search to find a value for a variable that satisfies constraints
-function binarySearchSolve(blocks, values, varToSolve, targetBlock) {
-  // Get the constraint expressions
-  const exprs = targetBlock.expressions
-  if (exprs.length < 2) return values[varToSolve]
+  // Binary search as fallback (for monotonic expressions)
+  let lo = 0, hi = 1000
   
-  // We want to find a value for varToSolve such that all expressions are equal
-  // Use the first expression as the target value
-  const targetExpr = exprs[0]
-  const otherExpr = exprs[1]
-  
-  // Compute target value
-  const targetResult = evaluate(targetExpr, values)
-  if (targetResult.error || !isFinite(targetResult.value)) {
-    return values[varToSolve]
-  }
-  const target = targetResult.value
-  
-  // Binary search for the value
-  let lo = -1e10, hi = 1e10
-  
-  // First, try to find bounds where the function crosses the target
-  const testValues = { ...values }
-  
-  // Evaluate at current value to get direction
-  const currentResult = evaluate(otherExpr, testValues)
-  if (currentResult.error) return values[varToSolve]
-  
-  // Try to find good initial bounds
+  // Find valid bounds
   for (let scale = 1; scale < 1e10; scale *= 10) {
-    testValues[varToSolve] = scale
-    const high = evaluate(otherExpr, testValues)
-    testValues[varToSolve] = -scale
-    const low = evaluate(otherExpr, testValues)
-    testValues[varToSolve] = 1/scale
-    const small = evaluate(otherExpr, testValues)
+    test[varName] = scale
+    const hiRes = evaluate(expr, test)
+    test[varName] = -scale  
+    const loRes = evaluate(expr, test)
     
-    if (!high.error && !low.error) {
-      if ((high.value - target) * (low.value - target) < 0) {
+    if (!hiRes.error && !loRes.error) {
+      if ((hiRes.value - target) * (loRes.value - target) <= 0) {
         lo = -scale
         hi = scale
         break
       }
     }
-    if (!high.error && !small.error) {
-      if ((high.value - target) * (small.value - target) < 0) {
-        lo = 1/scale
+    
+    test[varName] = 0
+    const zeroRes = evaluate(expr, test)
+    if (!hiRes.error && !zeroRes.error) {
+      if ((hiRes.value - target) * (zeroRes.value - target) <= 0) {
+        lo = 0
         hi = scale
         break
       }
@@ -616,26 +609,19 @@ function binarySearchSolve(blocks, values, varToSolve, targetBlock) {
   }
   
   // Binary search
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2
-    testValues[varToSolve] = mid
-    const result = evaluate(otherExpr, testValues)
+    test[varName] = mid
+    const r = evaluate(expr, test)
+    if (r.error) return null
     
-    if (result.error || !isFinite(result.value)) {
-      return values[varToSolve]
-    }
+    if (Math.abs(r.value - target) < tol) return mid
     
-    const diff = result.value - target
-    if (Math.abs(diff) < Math.abs(target) * 1e-10 + 1e-10) {
-      return mid
-    }
+    test[varName] = lo
+    const loRes = evaluate(expr, test)
+    if (loRes.error) return null
     
-    // Determine search direction
-    testValues[varToSolve] = lo
-    const loResult = evaluate(otherExpr, testValues)
-    if (loResult.error) return values[varToSolve]
-    
-    if ((loResult.value - target) * diff > 0) {
+    if ((loRes.value - target) * (r.value - target) > 0) {
       lo = mid
     } else {
       hi = mid
@@ -645,50 +631,157 @@ function binarySearchSolve(blocks, values, varToSolve, targetBlock) {
   return (lo + hi) / 2
 }
 
+// Find a constraint involving varName and solve for it
+function solveFromConstraints(varName, blocks, values) {
+  for (const block of blocks) {
+    if (block.expressions.length < 2) continue
+    
+    // Find expressions with and without the variable
+    let targetExpr = null, solveExpr = null
+    for (const expr of block.expressions) {
+      const vars = findVariables(expr)
+      if (vars.has(varName)) {
+        solveExpr = expr
+      } else if (!targetExpr) {
+        targetExpr = expr
+      }
+    }
+    
+    if (!solveExpr) continue // Variable not in this constraint
+    if (!targetExpr) continue // No target expression without the variable
+    
+    // Check all other variables have values
+    const allVars = findVariables(targetExpr)
+    if (![...allVars].every(v => values[v] !== undefined)) continue
+    
+    // Evaluate target
+    const targetRes = evaluate(targetExpr, values)
+    if (targetRes.error || !isFinite(targetRes.value)) continue
+    
+    // Solve
+    const result = solve(solveExpr, varName, targetRes.value, values)
+    if (result !== null) return result
+  }
+  return null
+}
+
+// Check if initial values contradict any constraints (fail loudly per Anti-Postel)
+// Skip checking constraints that involve variables with empty expressions (those need solving)
+function checkInitialContradictions(blocks, values, emptyExprVars) {
+  const errors = []
+  
+  for (const block of blocks) {
+    if (block.expressions.length > 1) {
+      // Check if this constraint involves any variable that needs to be computed
+      const varsInConstraint = new Set()
+      block.expressions.forEach(expr => {
+        if (expr && expr.trim() !== '') {
+          findVariables(expr).forEach(v => varsInConstraint.add(v))
+        }
+      })
+      
+      // Skip if any variable in this constraint has an empty expression (needs solving)
+      const involvesEmptyVar = [...varsInConstraint].some(v => emptyExprVars.has(v))
+      if (involvesEmptyVar) continue
+      
+      // This is a constraint - all expressions should evaluate equal
+      const results = block.expressions.map(expr => {
+        if (!expr || expr.trim() === '') return null
+        const r = evaluate(expr, values)
+        return r.error ? null : r.value
+      })
+      
+      // Skip if any expression couldn't be evaluated
+      if (results.some(r => r === null)) continue
+      
+      // Check if all results are approximately equal
+      const first = results[0]
+      const tolerance = Math.abs(first) * 1e-6 + 1e-6
+      for (let i = 1; i < results.length; i++) {
+        if (Math.abs(results[i] - first) > tolerance) {
+          const exprStr = block.expressions.join(' = ')
+          const valuesStr = results.map(r => formatNum(r)).join(' ≠ ')
+          errors.push(`Contradiction: {${exprStr}} evaluates to ${valuesStr}`)
+          break
+        }
+      }
+    }
+  }
+  
+  return errors
+}
+
+// Check if all constraints are satisfied with given values
+function checkConstraints(blocks, values) {
+  const violations = []
+  const tol = 1e-9
+  
+  for (const block of blocks) {
+    if (block.expressions.length < 2) continue
+    
+    const results = block.expressions.map(expr => {
+      const r = evaluate(expr, values)
+      return r.error ? null : r.value
+    })
+    
+    if (results.some(r => r === null)) {
+      violations.push({ block, message: 'Evaluation error' })
+      continue
+    }
+    
+    const first = results[0]
+    const tolerance = Math.abs(first) * tol + tol
+    for (let i = 1; i < results.length; i++) {
+      if (Math.abs(results[i] - first) > tolerance) {
+        violations.push({ block, message: `${formatNum(first)} ≠ ${formatNum(results[i])}` })
+        break
+      }
+    }
+  }
+  return violations
+}
+
 // Solve constraints by adjusting unfixed variables
 function solveConstraints(blocks, values, fixedVars, changedVar) {
   const newValues = { ...values }
   
-  // Multiple passes to propagate changes through dependent constraints
   for (let pass = 0; pass < 10; pass++) {
     const violations = checkConstraints(blocks, newValues)
     if (violations.length === 0) break
     
     let madeProgress = false
-    
-    // For each violation, try to find an unfixed variable to adjust
-    for (const violation of violations) {
-      const block = violation.block
-      const exprs = block.expressions
-      if (exprs.length < 2) continue
+    for (const { block } of violations) {
+      if (block.expressions.length < 2) continue
       
-      // Find variables in each expression
-      const varsInFirst = findVariables(exprs[0])
-      const varsInOthers = new Set()
-      for (let i = 1; i < exprs.length; i++) {
-        findVariables(exprs[i]).forEach(v => varsInOthers.add(v))
+      // Find all variables and which are adjustable
+      const allVars = new Set()
+      block.expressions.forEach(expr => findVariables(expr).forEach(v => allVars.add(v)))
+      
+      const adjustable = [...allVars].filter(v => !fixedVars.has(v) && v !== changedVar)
+      if (adjustable.length === 0) continue
+      
+      // Find target (expression without adjustable var) and solve expression
+      const varToSolve = adjustable[0]
+      let targetExpr = null, solveExpr = null
+      
+      for (const expr of block.expressions) {
+        const vars = findVariables(expr)
+        if (vars.has(varToSolve)) {
+          solveExpr = expr
+        } else if (!targetExpr) {
+          targetExpr = expr
+        }
       }
       
-      // Prefer to solve for variables that are ONLY in the other expressions
-      // (not in the target/first expression)
-      const preferredVars = [...varsInOthers].filter(v => 
-        !varsInFirst.has(v) && !fixedVars.has(v) && v !== changedVar
-      )
+      if (!targetExpr || !solveExpr) continue
       
-      // Fall back to any unfixed variable in the other expressions
-      const fallbackVars = [...varsInOthers].filter(v =>
-        !fixedVars.has(v) && v !== changedVar
-      )
+      const targetRes = evaluate(targetExpr, newValues)
+      if (targetRes.error) continue
       
-      const varsToTry = preferredVars.length > 0 ? preferredVars : fallbackVars
-      
-      if (varsToTry.length > 0) {
-        const varToSolve = varsToTry[0]
-        const newVal = binarySearchSolve(blocks, newValues, varToSolve, block)
-        if (newVal !== newValues[varToSolve]) {
-          newValues[varToSolve] = newVal
-          madeProgress = true
-        }
+      const newVal = solve(solveExpr, varToSolve, targetRes.value, newValues)
+      if (newVal !== null && Math.abs(newVal - newValues[varToSolve]) > 1e-12) {
+        newValues[varToSolve] = newVal
+        madeProgress = true
       }
     }
     
@@ -739,13 +832,16 @@ function parseRecipe() {
   const { symbols, errors: symbolErrors } = buildSymbolTable(blocks)
   
   // Compute initial values
-  const { values, errors: valueErrors } = computeInitialValues(blocks, symbols)
+  const { values, errors: valueErrors, emptyExprVars } = computeInitialValues(blocks, symbols)
+  
+  // Check for contradictions in initial values (skip constraints involving empty-expr vars)
+  const contradictions = checkInitialContradictions(blocks, values, emptyExprVars)
   
   // Update state
   state.blocks = blocks
   state.symbols = symbols
   state.values = values
-  state.errors = [...symbolErrors, ...valueErrors]
+  state.errors = [...symbolErrors, ...valueErrors, ...contradictions]
   state.fixedVars = new Set()
   
   updateRecipeDropdown()
@@ -778,20 +874,11 @@ function renderRecipe() {
     return
   }
   
-  // Show errors if any critical ones
+  // Check for critical errors (will show banner but still render everything)
   const criticalErrors = state.errors.filter(e => 
-    e.includes('Undefined') || e.includes('Duplicate')
+    e.includes('Undefined') || e.includes('Duplicate') || e.includes('Contradiction')
   )
-  
-  if (criticalErrors.length > 0) {
-    output.innerHTML = `<div class="error-display">${criticalErrors.map(e => 
-      `<div class="error-message">⚠️ ${e}</div>`
-    ).join('')}</div>`
-    output.style.display = 'block'
-    copySection.style.display = 'none'
-    return
-  }
-  
+
   // Find all HTML comment ranges to strip them from output
   const text = state.recipeText
   const commentRanges = []
@@ -877,7 +964,14 @@ function renderRecipe() {
   // Convert newlines to <br> for display
   html = html.replace(/\n/g, '<br>')
   
-  output.innerHTML = `<div class="recipe-rendered">${html}</div>`
+  // Build error banner if there are critical errors (shown BEFORE the recipe, not instead of it)
+  const errorBanner = criticalErrors.length > 0
+    ? `<div class="error-display">
+        ${criticalErrors.map(e => `<div class="error-message">⚠️ ${e}</div>`).join('')}
+      </div>`
+    : ''
+  
+  output.innerHTML = `${errorBanner}<div class="recipe-rendered">${html}</div>`
   output.style.display = 'block'
   copySection.style.display = 'block'
   
@@ -906,142 +1000,93 @@ function handleFieldInput(e) {
   const blockId = input.dataset.blockId
   const newValue = toNum(input.value)
   
+  // Invalid number format - just mark invalid, don't change state
   if (newValue === null || !isFinite(newValue)) {
     input.classList.add('invalid')
     return
   }
   
-  input.classList.remove('invalid')
-  
-  // Find the block for this field
   const block = state.blocks.find(b => b.id === blockId)
   if (!block) return
   
-  // If the field has an expression with variables, solve for those variables
-  // to make the expression equal the new value
+  // Work on a COPY of values - only commit if constraints can be satisfied
+  let testValues = { ...state.values }
+  
+  // Apply the new value
   const expr = block.expressions[0]
   const varsInExpr = findVariables(expr)
   
   if (varsInExpr.size > 0) {
-    // Find an unfixed variable to solve for
-    const unfixedVars = [...varsInExpr].filter(v => !state.fixedVars.has(v))
-    
-    if (unfixedVars.length > 0) {
-      // Solve for the first unfixed variable to make expression = newValue
-      const varToSolve = unfixedVars[0]
-      const solvedValue = solveForVariable(expr, varToSolve, newValue, state.values)
-      if (solvedValue !== null) {
-        state.values[varToSolve] = solvedValue
+    // This field's value comes from an expression - solve for an unfixed variable
+    const unfixed = [...varsInExpr].filter(v => !state.fixedVars.has(v))
+    if (unfixed.length > 0) {
+      const solved = solve(expr, unfixed[0], newValue, testValues)
+      if (solved !== null) {
+        testValues[unfixed[0]] = solved
       }
     }
   } else {
-    // No variables in expression - just update the literal value
-    state.values[label] = newValue
+    // This field is a simple value - set it directly
+    testValues[label] = newValue
   }
   
-  // Recompute all derived values and solve constraints
-  recomputeAllValues()
-  state.values = solveConstraints(state.blocks, state.values, state.fixedVars, label)
-  recomputeAllValues() // Re-run after constraint solving
+  // Temporarily treat this variable as fixed while solving constraints
+  const tempFixed = new Set(state.fixedVars)
+  tempFixed.add(label)
   
-  // Update all other fields (not the one being edited)
-  $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
-    if (field !== input) {
-      const fieldLabel = field.dataset.label
-      field.value = formatNum(state.values[fieldLabel])
-    }
-  })
+  // Try to solve all constraints with the new value
+  testValues = solveConstraints(state.blocks, testValues, tempFixed, label)
+  
+  // Recompute derived values
+  testValues = recomputeValues(state.blocks, testValues)
+  
+  // Check if constraints are satisfied
+  const violations = checkConstraints(state.blocks, testValues)
+  
+  if (violations.length === 0) {
+    // Success - commit the valid values
+    state.values = testValues
+    input.classList.remove('invalid')
+    
+    // Update all other fields with the new valid values
+    $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
+      if (field !== input) {
+        field.value = formatNum(state.values[field.dataset.label])
+      }
+    })
+  } else {
+    // Constraints violated - mark invalid but don't change state.values
+    input.classList.add('invalid')
+  }
 }
 
-// Solve for a variable to make expression equal target value
-function solveForVariable(expr, varToSolve, targetValue, currentValues) {
-  const testValues = { ...currentValues }
-  
-  // Binary search
-  let lo = -1e10, hi = 1e10
-  
-  // Try to find good initial bounds
-  for (let scale = 1; scale < 1e10; scale *= 10) {
-    testValues[varToSolve] = scale
-    const high = evaluate(expr, testValues)
-    testValues[varToSolve] = -scale
-    const low = evaluate(expr, testValues)
-    testValues[varToSolve] = 1/scale
-    const small = evaluate(expr, testValues)
-    testValues[varToSolve] = 0
-    const zero = evaluate(expr, testValues)
-    
-    if (!high.error && !low.error) {
-      if ((high.value - targetValue) * (low.value - targetValue) <= 0) {
-        lo = -scale
-        hi = scale
-        break
-      }
-    }
-    if (!high.error && !small.error) {
-      if ((high.value - targetValue) * (small.value - targetValue) <= 0) {
-        lo = 1/scale
-        hi = scale
-        break
-      }
-    }
-    if (!high.error && !zero.error) {
-      if ((high.value - targetValue) * (zero.value - targetValue) <= 0) {
-        lo = 0
-        hi = scale
-        break
-      }
-    }
-  }
-  
-  // Binary search
-  for (let i = 0; i < 100; i++) {
-    const mid = (lo + hi) / 2
-    testValues[varToSolve] = mid
-    const result = evaluate(expr, testValues)
-    
-    if (result.error || !isFinite(result.value)) {
-      return null
-    }
-    
-    const diff = result.value - targetValue
-    if (Math.abs(diff) < Math.abs(targetValue) * 1e-10 + 1e-10) {
-      return mid
-    }
-    
-    // Determine search direction
-    testValues[varToSolve] = lo
-    const loResult = evaluate(expr, testValues)
-    if (loResult.error) return null
-    
-    if ((loResult.value - targetValue) * diff > 0) {
-      lo = mid
-    } else {
-      hi = mid
-    }
-  }
-  
-  return (lo + hi) / 2
-}
-
-// Recompute all field values based on current variable values
+// Recompute all field values based on current variable values (mutates state.values)
 function recomputeAllValues() {
+  state.values = recomputeValues(state.blocks, state.values)
+}
+
+// Pure version: recompute derived values and return new values object
+function recomputeValues(blocks, values) {
+  const newValues = { ...values }
+  
   // Multiple passes to handle dependencies
   for (let pass = 0; pass < 10; pass++) {
     let changed = false
     
-    for (const block of state.blocks) {
+    for (const block of blocks) {
       const expr = block.expressions[0]
+      if (!expr || expr.trim() === '') continue
+      
       const vars = findVariables(expr)
       
       // If all variables are defined, recompute this value
-      const allDefined = [...vars].every(v => state.values[v] !== undefined)
+      const allDefined = [...vars].every(v => newValues[v] !== undefined)
       if (allDefined && vars.size > 0) {
-        const result = evaluate(expr, state.values)
+        const result = evaluate(expr, newValues)
         if (!result.error && isFinite(result.value)) {
-          const oldVal = state.values[block.label]
-          state.values[block.label] = result.value
-          if (Math.abs(result.value - oldVal) > 1e-10) {
+          const oldVal = newValues[block.label]
+          if (oldVal === undefined || Math.abs(result.value - oldVal) > 1e-10) {
+            newValues[block.label] = result.value
             changed = true
           }
         }
@@ -1050,14 +1095,19 @@ function recomputeAllValues() {
     
     if (!changed) break
   }
+  
+  return newValues
 }
 
 function handleFieldBlur(e) {
   const input = e.target
   const label = input.dataset.label
   
-  // Ensure valid value
+  // If field is invalid, revert to the valid value from state.values
+  // Per README: "as soon as you clicked away from field c, it would recompute
+  // itself as the only value that makes all the equations true"
   if (input.classList.contains('invalid')) {
+    // state.values always contains consistent values, so just display them
     input.value = formatNum(state.values[label])
     input.classList.remove('invalid')
   }
@@ -1072,6 +1122,11 @@ function handleFieldKeypress(e) {
 function handleFieldDoubleClick(e) {
   const input = e.target
   const label = input.dataset.label
+  
+  // Per README: "you can't mark a field fixed when in that state" (invalid)
+  if (input.classList.contains('invalid')) {
+    return
+  }
   
   // Toggle fixed state
   if (state.fixedVars.has(label)) {
@@ -1166,12 +1221,31 @@ function showNotification(message) {
 // ============================================================================
 
 function updateSliderDisplay() {
+  const slider = $('scalingSlider')
+  const display = $('scalingDisplay')
+  
+  // Check if x variable exists in the current recipe
+  const hasX = state.symbols && state.symbols.x !== undefined
+  
+  if (!hasX) {
+    // Gray out the slider if no x variable
+    slider.disabled = true
+    slider.classList.add('disabled')
+    display.textContent = 'n/a'
+    display.classList.add('disabled')
+    return
+  }
+  
+  // Enable slider
+  slider.disabled = false
+  slider.classList.remove('disabled')
+  display.classList.remove('disabled')
+  
   const x = state.values.x || 1
-  $('scalingDisplay').textContent = formatNum(x)
-  $('scalingSlider').value = Math.min(10, Math.max(0.1, x))
+  display.textContent = formatNum(x) //+ 'x'
+  slider.value = Math.min(10, Math.max(0.1, x))
   
   // Green thumb when at 1x
-  const slider = $('scalingSlider')
   if (Math.abs(x - 1) < 0.005) {
     slider.classList.add('at-one-x')
   } else {
