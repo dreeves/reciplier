@@ -133,8 +133,8 @@ What if the initial template is impossible? Like:
 <!-- Hidden constraint: {a^2 + b^2 = c^2} -->
 ```
 
-Then it just changes a, b, or c arbitrarily. Hopefully it picks c since that
-yields all integers, but we don't want it to try to be clever. Anti-magic FTW.
+We want to fail loudly in that case and not render anything except to point to 
+where the problem is. Anti-magic FTW.
 
 Side note for that example: We want to support arbitrary markdown, including 
 html, so you can, for example, put intermediate equations you don't want 
@@ -196,3 +196,32 @@ possible there's a solution that can only be found by changing more than one
 variable at once.
 
 We'll worry about that when we find use cases where it matters.
+
+### Errors and Corner Cases
+
+Fail loudly and refuse to generate the fields or render the markdown in the
+following cases:
+
+1. Any variable is referenced in any expression that's never defined via a label
+on some other expression.
+
+2. The template itself contains contradictions. As discussed in the example with
+Pythagorean triples.
+
+3. Any syntax error.
+
+4. Other errors we haven't thought of yet or ways the template file violates any
+expectations. Anti-Postel FTW.
+
+5. If any expression is a bare number. I'm torn on this. Reasons to treat it as
+an error: (1) It doesn't make sense to have a field that when you change it it 
+has zero effect on anything else. (2) If you really want that for some reason,
+give the field a label. Even if you never use that label, it demonstrates that
+you're creating that disconnected field intentionally.
+
+6. Although, come to think of it, maybe we want to treat it as an error when any
+field is disconnected from all others? Like if you define {tau: 6.28} and then
+never use it. That would be nice to at least be warned about. The workaround if
+you intentionally want to define something you're not currently using would be
+something like `{tau: 6.28} <!-- {tau} not currently used -->`. So let's start 
+with treating this as an error and reconsider if it's too annoying in practice.

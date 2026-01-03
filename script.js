@@ -10,7 +10,7 @@ const recipesShown = {
 // Recipe data keyed consistently with recipesShown
 const recipeHash = {
 // -----------------------------------------------------------------------------
-'shortcake': `\
+'OLDshortcakeSCHDEL': `\
 Preheat oven to =325°F. Line bottom of =9x9 square pan with parchment paper.
 
 * 2   C   flour (can do half/half cake flour)
@@ -30,7 +30,29 @@ Pour into the prepared cake pan, spread evenly.
 Bake =30 to =40 minutes @ =325°F
 `,
 // -----------------------------------------------------------------------------
-'crepes': `\
+'shortcake': `\
+Preheat oven to 325°F. Line bottom of {9}x{9x}-inch pan with parchment paper.
+
+* {2x}    C   flour (can do half/half cake flour)
+* {1x}    C   sugar
+* {1/2*x} C   butter ({1x} stick)
+* {2x}    tsp baking powder
+* {1/2*x} tsp salt
+* {3/4*x} C   milk
+* {1x}    tsp vanilla
+
+Mix together dry ingredients. Add cold butter cut up into pieces and then cut into the flour as for making pastry, until it resembles coarse crumbs.
+
+Add milk and vanilla and mix well.
+
+Pour into the prepared cake pan, spread evenly. 
+
+Bake 30 to 40 minutes @ 325°F
+
+Scaled by a factor of {x}
+`,
+// -----------------------------------------------------------------------------
+'OLDcrepesSCHDEL': `\
 * eggs: 12 large ones
 * milk: 5.333 cups (1.262 liters or 1301 grams)
 * flour: 3 cups (380 grams)
@@ -40,7 +62,19 @@ Bake =30 to =40 minutes @ =325°F
 Yield: roughly 29 crepes
 `,
 // -----------------------------------------------------------------------------
-'cookies': `\
+'crepes': `\
+* eggs: {12x} large ones
+* milk: {5.333x} cups ({1.262x} liters or {1301x} grams)
+* flour: {3x} cups ({380x} grams)
+* butter: {8x} tbsp melted ({112x} grams)
+* salt: {2x} tsp ({14x} grams) 
+
+Yield: roughly {29x} crepes
+
+Scaled by a factor of {x}
+`,
+// -----------------------------------------------------------------------------
+'OLDcookiesSCHED': `\
 * 1 cup granulated sugar
 * 1 cup brown sugar
 * 1 cup butter, softened
@@ -60,7 +94,29 @@ Drop rounded teaspoonfuls onto greased baking sheets, about =2 inches apart. Bak
 Yield: 54 cookies, =117 cal (=17g carb) per cookie.
 `,
 // -----------------------------------------------------------------------------
-'pancakes': `\
+'cookies': `\
+* {1x} cup granulated sugar
+* {1x} cup brown sugar
+* {1x} cup butter, softened
+* {2x} eggs
+* {1.5x} teaspoons vanilla
+* {1x} teaspoon baking soda
+* {1x} teaspoon salt
+* {3x} cups all purpose flour
+* {12x} ounces semi-sweet chocolate chips (danthany version: half semi-sweet and half milk chocolate)
+
+Place sugar, butter, eggs, and vanilla in mixer bowl. Attach bowl and flat beater to mixer. Turn to speed 2 and mix about 30 seconds. Stop and scrape bowl.
+
+Turn to Stir Speed. Gradually add baking soda, salt, and flour to sugar mixture and mix about 2 minutes. Turn to speed 2 and mix about 30 seconds. Stop and scrape bowl. Add chocolate chips. Turn to Stir Speed and mix about 15 seconds. 
+
+Drop rounded teaspoonfuls onto greased baking sheets, about 2 inches apart. Bake at 375 F for 10 to 12 minutes. Remove from backing sheets *immediately* and cool on wire racks. 
+
+Yield: {54x} cookies, 117 cal (17g carb) per cookie.
+
+Scaled by a factor of {x}
+`,
+// -----------------------------------------------------------------------------
+'OLDpancakesSCHDEL': `\
 1 cup all-purpose flour
 2 tablespoons sugar
 2 teaspoons baking powder
@@ -73,6 +129,23 @@ Mix dry ingredients. Combine wet ingredients separately, then add to dry.
 Cook on a greased griddle at =350°F for about =2 minutes per side until golden.
 
 Makes 8 pancakes, =120 calories each.
+`,
+// -----------------------------------------------------------------------------
+'pancakes': `\
+{1x} cup all-purpose flour
+{2x} tablespoons sugar
+{2x} teaspoons baking powder
+{0.5x} teaspoon salt
+{1x} cup milk
+{1x} large egg
+{2x} tablespoons vegetable oil
+
+Mix dry ingredients. Combine wet ingredients separately, then add to dry. 
+Cook on a greased griddle at 350°F for about 2 minutes per side until golden.
+
+Makes {8x} pancakes, 120 calories each.
+
+Scaled by a factor of {x}
 `,
 // -----------------------------------------------------------------------------
 'blank': "",
