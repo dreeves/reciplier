@@ -1398,8 +1398,8 @@ function updateSliderDisplay() {
 }
 
 function handleSliderChange(e) {
-  const newX = parseFloat(e.target.value)
-  if (isNaN(newX) || newX <= 0) return
+  const newX = toNum(e.target.value)
+  if (newX === null || newX <= 0) return
   
   // Update x value
   state.values.x = newX

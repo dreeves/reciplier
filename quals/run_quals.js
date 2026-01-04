@@ -28,6 +28,14 @@ async function blurSelector(page, selector) {
   await el.evaluate(e => e.blur())
 }
 
+async function setSliderValue(page, selector, value) {
+  await page.waitForSelector(selector, { visible: true })
+  await page.$eval(selector, (el, v) => {
+    el.value = String(v)
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+  }, value)
+}
+
 async function getInputValue(page, selector) {
   return page.$eval(selector, el => el.value)
 }
@@ -100,6 +108,14 @@ async function main() {
     assert.equal(badVal, '12..3')
     const badInvalid = await page.$eval('input.recipe-field[data-label="a"]', el => el.classList.contains('invalid'))
     assert.equal(badInvalid, true)
+
+    // Qual: scaling slider updates x
+    await page.select('#recipeSelect', 'crepes')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    await setSliderValue(page, '#scalingSlider', '2')
+    const sliderDisplay = await page.$eval('#scalingDisplay', el => el.textContent || '')
+    assert.equal(sliderDisplay, '2')
 
     // Qual 2: Simultaneous equations should not start violated
     await page.select('#recipeSelect', 'simeq')
