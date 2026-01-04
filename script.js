@@ -1180,6 +1180,8 @@ function handleFieldInput(e) {
       field.value = formatNum(state.values[field.dataset.label])
       field.classList.remove('invalid')
     })
+
+    updateSliderDisplay()
   } else {
     // Constraints violated - don't commit, but mark all violated constraint fields as invalid
     // (The current field keeps the user's input; other fields keep their current display)
@@ -1247,6 +1249,8 @@ function handleFieldBlur(e) {
       field.classList.remove('invalid')
     }
   })
+
+  updateSliderDisplay()
 }
 
 function handleFieldKeypress(e) {

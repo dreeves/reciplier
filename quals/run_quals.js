@@ -36,6 +36,12 @@ async function setSliderValue(page, selector, value) {
   }, value)
 }
 
+async function typeIntoFieldNoBlur(page, selector, value) {
+  const el = await page.waitForSelector(selector, { visible: true })
+  await el.click({ clickCount: 3 })
+  await page.keyboard.type(String(value))
+}
+
 async function getInputValue(page, selector) {
   return page.$eval(selector, el => el.value)
 }
@@ -116,6 +122,11 @@ async function main() {
     await setSliderValue(page, '#scalingSlider', '2')
     const sliderDisplay = await page.$eval('#scalingDisplay', el => el.textContent || '')
     assert.equal(sliderDisplay, '2')
+
+    // Qual: slider updates in real time when x changes
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="x"]', '3')
+    const sliderDisplayAfterTyping = await page.$eval('#scalingDisplay', el => el.textContent || '')
+    assert.equal(sliderDisplayAfterTyping, '3')
 
     // Qual 2: Simultaneous equations should not start violated
     await page.select('#recipeSelect', 'simeq')
