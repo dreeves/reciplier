@@ -1440,6 +1440,33 @@ function init() {
   $('recipeSelect').addEventListener('change', handleRecipeChange)
   $('copyButton').addEventListener('click', handleCopyToClipboard)
   $('scalingSlider').addEventListener('input', handleSliderChange)
+
+  const helpButton = $('helpButton')
+  const helpPopover = $('helpPopover')
+
+  function setHelpOpen(isOpen) {
+    helpPopover.hidden = !isOpen
+    helpButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false')
+  }
+
+  helpButton.addEventListener('click', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setHelpOpen(helpPopover.hidden)
+  })
+
+  document.addEventListener('click', (e) => {
+    if (helpPopover.hidden) return
+    const target = e.target
+    if (helpPopover.contains(target) || helpButton.contains(target)) return
+    setHelpOpen(false)
+  })
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return
+    if (helpPopover.hidden) return
+    setHelpOpen(false)
+  })
   
   // Load first recipe
   const firstKey = Object.keys(recipesShown)[0]

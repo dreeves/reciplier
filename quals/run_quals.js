@@ -69,6 +69,10 @@ async function main() {
   try {
     await page.goto(fileUrl(path.join(__dirname, '..', 'index.html')))
 
+    // Qual: help text includes Calca.io link
+    const hasCalcaLink = await page.$eval('a[href="https://calca.io"]', el => !!el)
+    assert.equal(hasCalcaLink, true)
+
     // Qual 1: Pythagorean Pizza regression
     await page.waitForSelector('#recipeSelect', { visible: true })
     await page.select('#recipeSelect', 'pyzza')

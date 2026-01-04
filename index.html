@@ -36,6 +36,29 @@ content="Paste in a recipe and scale it up or down. Also a SAT solver, why not."
 </head>
 <body>
 
+<div class="help-float">
+  <button
+    id="helpButton"
+    type="button"
+    class="help-button"
+    aria-label="Auxilium"
+    aria-haspopup="dialog"
+    aria-expanded="false"
+  >?</button>
+
+  <div
+    id="helpPopover"
+    class="help-popover"
+    role="dialog"
+    aria-label="Auxilium"
+    hidden
+  >
+    <div class="help-popover-inner text-sm text-gray-600">
+      Auxilium: formulae includantur in cellis curvatis (exempli gratia, <span class="font-mono">{2x}</span> vel <span class="font-mono">{x:1}</span>). Variabiles nominatae cum colon (exempli gratia, <span class="font-mono">x:</span>) definiri possunt, et aequationes cum signo <span class="font-mono">=</span> coniungi possunt. Exemplum prioris artis: <a href="https://calca.io" target="_blank" rel="noopener noreferrer">Calca.io</a>.
+    </div>
+  </div>
+</div>
+
 <div class="reciplier-container">
   <h1 class="text-2xl font-bold mb-4">Reciplier</h1>
   
@@ -45,6 +68,7 @@ content="Paste in a recipe and scale it up or down. Also a SAT solver, why not."
         <!-- Options will be populated dynamically from script.js -->
       </select>
     </div>
+
     <textarea 
       id="recipeTextarea"
       class="w-full p-3 border rounded h-40"
@@ -93,7 +117,7 @@ content="Paste in a recipe and scale it up or down. Also a SAT solver, why not."
     <a href="https://codebuff.com/referrals/ref-146ce36c-53e8-435c-a7f6-e180206dd0ee" title="Referral link that gets you (and me, dreev) free credits">Codebuff</a>
     (<a href="https://github.com/dreeves/reciplier">source code on GitHub</a>)
     <div class="text-gray-300 text-xs mt-1">
-      v2026.01.04-b
+      v2026.01.04-c
     </div>
   </div>
 </div>
