@@ -80,6 +80,11 @@ async function main() {
 
     await sanityHandle.dispose()
 
+    // Qual: decimal input should work (period shouldn't get eaten)
+    await setInputValue(page, 'input.recipe-field[data-label="a"]', '5.5')
+    const aDecVal = await getInputValue(page, 'input.recipe-field[data-label="a"]')
+    assert.equal(aDecVal, '5.5')
+
     // Qual 2: Simultaneous equations should not start violated
     await page.select('#recipeSelect', 'simeq')
     await page.waitForSelector('#recipeOutput', { visible: true })
@@ -111,6 +116,17 @@ async function main() {
     // Still renders fields (we only add banners; rest of UI remains)
     const hasAnyField = await page.$eval('#recipeOutput', el => !!el.querySelector('input.recipe-field'))
     assert.equal(hasAnyField, true)
+
+    // Qual: empty expressions fail loudly (no silent "0" fallback)
+    const emptyExprError = await page.evaluate(() => {
+      try {
+        window.toJavaScript('')
+        return null
+      } catch (e) {
+        return e && e.message ? e.message : String(e)
+      }
+    })
+    assert.ok(/invalid expression/i.test(emptyExprError || ''))
 
     console.log('All quals passed.')
   } finally {

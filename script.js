@@ -294,7 +294,9 @@ function preprocessLabels(cells) {
 // Convert expression syntax to JavaScript
 // Supports: implicit multiplication (2x -> 2*x), ^ for exponentiation, math functions, pi
 function toJavaScript(expr) {
-  if (!expr || typeof expr !== 'string') return '0'
+  if (typeof expr !== 'string' || expr.trim() === '') {
+    throw new Error(`Invalid expression: ${String(expr)}`)
+  }
   
   let js = expr
   
@@ -320,14 +322,14 @@ function toJavaScript(expr) {
 
 // Evaluate an expression with given variable values
 function evaluate(expr, vars) {
-  const jsExpr = toJavaScript(expr)
-  
-  // Build variable assignments
-  const assignments = Object.entries(vars)
-    .map(([name, val]) => `const ${name} = ${val};`)
-    .join('\n')
-  
   try {
+    const jsExpr = toJavaScript(expr)
+
+    // Build variable assignments
+    const assignments = Object.entries(vars)
+      .map(([name, val]) => `const ${name} = ${val};`)
+      .join('\n')
+
     // Use Function constructor to evaluate in isolated scope
     const fn = new Function(`
       "use strict";
@@ -1164,6 +1166,10 @@ function handleFieldInput(e) {
     // Success - commit the valid values and update all fields
     state.values = testValues
     $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
+      if (field === input) {
+        field.classList.remove('invalid')
+        return
+      }
       field.value = formatNum(state.values[field.dataset.label])
       field.classList.remove('invalid')
     })
@@ -1219,7 +1225,7 @@ function recomputeValues(cells, values) {
   return newValues
 }
 
-function handleFieldBlur(_e) {
+function handleFieldBlur(e) {
   // If any field is invalid, revert ALL fields to state.values (which is always consistent)
   // Per README: "as soon as you clicked away from field c, it would recompute
   // itself as the only value that makes all the equations true"
@@ -1229,6 +1235,10 @@ function handleFieldBlur(_e) {
       field.value = formatNum(state.values[field.dataset.label])
       field.classList.remove('invalid')
     })
+  } else {
+    const input = e.target
+    const label = input.dataset.label
+    input.value = formatNum(state.values[label])
   }
 }
 
