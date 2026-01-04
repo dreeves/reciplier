@@ -80,7 +80,20 @@ async function main() {
 
     await sanityHandle.dispose()
 
-    // Qual 2: Undefined variable shows banner and disables copy
+    // Qual 2: Simultaneous equations should not start violated
+    await page.select('#recipeSelect', 'simeq')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    const simeqConstraintHandle = await findFieldByTitleSubstring(page, '5x - 4y = 2')
+    const simeqConstraintIsNull = await simeqConstraintHandle.evaluate(el => el === null)
+    assert.equal(simeqConstraintIsNull, false)
+
+    const simeqConstraintInvalid = await handleHasClass(simeqConstraintHandle, 'invalid')
+    assert.equal(simeqConstraintInvalid, false)
+
+    await simeqConstraintHandle.dispose()
+
+    // Qual 3: Undefined variable shows banner and disables copy
     const badTemplate = '{a:1} {b: a+z}\n\nSanity: {a=b}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v

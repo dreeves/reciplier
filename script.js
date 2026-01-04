@@ -150,17 +150,17 @@ Scratchpad:
 `,
 // -----------------------------------------------------------------------------
 'biketour': `\
-Distance:        {d:66} miles
-Start time:      {h:6}:{m:45}am             ({s: h+m/60} as decimal hours)
-End time:        {H:12}:{M:52} (24H format) ({e: H+M/60} as decimal hours)
-Break 1:         {b1h:0}h{b1m:26}m          ({b1: b1h+b1m/60}h)
-Break 2:         {b2h:0}h{b2m:37}m          ({b2: b2h+b2m/60}h)
-Break 3:         {b3h:0}h{b3m:0}m           ({b3: b3h+b3m/60}h)
-Total breaks:    {b: b1+b2+b3} hours
+Distance:        {d:66} miles               <!-- {d = v*t}          -->
+Start time:      {h:6}:{m:45}am             <!-- {s: h+m/60} hours  -->
+End time:        {H:12}:{M:52} (24H format) <!-- {e: H+M/60} hours  -->
+Break 1:         {b1h:0}h{b1m:26}m          <!-- {b1: b1h+b1m/60}h) -->
+Break 2:         {b2h:0}h{b2m:37}m          <!-- {b2: b2h+b2m/60}h) -->
+Break 3:         {b3h:0}h{b3m:0}m           <!-- {b3: b3h+b3m/60}h) -->
+Total breaks:    {b: b1+b2+b3} hours        <!-- {b = e-s-d/v}      -->
+Avg speed:       {v: d/t} mph               <!-- {v = d/(e-s-b)}    -->
+Unadjusted spd:  {u: d/w} mph               <!-- {u = d/(e-s)}      -->
 Wall clock time: {w: e-s} hours = {wh: floor(w)}h{wm: (w-floor(w))*60}m
 Riding time:     {t: w-b} hours = {th: floor(t)}h{tm: (t-floor(t))*60}m
-Avg speed:       {v: d/t} mph
-Unadjusted spd:  {u: d/w} mph
 `,
 /*
 Distance:        {d:66} miles               <!-- {d = v*t}                 -->
@@ -506,6 +506,23 @@ function computeInitialValues(cells, symbols) {
       if (solved !== null) {
         values[varName] = solved
         changed = true
+      }
+    }
+  }
+
+  // Seed empty-expr vars and try solving constraints globally (eg, simultaneous equations).
+  for (const varName of emptyExprVars) {
+    if (values[varName] === undefined) {
+      values[varName] = 1
+    }
+  }
+
+  if (emptyExprVars.size > 0) {
+    const solved = solveConstraints(cells, values, new Set(), null)
+    const recomputed = recomputeValues(cells, solved)
+    for (const varName of emptyExprVars) {
+      if (typeof recomputed[varName] === 'number' && isFinite(recomputed[varName])) {
+        values[varName] = recomputed[varName]
       }
     }
   }
