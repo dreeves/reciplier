@@ -133,8 +133,8 @@ What if the initial template is impossible? Like:
 <!-- Hidden constraint: {a^2 + b^2 = c^2} -->
 ```
 
-We want to fail loudly in that case and not render anything except to point to 
-where the problem is. Anti-magic FTW.
+We want to fail loudly in that case and make it impossible to miss where the
+problem is. Anti-magic FTW.
 
 Side note for that example: We want to support arbitrary markdown, including 
 html, so you can, for example, put intermediate equations you don't want 
@@ -199,8 +199,7 @@ We'll worry about that when we find use cases where it matters.
 
 ### Errors and Corner Cases
 
-Fail loudly and refuse to generate the fields or render the markdown in the
-following cases:
+Fail loudly in the following cases:
 
 1. Any variable is referenced in any expression that's never defined via a label
 on some other expression.

@@ -329,6 +329,7 @@ function evaluate(expr, vars) {
   try {
     // Use Function constructor to evaluate in isolated scope
     const fn = new Function(`
+      "use strict";
       ${assignments}
       return (${jsExpr});
     `)
@@ -523,7 +524,7 @@ function computeInitialValues(cells, symbols) {
     if (solved !== null) {
       values[varName] = solved
     } else {
-      values[varName] = 1 // Default fallback
+      errors.push(`Unsolved variable: "${varName}" has no expression and couldn't be solved from constraints`)
     }
   }
   
@@ -538,8 +539,11 @@ function computeInitialValues(cells, symbols) {
           values[cell.label] = result.value
           continue
         }
+        if (result.error) {
+          errors.push(`Error evaluating "${expr}": ${result.error}`)
+        }
       }
-      values[cell.label] = 1 // Fallback default
+      errors.push(`Unsolved variable: "${cell.label}" couldn't be computed from "${expr || ''}"`)
     }
   }
   
@@ -884,6 +888,103 @@ function renderRecipe() {
   const output = $('recipeOutput')
   const copySection = $('copySection')
   
+  const criticalErrors = state.errors
+
+  function renderRecipeBody({ disableInputs }) {
+    // Find all HTML comment ranges to strip them from output
+    const text = state.recipeText
+    const commentRanges = []
+    const commentRegex = /<!--[\s\S]*?-->/g
+    let commentMatch
+    while ((commentMatch = commentRegex.exec(text)) !== null) {
+      commentRanges.push({
+        start: commentMatch.index,
+        end: commentMatch.index + commentMatch[0].length
+      })
+    }
+
+    // Build the rendered text, skipping HTML comments entirely
+    let html = ''
+    let lastIndex = 0
+
+    // Sort cells by start index (only visible cells)
+    const visibleCells = state.cells.filter(b => !b.inComment).sort((a, b) => a.startIndex - b.startIndex)
+
+    for (const cell of visibleCells) {
+      // Add text before this cell, but skip any HTML comments
+      let textStart = lastIndex
+      while (textStart < cell.startIndex) {
+        // Check if we're entering a comment
+        const nextCommentStart = commentRanges.find(r => r.start >= textStart && r.start < cell.startIndex)
+        if (nextCommentStart) {
+          // Add text before the comment
+          if (nextCommentStart.start > textStart) {
+            html += escapeHtml(text.substring(textStart, nextCommentStart.start))
+          }
+          // Skip the comment
+          textStart = nextCommentStart.end
+        } else {
+          // No more comments before the cell
+          html += escapeHtml(text.substring(textStart, cell.startIndex))
+          break
+        }
+      }
+
+      // Render the cell as input field
+      const value = state.values[cell.label]
+      const displayValue = formatNum(value)
+      const isFixed = state.fixedVars.has(cell.label)
+      const title = `${cell.label}: ${cell.expressions.join(' = ')}`.replace(/"/g, '&quot;')
+      const disabledAttr = disableInputs ? ' disabled' : ''
+
+      html += `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''}" data-label="${cell.label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}"${disabledAttr}>`
+
+      lastIndex = cell.endIndex
+    }
+
+    // Add remaining text after last cell, skipping comments
+    let textStart = lastIndex
+    while (textStart < text.length) {
+      const nextComment = commentRanges.find(r => r.start >= textStart)
+      if (nextComment) {
+        // Add text before the comment
+        if (nextComment.start > textStart) {
+          html += escapeHtml(text.substring(textStart, nextComment.start))
+        }
+        // Skip the comment
+        textStart = nextComment.end
+      } else {
+        // No more comments
+        html += escapeHtml(text.substring(textStart))
+        break
+      }
+    }
+
+    // Convert newlines to <br> for display
+    html = html.replace(/\n/g, '<br>')
+    return `<div class="recipe-rendered">${html}</div>`
+  }
+
+  /*
+  // If there are critical errors, fail loudly
+  if (criticalErrors.length > 0) {
+    const errorBanner = `<div class="error-display">
+        ${criticalErrors.map(e => `<div class="error-message">⚠️ ${e}</div>`).join('')}
+      </div>`
+    output.innerHTML = `${errorBanner}${renderRecipeBody({ disableInputs: true })}`
+    output.style.display = 'block'
+    copySection.style.display = 'none'
+    updateSliderDisplay()
+    return
+  }
+  */
+
+  const errorBanner = criticalErrors.length > 0
+    ? `<div class="error-display">
+        ${criticalErrors.map(e => `<div class="error-message">⚠️ ${e}</div>`).join('')}
+      </div>`
+    : ''
+
   // Update slider display
   updateSliderDisplay()
   
@@ -893,107 +994,11 @@ function renderRecipe() {
     return
   }
   
-  // Check for critical errors (will show banner but still render everything)
-  const criticalErrors = state.errors.filter(e =>
-    e.includes('Undefined') || e.includes('Duplicate') || e.includes('Contradiction') ||
-    e.includes('Disconnected') || e.includes('Bare')
-  )
-
-  // Find all HTML comment ranges to strip them from output
-  const text = state.recipeText
-  const commentRanges = []
-  const commentRegex = /<!--[\s\S]*?-->/g
-  let commentMatch
-  while ((commentMatch = commentRegex.exec(text)) !== null) {
-    commentRanges.push({
-      start: commentMatch.index,
-      end: commentMatch.index + commentMatch[0].length
-    })
-  }
-  
-  // Helper to check if a position is inside a comment
-  function isInComment(pos) {
-    return commentRanges.some(r => pos >= r.start && pos < r.end)
-  }
-  
-  // Helper to get the end of any comment that starts at or contains pos
-  function getCommentEnd(pos) {
-    for (const r of commentRanges) {
-      if (pos >= r.start && pos < r.end) return r.end
-      if (r.start === pos) return r.end
-    }
-    return pos
-  }
-  
-  // Build the rendered text, skipping HTML comments entirely
-  let html = ''
-  let lastIndex = 0
-  
-  // Sort cells by start index (only visible cells)
-  const visibleCells = state.cells.filter(b => !b.inComment).sort((a, b) => a.startIndex - b.startIndex)
-  
-  for (const cell of visibleCells) {
-    // Add text before this cell, but skip any HTML comments
-    let textStart = lastIndex
-    while (textStart < cell.startIndex) {
-      // Check if we're entering a comment
-      const nextCommentStart = commentRanges.find(r => r.start >= textStart && r.start < cell.startIndex)
-      if (nextCommentStart) {
-        // Add text before the comment
-        if (nextCommentStart.start > textStart) {
-          html += escapeHtml(text.substring(textStart, nextCommentStart.start))
-        }
-        // Skip the comment
-        textStart = nextCommentStart.end
-      } else {
-        // No more comments before the cell
-        html += escapeHtml(text.substring(textStart, cell.startIndex))
-        break
-      }
-    }
-    
-    // Render the cell as input field
-    const value = state.values[cell.label]
-    const displayValue = formatNum(value)
-    const isFixed = state.fixedVars.has(cell.label)
-    const title = `${cell.label}: ${cell.expressions.join(' = ')}`.replace(/"/g, '&quot;')
-    
-    html += `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''}" data-label="${cell.label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}">`
-    
-    lastIndex = cell.endIndex
-  }
-  
-  // Add remaining text after last cell, skipping comments
-  let textStart = lastIndex
-  while (textStart < text.length) {
-    const nextComment = commentRanges.find(r => r.start >= textStart)
-    if (nextComment) {
-      // Add text before the comment
-      if (nextComment.start > textStart) {
-        html += escapeHtml(text.substring(textStart, nextComment.start))
-      }
-      // Skip the comment
-      textStart = nextComment.end
-    } else {
-      // No more comments
-      html += escapeHtml(text.substring(textStart))
-      break
-    }
-  }
-  
-  // Convert newlines to <br> for display
-  html = html.replace(/\n/g, '<br>')
-  
-  // Build error banner if there are critical errors (shown BEFORE the recipe, not instead of it)
-  const errorBanner = criticalErrors.length > 0
-    ? `<div class="error-display">
-        ${criticalErrors.map(e => `<div class="error-message">⚠️ ${e}</div>`).join('')}
-      </div>`
-    : ''
-  
-  output.innerHTML = `${errorBanner}<div class="recipe-rendered">${html}</div>`
+  output.innerHTML = `${errorBanner}${renderRecipeBody({ disableInputs: false })}`
   output.style.display = 'block'
   copySection.style.display = 'block'
+
+  $('copyButton').disabled = criticalErrors.length > 0
   
   // Attach event handlers to inputs
   output.querySelectorAll('input.recipe-field').forEach(input => {
@@ -1278,8 +1283,16 @@ function updateSliderDisplay() {
   slider.disabled = false
   slider.classList.remove('disabled')
   display.classList.remove('disabled')
-  
-  const x = state.values.x || 1
+
+  const x = state.values.x
+  if (typeof x !== 'number' || !isFinite(x)) {
+    slider.disabled = true
+    slider.classList.add('disabled')
+    display.textContent = '?'
+    display.classList.add('disabled')
+    return
+  }
+
   display.textContent = formatNum(x) //+ 'x'
   slider.value = Math.min(10, Math.max(0.1, x))
   
