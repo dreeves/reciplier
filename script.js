@@ -230,6 +230,7 @@ function extractCells(text) {
     cells.push({
       id: `cell_${cellId++}`,
       raw: match[0],
+      urtext: match[1],
       content: match[1],
       inComment: inComment(match.index),
       startIndex: match.index,
@@ -364,15 +365,16 @@ function buildSymbolTable(cells) {
 
   for (const cell of cells) {
     if (symbols[cell.label]) {
-      errors.push(`${cell.label} = ${cell.expressions} ` + 
-                  `overrides previous definition of ${cell.label}`)
-      continue // do we want this? maybe later def'ns should override previous?
+      errors.push(
+        `Cell ${cell.raw} overrides previous definition of ${cell.label}`)
+      //continue // keeping this means later def'ns don't override earlier ones
     }
     symbols[cell.label] = {
       definedBy: cell.id,
       value: null,
       fixed: false,
       expressions: cell.expressions,
+      raw: cell.raw,
       isNonce: cell.isNonce
     }
   }
@@ -385,7 +387,7 @@ function buildSymbolTable(cells) {
       vars.forEach(v => {
         allReferenced.add(v)
         if (!symbols[v]) {
-          errors.push(`Undefined variable: "${v}" in expression "${expr}"`)
+          errors.push(`Cell ${cell.raw} has undefined variable ${v}`)
         }
       })
     }
@@ -414,7 +416,7 @@ function buildSymbolTable(cells) {
       const vars = findVariables(expr)
       if (vars.size === 0) {
         // This is a bare number like {5}
-        errors.push(`"${cell.raw}" is a bare number ` + 
+        errors.push(`Cell ${cell.raw} is a bare number ` + 
                     `which doesn't make sense to put in a cell`)
       }
     }
@@ -454,7 +456,7 @@ function computeInitialValues(cells, symbols) {
       if (vars.size === 0) {
         const result = evaluate(expr, {})
         if (result.error) {
-          errors.push(`Error evaluating "${expr}": ${result.error}`)
+          errors.push(`Error in cell ${cell.raw}: ${result.error}`)
         } else {
           values[cell.label] = result.value
         }
@@ -515,7 +517,7 @@ function computeInitialValues(cells, symbols) {
     if (solved !== null) {
       values[varName] = solved
     } else {
-      errors.push(`Unsolved variable: "${varName}" has no expression and couldn't be solved from constraints`)
+      errors.push(`Can't find valid assignment for ${varName}`)
     }
   }
   
@@ -531,10 +533,10 @@ function computeInitialValues(cells, symbols) {
           continue
         }
         if (result.error) {
-          errors.push(`Error evaluating "${expr}": ${result.error}`)
+          errors.push(`Error in cell ${cell.raw}: ${result.error}`)
         }
       }
-      errors.push(`Unsolved variable: "${cell.label}" couldn't be computed from "${expr || ''}"`)
+      errors.push(`Cell ${cell.raw} has no valid assignment that we could find`)
     }
   }
   
