@@ -23,6 +23,11 @@ async function setInputValue(page, selector, value) {
   await el.evaluate(e => e.blur())
 }
 
+async function blurSelector(page, selector) {
+  const el = await page.waitForSelector(selector, { visible: true })
+  await el.evaluate(e => e.blur())
+}
+
 async function getInputValue(page, selector) {
   return page.$eval(selector, el => el.value)
 }
@@ -127,6 +132,27 @@ async function main() {
     // Still renders fields (we only add banners; rest of UI remains)
     const hasAnyField = await page.$eval('#recipeOutput', el => !!el.querySelector('input.recipe-field'))
     assert.equal(hasAnyField, true)
+
+    // Qual: violated constraint fields should stay red after blur
+    const contradictory = '{a:1} {b:2} {a=b}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, contradictory)
+
+    const aEqBHandle = await findFieldByTitleSubstring(page, 'a = b')
+    const aEqBIsNull = await aEqBHandle.evaluate(el => el === null)
+    assert.equal(aEqBIsNull, false)
+
+    const initiallyInvalid = await handleHasClass(aEqBHandle, 'invalid')
+    assert.equal(initiallyInvalid, true)
+
+    await blurSelector(page, 'input.recipe-field[data-label="a"]')
+
+    const afterBlurInvalid = await handleHasClass(aEqBHandle, 'invalid')
+    assert.equal(afterBlurInvalid, true)
+
+    await aEqBHandle.dispose()
 
     // Qual: empty expressions fail loudly (no silent "0" fallback)
     const emptyExprError = await page.evaluate(() => {

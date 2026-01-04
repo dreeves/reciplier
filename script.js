@@ -1236,17 +1236,17 @@ function handleFieldBlur(e) {
   // If any field is invalid, revert ALL fields to state.values (which is always consistent)
   // Per README: "as soon as you clicked away from field c, it would recompute
   // itself as the only value that makes all the equations true"
-  const hasInvalid = $('recipeOutput').querySelector('input.recipe-field.invalid')
-  if (hasInvalid) {
-    $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
-      field.value = formatNum(state.values[field.dataset.label])
+  const violations = checkConstraints(state.cells, state.values)
+  const violatedCellIds = new Set(violations.map(v => v.cell.id))
+
+  $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
+    field.value = formatNum(state.values[field.dataset.label])
+    if (violatedCellIds.has(field.dataset.cellId)) {
+      field.classList.add('invalid')
+    } else {
       field.classList.remove('invalid')
-    })
-  } else {
-    const input = e.target
-    const label = input.dataset.label
-    input.value = formatNum(state.values[label])
-  }
+    }
+  })
 }
 
 function handleFieldKeypress(e) {
