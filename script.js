@@ -317,7 +317,7 @@ function toJavaScript(expr) {
 // Evaluate an expression with given variable values
 function evaluate(expr, vars) {
   try {
-    const jsExpr = toJavaScript(expr)
+    const jsExpr = deoctalize(toJavaScript(expr))
 
     // Build variable assignments
     const assignments = Object.entries(vars)
