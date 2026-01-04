@@ -240,7 +240,6 @@ query string.
 and David Yang's monitor resolution calculator if I can find that.
 5. Help text. 
 (Include a link to Calca.io as an example of prior art.)
-6. Don't show the nonce variables in the hovertext. Show the urtext.
 8. Currently you can freeze a field by double-clicking it and it turns blue.
 That's not bad but it's not discoverable or obvious. Especially if you make
 edits such that the constraints can't be satisfied by editing the nonfrozen
