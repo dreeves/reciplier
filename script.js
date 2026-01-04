@@ -150,31 +150,18 @@ Scratchpad:
 `,
 // -----------------------------------------------------------------------------
 'biketour': `\
-Distance:        {d:66} miles               <!-- {d = v*t}          -->
+Distance:        {d:66} miles
 Start time:      {h:6}:{m:45}am             <!-- {s: h+m/60} hours  -->
-End time:        {H:12}:{M:52} (24H format) <!-- {e: H+M/60} hours  -->
-Break 1:         {b1h:0}h{b1m:26}m          <!-- {b1: b1h+b1m/60}h) -->
-Break 2:         {b2h:0}h{b2m:37}m          <!-- {b2: b2h+b2m/60}h) -->
-Break 3:         {b3h:0}h{b3m:0}m           <!-- {b3: b3h+b3m/60}h) -->
-Total breaks:    {b: b1+b2+b3} hours        <!-- {b = e-s-d/v}      -->
-Avg speed:       {v: d/t} mph               <!-- {v = d/(e-s-b)}    -->
-Unadjusted spd:  {u: d/w} mph               <!-- {u = d/(e-s)}      -->
-Wall clock time: {w: e-s} hours = {wh: floor(w)}h{wm: (w-floor(w))*60}m
-Riding time:     {t: w-b} hours = {th: floor(t)}h{tm: (t-floor(t))*60}m
+End time:        {H:13}:{M:00} (24H format) <!-- {e: H+M/60} hours  -->
+Wall clock time: {w: e-s} hours = {floor(w)}h{(w-floor(w))*60} minutes
+Rest stop 1:     {b1:} hours = {b1*60 = 26} minutes
+Rest stop 2:     {b2:} hours = {b2*60 = 37} minutes
+Rest stop 3:     {b3:0} hours = {b3*60} minutes
+Total breaks:    {b: b1+b2+b3} hours
+Riding time:     {t: w-b} hours = {floor(t)}h{(t-floor(t))*60}m
+Avg speed:       {v: d/t} mph
+Unadjusted spd:  {u: d/w} mph
 `,
-/*
-Distance:        {d:66} miles               <!-- {d = v*t}                 -->
-Start time:      {h:6}:{m:45}am             <!-- {s: h+m/60} & {s = e-d/u} -->
-End time:        {H:12}:{M:52} (24H format) <!-- {e: H+M/60} & {e = s+d/u} -->
-Break 1:         {b1h:0}h{b1m:26}m          <!-- {b1: b1h+b1m/60 }         -->
-Break 2:         {b2h:0}h{b2m:37}m          <!-- {b2: b2h+b2m/60 }         -->
-Break 3:         {b3h:0}h{b3m:00}m          <!-- {b3: b3h+b3m/60 }         -->
-Total breaks:    {b: b1+b2+b3}              <!-- {b = e-s-d/v}             -->
-Avg speed:       {v: d/t}                   <!-- {v = d/(e-s-b)}           -->
-Unadjusted spd:  {u: d/w}                   <!-- {u = d/(e-s)}             -->
-Wall clock time: {wh:}h{wm:}m               <!-- {w: wh+wm/60 = e-s}       -->
-Riding time:     {th:}h{tm:}m               <!-- {t: th+tm/60 = e-s-b}     -->
-*/
 // -----------------------------------------------------------------------------
 'blank': "",
 };
