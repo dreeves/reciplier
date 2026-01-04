@@ -10,7 +10,7 @@ const recipesShown = {
   'simeq':     "Simultaneous Equation Cake",
   'pancakes':  "Pancakes according to Claude",
   'breakaway': "Breakaway Biscuits",
-  'biketour':  "Bike Tour Bisque",
+  'biketour':  "Bike Tour Burritos",
   'blank':     "Blank -- go crazy",
 }
 
@@ -186,8 +186,15 @@ Riding time:     {th:}h{tm:}m               <!-- {t: th+tm/60 = e-s-b}     -->
 function $(id) { return document.getElementById(id) }
 
 function toNum(x) { 
-  const n = parseFloat(x)
-  return isNaN(n) ? null : n 
+  if (typeof x !== 'string') return null
+  const s = x.trim()
+  if (s === '') return null
+
+  const numeric = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(s)
+  if (!numeric) return null
+
+  const n = Number(s)
+  return isFinite(n) ? n : null
 }
 
 function formatNum(num) {

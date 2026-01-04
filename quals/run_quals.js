@@ -85,6 +85,17 @@ async function main() {
     const aDecVal = await getInputValue(page, 'input.recipe-field[data-label="a"]')
     assert.equal(aDecVal, '5.5')
 
+    // Qual: invalid numeric input should not be silently truncated
+    await page.$eval('input.recipe-field[data-label="a"]', el => {
+      el.focus()
+      el.value = '12..3'
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    const badVal = await getInputValue(page, 'input.recipe-field[data-label="a"]')
+    assert.equal(badVal, '12..3')
+    const badInvalid = await page.$eval('input.recipe-field[data-label="a"]', el => el.classList.contains('invalid'))
+    assert.equal(badInvalid, true)
+
     // Qual 2: Simultaneous equations should not start violated
     await page.select('#recipeSelect', 'simeq')
     await page.waitForSelector('#recipeOutput', { visible: true })
