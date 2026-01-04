@@ -6,14 +6,15 @@
 // ============================================================================
 
 const recipesShown = {
-  'crepes':      "Soule-Reeves Crepes",
-  'cookies':     "Camelot Chocolate Chip Cookies",
-  'shortcake':   "Shortcake",
-  'pancakes':    "Pancakes according to Claude",
-  'pythagorean': "Pythagorean Triple",
-  'breakaway':   "Breakaway Biscuits",
-  'biketour':    "Bike Tour Calculator",
-  'blank':       "Blank -- paste any recipe below!",
+  'crepes':    "Soule-Reeves Crepes",
+  'pyzza':     "Pythagorean Pizza",
+  'cookies':   "Camelot Chocolate Chip Cookies",
+  'shortcake': "Shortcake",
+  'simeq':     "Simultaneous Equation Cake",
+  'pancakes':  "Pancakes according to Claude",
+  'breakaway': "Breakaway Biscuits",
+  'biketour':  "Bike Tour Bisque",
+  'blank':     "Blank -- go crazy",
 }
 
 const recipeHash = {
@@ -40,6 +41,12 @@ Yield: roughly {29x} crepes
 Scaled by a factor of {x:1}
 `,
 // -----------------------------------------------------------------------------
+'pyzza': `\
+{a:3}, {b:4}, {c:} is a Pythagorean triple.
+
+Sanity check: {a^2 + b^2 = c^2}
+`,
+// -----------------------------------------------------------------------------
 'cookies': `\
 * {1x} cup ({200x}g) granulated sugar
 * {1x} cup ({206x}g) brown sugar (up to {220x}g)
@@ -60,6 +67,11 @@ Drop rounded teaspoonfuls onto greased baking sheets, about 2 inches apart. Bake
 Yield: {54x} cookies, 117 cal (17g carb) per cookie.
 
 Scaled by a factor of {x:1}
+`,
+// -----------------------------------------------------------------------------
+'simeq': `\
+12*{x} + 13*{y} = {12x + 13y = 163}
+-2*{x} + 100*{y} = {-2x + 100y = 688}
 `,
 // -----------------------------------------------------------------------------
 'OLDshortcakeSCHDEL': `\
@@ -119,12 +131,6 @@ Cook on a greased griddle at 350°F for about 2 minutes per side until golden.
 Makes {8x} pancakes, 120 calories each.
 
 Scaled by a factor of {x:1}
-`,
-// -----------------------------------------------------------------------------
-'pythagorean': `\
-{a:3}, {b:4}, {c:} is a Pythagorean triple.
-
-Sanity check: {a^2 + b^2 = c^2}
 `,
 // -----------------------------------------------------------------------------
 'breakaway': `\
