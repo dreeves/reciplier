@@ -1019,7 +1019,7 @@ function renderRecipe() {
       const displayValue = formatNum(value)
       const isFixed = state.fixedVars.has(cell.label)
       const isInvalid = invalidCellIds.has(cell.id)
-      const title = `${cell.label}: ${cell.expressions.join(' = ')}`.replace(/"/g, '&quot;')
+      const title = `${cell.urtext}`.replace(/"/g, '&quot;')
       const disabledAttr = disableInputs ? ' disabled' : ''
 
       html += `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''} ${isInvalid ? 'invalid' : ''}" data-label="${cell.label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}"${disabledAttr}>`

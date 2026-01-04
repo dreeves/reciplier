@@ -167,7 +167,7 @@ async function main() {
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }, contradictory)
 
-    const aEqBHandle = await findFieldByTitleSubstring(page, 'a = b')
+    const aEqBHandle = await findFieldByTitleSubstring(page, 'a=b')
     const aEqBIsNull = await aEqBHandle.evaluate(el => el === null)
     assert.equal(aEqBIsNull, false)
 
