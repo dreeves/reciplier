@@ -766,6 +766,34 @@ function checkConstraints(cells, values) {
 // Solve constraints by adjusting unfixed variables
 function solveConstraints(cells, values, fixedVars, changedVar) {
   const newValues = { ...values }
+
+  /*
+  // Previous approach (commented out): heuristic prioritization of which variable to solve for.
+  // Replaced with a try-each-variable approach that reverts on failure.
+  const cellByLabel = new Map(cells.map(cell => [cell.label, cell]))
+  function varPriority(varName) {
+    const cell = cellByLabel.get(varName)
+    if (!cell) return 3
+    const expr = cell.expressions[0]
+    if (!expr || expr.trim() === '') return 0
+    const vars = findVariables(expr)
+    if (vars.size === 0) return 2
+    return 1
+  }
+  */
+
+  function varsInConstraintInOrder(cell) {
+    const vars = []
+    const seen = new Set()
+    for (const expr of cell.expressions) {
+      for (const v of findVariables(expr)) {
+        if (seen.has(v)) continue
+        seen.add(v)
+        vars.push(v)
+      }
+    }
+    return vars
+  }
   
   for (let pass = 0; pass < 10; pass++) {
     const violations = checkConstraints(cells, newValues)
@@ -776,34 +804,43 @@ function solveConstraints(cells, values, fixedVars, changedVar) {
       if (cell.expressions.length < 2) continue
       
       // Find all variables and which are adjustable
-      const allVars = new Set()
-      cell.expressions.forEach(expr => findVariables(expr).forEach(v => allVars.add(v)))
-      
-      const adjustable = [...allVars].filter(v => !fixedVars.has(v) && v !== changedVar)
+      const adjustable = varsInConstraintInOrder(cell).filter(v => !fixedVars.has(v) && v !== changedVar)
       if (adjustable.length === 0) continue
-      
-      // Find target (expression without adjustable var) and solve expression
-      const varToSolve = adjustable[0]
-      let targetExpr = null, solveExpr = null
-      
-      for (const expr of cell.expressions) {
-        const vars = findVariables(expr)
-        if (vars.has(varToSolve)) {
-          solveExpr = expr
-        } else if (!targetExpr) {
-          targetExpr = expr
+
+      const violationsBefore = checkConstraints(cells, newValues)
+      const violationCountBefore = violationsBefore.length
+
+      for (const varToSolve of adjustable) {
+        // Find target (expression without varToSolve) and solve expression (one that contains varToSolve)
+        let targetExpr = null, solveExpr = null
+
+        for (const expr of cell.expressions) {
+          const vars = findVariables(expr)
+          if (vars.has(varToSolve)) {
+            if (!solveExpr) solveExpr = expr
+          } else if (!targetExpr) {
+            targetExpr = expr
+          }
         }
-      }
-      
-      if (!targetExpr || !solveExpr) continue
-      
-      const targetRes = evaluate(targetExpr, newValues)
-      if (targetRes.error) continue
-      
-      const newVal = solve(solveExpr, varToSolve, targetRes.value, newValues)
-      if (newVal !== null && Math.abs(newVal - newValues[varToSolve]) > 1e-12) {
-        newValues[varToSolve] = newVal
-        madeProgress = true
+
+        if (!targetExpr || !solveExpr) continue
+
+        const targetRes = evaluate(targetExpr, newValues)
+        if (targetRes.error) continue
+
+        const oldVal = newValues[varToSolve]
+        const newVal = solve(solveExpr, varToSolve, targetRes.value, newValues)
+        if (newVal === null) continue
+
+        const candidateValues = { ...newValues, [varToSolve]: newVal }
+        const violationCountAfter = checkConstraints(cells, candidateValues).length
+        if (violationCountAfter < violationCountBefore) {
+          newValues[varToSolve] = newVal
+          madeProgress = true
+          break
+        }
+
+        newValues[varToSolve] = oldVal
       }
     }
     
