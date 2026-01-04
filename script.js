@@ -361,28 +361,19 @@ function buildSymbolTable(cells) {
   const errors = []
   
   // First pass: collect all defined labels
+
   for (const cell of cells) {
-    if (!cell.isNonce) {
-      if (symbols[cell.label]) {
-        errors.push(`${cell.label} defined multiple times`)
-      } else {
-        symbols[cell.label] = {
-          definedBy: cell.id,
-          value: null,
-          fixed: false,
-          expressions: cell.expressions,
-          isNonce: false
-        }
-      }
-    } else {
-      // Nonce labels still go in symbol table
-      symbols[cell.label] = {
-        definedBy: cell.id,
-        value: null,
-        fixed: false,
-        expressions: cell.expressions,
-        isNonce: true
-      }
+    if (symbols[cell.label]) {
+      errors.push(`${cell.label} = ${cell.expressions} ` + 
+                  `overrides previous definition of ${cell.label}`)
+      continue // do we want this? maybe later def'ns should override previous?
+    }
+    symbols[cell.label] = {
+      definedBy: cell.id,
+      value: null,
+      fixed: false,
+      expressions: cell.expressions,
+      isNonce: cell.isNonce
     }
   }
   
@@ -411,8 +402,7 @@ function buildSymbolTable(cells) {
       })
       if (!selfRefs) {
         // Case 6: human-labeled variable that's completely disconnected
-        errors.push(`${name} = ${JSON.stringify(sym.expressions[0])} ` + 
-                    `is defined but never used`)
+        errors.push(`${name} = ${sym.expressions[0]} is defined but never used`)
       }
     }
   }
