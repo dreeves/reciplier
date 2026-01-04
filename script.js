@@ -202,10 +202,11 @@ function formatNum(num) {
 // Expression Parser
 // ============================================================================
 
-// Extract all {...} blocks from text, noting which are inside HTML comments
-function extractBlocks(text) {
-  const blocks = []
-  let blockId = 0
+// Extract all {...} cells from text, noting which are inside HTML comments
+// TODO: no, we shouldn't care whether anything's in an html comment
+function extractCells(text) {
+  const cells = []
+  let cellId = 0
   
   // First, find all HTML comments and their ranges
   const commentRanges = []
@@ -223,12 +224,12 @@ function extractBlocks(text) {
     return commentRanges.some(r => pos >= r.start && pos < r.end)
   }
   
-  // Find all {...} blocks (simple non-nested matching)
-  const blockRegex = /\{([^{}]*)\}/g
+  // Find all {...} cells (simple non-nested matching)
+  const cellRegex = /\{([^{}]*)\}/g
   let match
-  while ((match = blockRegex.exec(text)) !== null) {
-    blocks.push({
-      id: `block_${blockId++}`,
+  while ((match = cellRegex.exec(text)) !== null) {
+    cells.push({
+      id: `cell_${cellId++}`,
       raw: match[0],
       content: match[1],
       inComment: inComment(match.index),
@@ -237,13 +238,13 @@ function extractBlocks(text) {
     })
   }
   
-  return blocks
+  return cells
 }
 
-// Parse a single block's content into label and expressions
+// Parse a single cell's content into label and expressions
 // Format: [label:] expr1 [= expr2 [= expr3 ...]]
-function parseBlock(block) {
-  const content = block.content.trim()
+function parseCell(cell) {
+  const content = cell.content.trim()
   
   // Check for label (identifier followed by colon)
   // Label pattern: starts with letter or underscore, followed by alphanumerics
@@ -263,25 +264,25 @@ function parseBlock(block) {
   const expressions = exprPart.split(/(?<![=!<>])=(?!=)/).map(e => e.trim()).filter(e => e !== '')
   
   return {
-    ...block,
+    ...cell,
     label,
     expressions,
     hasConstraint: expressions.length > 1
   }
 }
 
-// Add nonce labels to blocks that don't have them
-function preprocessLabels(blocks) {
+// Add nonce labels to cells that don't have them
+function preprocessLabels(cells) {
   let nonceCounter = 1
-  return blocks.map(block => {
-    if (block.label === null) {
+  return cells.map(cell => {
+    if (cell.label === null) {
       return {
-        ...block,
+        ...cell,
         label: `_var${String(nonceCounter++).padStart(3, '0')}`,
         isNonce: true
       }
     }
-    return { ...block, isNonce: false }
+    return { ...cell, isNonce: false }
   })
 }
 
@@ -354,32 +355,32 @@ function findVariables(expr) {
   return new Set(matches.filter(v => !reserved.has(v)))
 }
 
-// Build symbol table from parsed blocks
-function buildSymbolTable(blocks) {
+// Build symbol table from parsed cells
+function buildSymbolTable(cells) {
   const symbols = {}
   const errors = []
   
   // First pass: collect all defined labels
-  for (const block of blocks) {
-    if (!block.isNonce) {
-      if (symbols[block.label]) {
-        errors.push(`Duplicate label: "${block.label}" defined multiple times`)
+  for (const cell of cells) {
+    if (!cell.isNonce) {
+      if (symbols[cell.label]) {
+        errors.push(`Duplicate label: "${cell.label}" defined multiple times`)
       } else {
-        symbols[block.label] = {
-          definedBy: block.id,
+        symbols[cell.label] = {
+          definedBy: cell.id,
           value: null,
           fixed: false,
-          expressions: block.expressions,
+          expressions: cell.expressions,
           isNonce: false
         }
       }
     } else {
       // Nonce labels still go in symbol table
-      symbols[block.label] = {
-        definedBy: block.id,
+      symbols[cell.label] = {
+        definedBy: cell.id,
         value: null,
         fixed: false,
-        expressions: block.expressions,
+        expressions: cell.expressions,
         isNonce: true
       }
     }
@@ -387,8 +388,8 @@ function buildSymbolTable(blocks) {
   
   // Second pass: find all referenced variables and check they're defined
   const allReferenced = new Set()
-  for (const block of blocks) {
-    for (const expr of block.expressions) {
+  for (const cell of cells) {
+    for (const expr of cell.expressions) {
       const vars = findVariables(expr)
       vars.forEach(v => {
         allReferenced.add(v)
@@ -416,13 +417,13 @@ function buildSymbolTable(blocks) {
   }
   
   // Fourth pass: check for bare numbers in anonymous expressions
-  for (const block of blocks) {
-    if (block.isNonce && block.expressions.length === 1) {
-      const expr = block.expressions[0]
+  for (const cell of cells) {
+    if (cell.isNonce && cell.expressions.length === 1) {
+      const expr = cell.expressions[0]
       const vars = findVariables(expr)
       if (vars.size === 0) {
         // This is a bare number like {5}
-        errors.push(`Bare number: "${block.raw}" has no variables and no label. Give it a label or add a variable reference.`)
+        errors.push(`Bare number: "${cell.raw}" has no variables and no label. Give it a label or add a variable reference.`)
       }
     }
   }
@@ -435,23 +436,23 @@ function buildSymbolTable(blocks) {
 // ============================================================================
 
 // Try to compute initial values for all variables
-function computeInitialValues(blocks, symbols) {
+function computeInitialValues(cells, symbols) {
   const values = {}
   const errors = []
   const emptyExprVars = new Set() // Track variables with empty expressions like {c:}
   
-  // Sort blocks by dependency order (simple topological sort attempt)
+  // Sort cells by dependency order (simple topological sort attempt)
   // Variables that only reference already-computed vars should be computed first
   
   // Start with explicit values: {d:9} means d=9
   // Also track variables with empty expressions that need solving
-  for (const block of blocks) {
-    if (block.expressions.length === 1) {
-      const expr = block.expressions[0]
+  for (const cell of cells) {
+    if (cell.expressions.length === 1) {
+      const expr = cell.expressions[0]
       
       // Check for empty expression like {c:}
       if (!expr || expr.trim() === '') {
-        emptyExprVars.add(block.label)
+        emptyExprVars.add(cell.label)
         continue
       }
       
@@ -463,11 +464,11 @@ function computeInitialValues(blocks, symbols) {
         if (result.error) {
           errors.push(`Error evaluating "${expr}": ${result.error}`)
         } else {
-          values[block.label] = result.value
+          values[cell.label] = result.value
         }
       }
-    } else if (block.expressions.length === 0) {
-      emptyExprVars.add(block.label)
+    } else if (cell.expressions.length === 0) {
+      emptyExprVars.add(cell.label)
     }
   }
   
@@ -481,12 +482,12 @@ function computeInitialValues(blocks, symbols) {
     changed = false
     iterations++
     
-    for (const block of blocks) {
-      if (values[block.label] !== undefined) continue // Already computed
-      if (emptyExprVars.has(block.label)) continue // Skip empty-expr vars for now
+    for (const cell of cells) {
+      if (values[cell.label] !== undefined) continue // Already computed
+      if (emptyExprVars.has(cell.label)) continue // Skip empty-expr vars for now
       
       // Try to evaluate the first expression with current values
-      const expr = block.expressions[0]
+      const expr = cell.expressions[0]
       if (!expr || expr.trim() === '') continue
       
       const vars = findVariables(expr)
@@ -497,7 +498,7 @@ function computeInitialValues(blocks, symbols) {
       if (allAvailable) {
         const result = evaluate(expr, values)
         if (!result.error && result.value !== null && isFinite(result.value)) {
-          values[block.label] = result.value
+          values[cell.label] = result.value
           changed = true
         }
       }
@@ -506,7 +507,7 @@ function computeInitialValues(blocks, symbols) {
     // Also try to solve empty-expr vars in each iteration (they may become solvable)
     for (const varName of emptyExprVars) {
       if (values[varName] !== undefined) continue
-      const solved = solveFromConstraints(varName, blocks, values)
+      const solved = solveFromConstraints(varName, cells, values)
       if (solved !== null) {
         values[varName] = solved
         changed = true
@@ -518,7 +519,7 @@ function computeInitialValues(blocks, symbols) {
   for (const varName of emptyExprVars) {
     if (values[varName] !== undefined) continue
     
-    const solved = solveFromConstraints(varName, blocks, values)
+    const solved = solveFromConstraints(varName, cells, values)
     if (solved !== null) {
       values[varName] = solved
     } else {
@@ -527,18 +528,18 @@ function computeInitialValues(blocks, symbols) {
   }
   
   // For any remaining undefined variables, set default value
-  for (const block of blocks) {
-    if (values[block.label] === undefined) {
+  for (const cell of cells) {
+    if (values[cell.label] === undefined) {
       // Try with current partial values
-      const expr = block.expressions[0]
+      const expr = cell.expressions[0]
       if (expr && expr.trim() !== '') {
         const result = evaluate(expr, values)
         if (!result.error && result.value !== null && isFinite(result.value)) {
-          values[block.label] = result.value
+          values[cell.label] = result.value
           continue
         }
       }
-      values[block.label] = 1 // Fallback default
+      values[cell.label] = 1 // Fallback default
     }
   }
   
@@ -650,13 +651,13 @@ function solve(expr, varName, target, values) {
 }
 
 // Find a constraint involving varName and solve for it
-function solveFromConstraints(varName, blocks, values) {
-  for (const block of blocks) {
-    if (block.expressions.length < 2) continue
+function solveFromConstraints(varName, cells, values) {
+  for (const cell of cells) {
+    if (cell.expressions.length < 2) continue
     
     // Find expressions with and without the variable
     let targetExpr = null, solveExpr = null
-    for (const expr of block.expressions) {
+    for (const expr of cell.expressions) {
       const vars = findVariables(expr)
       if (vars.has(varName)) {
         solveExpr = expr
@@ -685,14 +686,14 @@ function solveFromConstraints(varName, blocks, values) {
 
 // Check if initial values contradict any constraints (fail loudly per Anti-Postel)
 // Skip checking constraints that involve variables with empty expressions (those need solving)
-function checkInitialContradictions(blocks, values, emptyExprVars) {
+function checkInitialContradictions(cells, values, emptyExprVars) {
   const errors = []
   
-  for (const block of blocks) {
-    if (block.expressions.length > 1) {
+  for (const cell of cells) {
+    if (cell.expressions.length > 1) {
       // Check if this constraint involves any variable that needs to be computed
       const varsInConstraint = new Set()
-      block.expressions.forEach(expr => {
+      cell.expressions.forEach(expr => {
         if (expr && expr.trim() !== '') {
           findVariables(expr).forEach(v => varsInConstraint.add(v))
         }
@@ -703,7 +704,7 @@ function checkInitialContradictions(blocks, values, emptyExprVars) {
       if (involvesEmptyVar) continue
       
       // This is a constraint - all expressions should evaluate equal
-      const results = block.expressions.map(expr => {
+      const results = cell.expressions.map(expr => {
         if (!expr || expr.trim() === '') return null
         const r = evaluate(expr, values)
         return r.error ? null : r.value
@@ -717,7 +718,7 @@ function checkInitialContradictions(blocks, values, emptyExprVars) {
       const tolerance = Math.abs(first) * 1e-6 + 1e-6
       for (let i = 1; i < results.length; i++) {
         if (Math.abs(results[i] - first) > tolerance) {
-          const exprStr = block.expressions.join(' = ')
+          const exprStr = cell.expressions.join(' = ')
           const valuesStr = results.map(r => formatNum(r)).join(' ≠ ')
           errors.push(`Contradiction: {${exprStr}} evaluates to ${valuesStr}`)
           break
@@ -730,20 +731,20 @@ function checkInitialContradictions(blocks, values, emptyExprVars) {
 }
 
 // Check if all constraints are satisfied with given values
-function checkConstraints(blocks, values) {
+function checkConstraints(cells, values) {
   const violations = []
   const tol = 1e-9
   
-  for (const block of blocks) {
-    if (block.expressions.length < 2) continue
+  for (const cell of cells) {
+    if (cell.expressions.length < 2) continue
     
-    const results = block.expressions.map(expr => {
+    const results = cell.expressions.map(expr => {
       const r = evaluate(expr, values)
       return r.error ? null : r.value
     })
     
     if (results.some(r => r === null)) {
-      violations.push({ block, message: 'Evaluation error' })
+      violations.push({ cell, message: 'Evaluation error' })
       continue
     }
     
@@ -751,7 +752,7 @@ function checkConstraints(blocks, values) {
     const tolerance = Math.abs(first) * tol + tol
     for (let i = 1; i < results.length; i++) {
       if (Math.abs(results[i] - first) > tolerance) {
-        violations.push({ block, message: `${formatNum(first)} ≠ ${formatNum(results[i])}` })
+        violations.push({ cell, message: `${formatNum(first)} ≠ ${formatNum(results[i])}` })
         break
       }
     }
@@ -760,20 +761,20 @@ function checkConstraints(blocks, values) {
 }
 
 // Solve constraints by adjusting unfixed variables
-function solveConstraints(blocks, values, fixedVars, changedVar) {
+function solveConstraints(cells, values, fixedVars, changedVar) {
   const newValues = { ...values }
   
   for (let pass = 0; pass < 10; pass++) {
-    const violations = checkConstraints(blocks, newValues)
+    const violations = checkConstraints(cells, newValues)
     if (violations.length === 0) break
     
     let madeProgress = false
-    for (const { block } of violations) {
-      if (block.expressions.length < 2) continue
+    for (const { cell } of violations) {
+      if (cell.expressions.length < 2) continue
       
       // Find all variables and which are adjustable
       const allVars = new Set()
-      block.expressions.forEach(expr => findVariables(expr).forEach(v => allVars.add(v)))
+      cell.expressions.forEach(expr => findVariables(expr).forEach(v => allVars.add(v)))
       
       const adjustable = [...allVars].filter(v => !fixedVars.has(v) && v !== changedVar)
       if (adjustable.length === 0) continue
@@ -782,7 +783,7 @@ function solveConstraints(blocks, values, fixedVars, changedVar) {
       const varToSolve = adjustable[0]
       let targetExpr = null, solveExpr = null
       
-      for (const expr of block.expressions) {
+      for (const expr of cell.expressions) {
         const vars = findVariables(expr)
         if (vars.has(varToSolve)) {
           solveExpr = expr
@@ -815,7 +816,7 @@ function solveConstraints(blocks, values, fixedVars, changedVar) {
 
 let state = {
   recipeText: '',
-  blocks: [],
+  cells: [],
   symbols: {},
   values: {},
   fixedVars: new Set(),
@@ -831,7 +832,7 @@ function parseRecipe() {
   const text = state.recipeText
   
   if (!text.trim()) {
-    state.blocks = []
+    state.cells = []
     state.symbols = {}
     state.values = {}
     state.errors = []
@@ -842,21 +843,21 @@ function parseRecipe() {
   }
   
   // Parse
-  let blocks = extractBlocks(text)
-  blocks = blocks.map(parseBlock)
-  blocks = preprocessLabels(blocks)
+  let cells = extractCells(text)
+  cells = cells.map(parseCell)
+  cells = preprocessLabels(cells)
   
   // Build symbol table
-  const { symbols, errors: symbolErrors } = buildSymbolTable(blocks)
+  const { symbols, errors: symbolErrors } = buildSymbolTable(cells)
   
   // Compute initial values
-  const { values, errors: valueErrors, emptyExprVars } = computeInitialValues(blocks, symbols)
+  const { values, errors: valueErrors, emptyExprVars } = computeInitialValues(cells, symbols)
   
   // Check for contradictions in initial values (skip constraints involving empty-expr vars)
-  const contradictions = checkInitialContradictions(blocks, values, emptyExprVars)
+  const contradictions = checkInitialContradictions(cells, values, emptyExprVars)
   
   // Update state
-  state.blocks = blocks
+  state.cells = cells
   state.symbols = symbols
   state.values = values
   state.errors = [...symbolErrors, ...valueErrors, ...contradictions]
@@ -886,7 +887,7 @@ function renderRecipe() {
   // Update slider display
   updateSliderDisplay()
   
-  if (state.blocks.length === 0 && state.errors.length === 0) {
+  if (state.cells.length === 0 && state.errors.length === 0) {
     output.style.display = 'none'
     copySection.style.display = 'none'
     return
@@ -928,15 +929,15 @@ function renderRecipe() {
   let html = ''
   let lastIndex = 0
   
-  // Sort blocks by start index (only visible blocks)
-  const visibleBlocks = state.blocks.filter(b => !b.inComment).sort((a, b) => a.startIndex - b.startIndex)
+  // Sort cells by start index (only visible cells)
+  const visibleCells = state.cells.filter(b => !b.inComment).sort((a, b) => a.startIndex - b.startIndex)
   
-  for (const block of visibleBlocks) {
-    // Add text before this block, but skip any HTML comments
+  for (const cell of visibleCells) {
+    // Add text before this cell, but skip any HTML comments
     let textStart = lastIndex
-    while (textStart < block.startIndex) {
+    while (textStart < cell.startIndex) {
       // Check if we're entering a comment
-      const nextCommentStart = commentRanges.find(r => r.start >= textStart && r.start < block.startIndex)
+      const nextCommentStart = commentRanges.find(r => r.start >= textStart && r.start < cell.startIndex)
       if (nextCommentStart) {
         // Add text before the comment
         if (nextCommentStart.start > textStart) {
@@ -945,24 +946,24 @@ function renderRecipe() {
         // Skip the comment
         textStart = nextCommentStart.end
       } else {
-        // No more comments before the block
-        html += escapeHtml(text.substring(textStart, block.startIndex))
+        // No more comments before the cell
+        html += escapeHtml(text.substring(textStart, cell.startIndex))
         break
       }
     }
     
-    // Render the block as input field
-    const value = state.values[block.label]
+    // Render the cell as input field
+    const value = state.values[cell.label]
     const displayValue = formatNum(value)
-    const isFixed = state.fixedVars.has(block.label)
-    const title = `${block.label}: ${block.expressions.join(' = ')}`.replace(/"/g, '&quot;')
+    const isFixed = state.fixedVars.has(cell.label)
+    const title = `${cell.label}: ${cell.expressions.join(' = ')}`.replace(/"/g, '&quot;')
     
-    html += `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''}" data-label="${block.label}" data-block-id="${block.id}" value="${displayValue}" title="${title}">`
+    html += `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''}" data-label="${cell.label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}">`
     
-    lastIndex = block.endIndex
+    lastIndex = cell.endIndex
   }
   
-  // Add remaining text after last block, skipping comments
+  // Add remaining text after last cell, skipping comments
   let textStart = lastIndex
   while (textStart < text.length) {
     const nextComment = commentRanges.find(r => r.start >= textStart)
@@ -1016,7 +1017,7 @@ function escapeHtml(text) {
 function handleFieldInput(e) {
   const input = e.target
   const label = input.dataset.label
-  const blockId = input.dataset.blockId
+  const cellId = input.dataset.cellId
   const newValue = toNum(input.value)
   
   // Invalid number format - just mark invalid, don't change state
@@ -1025,14 +1026,14 @@ function handleFieldInput(e) {
     return
   }
   
-  const block = state.blocks.find(b => b.id === blockId)
-  if (!block) return
+  const cell = state.cells.find(c => c.id === cellId)
+  if (!cell) return
   
   // Work on a COPY of values - only commit if constraints can be satisfied
   let testValues = { ...state.values }
   
   // Apply the new value
-  const expr = block.expressions[0]
+  const expr = cell.expressions[0]
   const varsInExpr = findVariables(expr)
   
   // Track which variables are in the user's expression (shouldn't be adjusted by constraint solver)
@@ -1067,16 +1068,16 @@ function handleFieldInput(e) {
   userExprVars.forEach(v => tempFixed.add(v))
 
   // Try to solve all constraints with the new value
-  testValues = solveConstraints(state.blocks, testValues, tempFixed, null)
+  testValues = solveConstraints(state.cells, testValues, tempFixed, null)
   
   // Recompute derived values
-  testValues = recomputeValues(state.blocks, testValues)
+  testValues = recomputeValues(state.cells, testValues)
   
   // Check if constraints are satisfied
-  const violations = checkConstraints(state.blocks, testValues)
+  const violations = checkConstraints(state.cells, testValues)
 
-  // Build set of block IDs with violated constraints
-  const violatedBlockIds = new Set(violations.map(v => v.block.id))
+  // Build set of cell IDs with violated constraints
+  const violatedCellIds = new Set(violations.map(v => v.cell.id))
 
   if (violations.length === 0) {
     // Success - commit the valid values and update all fields
@@ -1089,7 +1090,7 @@ function handleFieldInput(e) {
     // Constraints violated - don't commit, but mark all violated constraint fields as invalid
     // (The current field keeps the user's input; other fields keep their current display)
     $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
-      if (violatedBlockIds.has(field.dataset.blockId)) {
+      if (violatedCellIds.has(field.dataset.cellId)) {
         field.classList.add('invalid')
       } else {
         field.classList.remove('invalid')
@@ -1100,19 +1101,19 @@ function handleFieldInput(e) {
 
 // Recompute all field values based on current variable values (mutates state.values)
 function recomputeAllValues() {
-  state.values = recomputeValues(state.blocks, state.values)
+  state.values = recomputeValues(state.cells, state.values)
 }
 
 // Pure version: recompute derived values and return new values object
-function recomputeValues(blocks, values) {
+function recomputeValues(cells, values) {
   const newValues = { ...values }
   
   // Multiple passes to handle dependencies
   for (let pass = 0; pass < 10; pass++) {
     let changed = false
     
-    for (const block of blocks) {
-      const expr = block.expressions[0]
+    for (const cell of cells) {
+      const expr = cell.expressions[0]
       if (!expr || expr.trim() === '') continue
       
       const vars = findVariables(expr)
@@ -1122,9 +1123,9 @@ function recomputeValues(blocks, values) {
       if (allDefined && vars.size > 0) {
         const result = evaluate(expr, newValues)
         if (!result.error && isFinite(result.value)) {
-          const oldVal = newValues[block.label]
+          const oldVal = newValues[cell.label]
           if (oldVal === undefined || Math.abs(result.value - oldVal) > 1e-10) {
-            newValues[block.label] = result.value
+            newValues[cell.label] = result.value
             changed = true
           }
         }
@@ -1199,22 +1200,22 @@ function getScaledRecipeText() {
   let lastIndex = 0
   const text = state.recipeText
   
-  const sortedBlocks = [...state.blocks].sort((a, b) => a.startIndex - b.startIndex)
+  const sortedCells = [...state.cells].sort((a, b) => a.startIndex - b.startIndex)
   
-  for (const block of sortedBlocks) {
-    // Add text before this block
-    if (block.startIndex > lastIndex) {
-      result += text.substring(lastIndex, block.startIndex)
+  for (const cell of sortedCells) {
+    // Add text before this cell
+    if (cell.startIndex > lastIndex) {
+      result += text.substring(lastIndex, cell.startIndex)
     }
     
     // Add the computed value (or original for comments)
-    if (block.inComment) {
-      result += block.raw
+    if (cell.inComment) {
+      result += cell.raw
     } else {
-      result += formatNum(state.values[block.label])
+      result += formatNum(state.values[cell.label])
     }
     
-    lastIndex = block.endIndex
+    lastIndex = cell.endIndex
   }
   
   // Add remaining text
