@@ -876,6 +876,7 @@ let state = {
 
 function parseRecipe() {
   const text = state.recipeText
+  const previousValues = state.values
   
   if (!text.trim()) {
     state.cells = []
@@ -901,12 +902,24 @@ function parseRecipe() {
   
   // Check for contradictions in initial values (skip constraints involving empty-expr vars)
   const contradictions = checkInitialContradictions(cells, values, emptyExprVars)
+
+  const allErrors = [...symbolErrors, ...valueErrors, ...contradictions]
+
+  if (allErrors.length > 0) {
+    for (const cell of cells) {
+      if (values[cell.label] !== undefined) continue
+      const previousValue = previousValues[cell.label]
+      if (typeof previousValue === 'number' && isFinite(previousValue)) {
+        values[cell.label] = previousValue
+      }
+    }
+  }
   
   // Update state
   state.cells = cells
   state.symbols = symbols
   state.values = values
-  state.errors = [...symbolErrors, ...valueErrors, ...contradictions]
+  state.errors = allErrors
   state.fixedVars = new Set()
   
   updateRecipeDropdown()
@@ -932,7 +945,9 @@ function renderRecipe() {
   
   const criticalErrors = state.errors
 
-  function renderRecipeBody({ disableInputs }) {
+  const violatedCellIds = new Set(checkConstraints(state.cells, state.values).map(v => v.cell.id))
+
+  function renderRecipeBody({ disableInputs, invalidCellIds }) {
     // Find all HTML comment ranges to strip them from output
     const text = state.recipeText
     const commentRanges = []
@@ -976,10 +991,11 @@ function renderRecipe() {
       const value = state.values[cell.label]
       const displayValue = formatNum(value)
       const isFixed = state.fixedVars.has(cell.label)
+      const isInvalid = invalidCellIds.has(cell.id)
       const title = `${cell.label}: ${cell.expressions.join(' = ')}`.replace(/"/g, '&quot;')
       const disabledAttr = disableInputs ? ' disabled' : ''
 
-      html += `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''}" data-label="${cell.label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}"${disabledAttr}>`
+      html += `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''} ${isInvalid ? 'invalid' : ''}" data-label="${cell.label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}"${disabledAttr}>`
 
       lastIndex = cell.endIndex
     }
@@ -1036,7 +1052,7 @@ function renderRecipe() {
     return
   }
   
-  output.innerHTML = `${errorBanner}${renderRecipeBody({ disableInputs: false })}`
+  output.innerHTML = `${errorBanner}${renderRecipeBody({ disableInputs: false, invalidCellIds: violatedCellIds })}`
   output.style.display = 'block'
   copySection.style.display = 'block'
 
