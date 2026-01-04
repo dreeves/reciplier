@@ -213,11 +213,11 @@ Pythagorean triples.
 4. Other errors we haven't thought of yet or ways the template file violates any
 expectations. Anti-Postel FTW.
 
-5. If any expression is a bare number. I'm torn on this. Reasons to treat it as
-an error: (1) It doesn't make sense to have a field that when you change it it 
-has zero effect on anything else. (2) If you really want that for some reason,
-give the field a label. Even if you never use that label, it demonstrates that
-you're creating that disconnected field intentionally.
+5. If any expression is a bare number without a human-assigned label. Reasons to
+treat it as an error: (1) It doesn't make sense to have a field that when you
+change it it has zero effect on anything else. (2) If you really want that for
+some reason, give the field a label. Even if you never use that label, it
+demonstrates that you're creating that disconnected field intentionally.
 
 6. Although, come to think of it, maybe we want to treat it as an error when any
 field is disconnected from all others? Like if you define {tau: 6.28} and then
@@ -237,6 +237,9 @@ Option 2: encode which template file and encode every labeled variable
 explicitly in the query string.
 4. Add redirects from old Sheeq URLs:
 [Sugar Calculator](https://sheeq.replit.app/?eq=%28Calories_per_gram_of_sugar%2520*%2520%250AGrams_of_sugar_per_serving_in_healthy_stuff%2520*%2520%250AGrams_of_healthy_stuff%2520%252F%2520%250AGrams_per_serving_in_healthy_stuff%2520%252B%2520%250ACalories_per_gram_of_brown_sugar%2520*%2520%250AGrams_of_brown_sugar_to_add%2520%29%2520%252F%2520%28%250ACalories_per_serving_in_healthy_stuff%2520*%2520%250AGrams_of_healthy_stuff%2520%252F%2520%250AGrams_per_serving_in_healthy_stuff%2520%252B%2520%250ACalories_per_gram_of_brown_sugar%2520*%2520%250AGrams_of_brown_sugar_to_add%2520%29%2520%250A%253D%253D%2520%250ACalories_per_gram_of_sugar%2520*%2520%250AGrams_of_sugar_per_serving_in_junk_food%2520%252F%2520%250ACalories_per_serving_in_junk_food&vars=%257B%2522Calories_per_gram_of_sugar%2522%253A3.87%252C%2522Grams_of_sugar_per_serving_in_healthy_stuff%2522%253A5%252C%2522Grams_of_healthy_stuff%2522%253A233.5%252C%2522Grams_per_serving_in_healthy_stuff%2522%253A170%252C%2522Calories_per_gram_of_brown_sugar%2522%253A3.8%252C%2522Grams_of_brown_sugar_to_add%2522%253A46.10019431698941%252C%2522Calories_per_serving_in_healthy_stuff%2522%253A120%252C%2522Grams_of_sugar_per_serving_in_junk_food%2522%253A23%252C%2522Calories_per_serving_in_junk_food%2522%253A150%257D&infer=Grams_of_brown_sugar_to_add),
-[Pounds<->Kilograms Calculator](https://sheeq.replit.app/?eq=pounds%2520%253D%2520kilograms%2520%252F%25200.45359237&vars=%257B%2522p%2522%253A0%252C%2522po%2522%253A0%252C%2522pou%2522%253A0%252C%2522poun%2522%253A0%252C%2522pound%2522%253A0%252C%2522pounds%2522%253A154.3235835294143%252C%2522k%2522%253A0%252C%2522ki%2522%253A0%252C%2522kil%2522%253A0%252C%2522kilo%2522%253A0%252C%2522kilob%2522%253A0%252C%2522kilog%2522%253A0%252C%2522kilogr%2522%253A0%252C%2522kilogra%2522%253A0%252C%2522kilogram%2522%253A0%252C%2522kilograms%2522%253A70%257D&infer=pounds).
+[Pounds<->Kilograms Calculator](https://sheeq.replit.app/?eq=pounds%2520%253D%2520kilograms%2520%252F%25200.45359237&vars=%257B%2522p%2522%253A0%252C%2522po%2522%253A0%252C%2522pou%2522%253A0%252C%2522poun%2522%253A0%252C%2522pound%2522%253A0%252C%2522pounds%2522%253A154.3235835294143%252C%2522k%2522%253A0%252C%2522ki%2522%253A0%252C%2522kil%2522%253A0%252C%2522kilo%2522%253A0%252C%2522kilob%2522%253A0%252C%2522kilog%2522%253A0%252C%2522kilogr%2522%253A0%252C%2522kilogra%2522%253A0%252C%2522kilogram%2522%253A0%252C%2522kilograms%2522%253A70%257D&infer=pounds),
+and David Yang's monitor resolution calculator if I can find that.
 5. Help text. 
 (Include a link to Calca.io as an example of prior art.)
+6. Don't show the nonce variables in the hovertext. Show the urtext.
+7. Bug: when a value changes, the slider should change in real time.

@@ -7,7 +7,7 @@
 
 const recipesShown = {
   'crepes':    "Soule-Reeves Crepes",
-  'pyzza':     "Pythagorean Pizza",
+  'pyzza':     "Pythagorean Triple Pizza",
   'cookies':   "Camelot Chocolate Chip Cookies",
   'shortcake': "Shortcake",
   'simeq':     "Simultaneous Equation Cake",
@@ -42,7 +42,10 @@ Scaled by a factor of {x:1}
 `,
 // -----------------------------------------------------------------------------
 'pyzza': `\
-{a:3}, {b:4}, {c:} is a Pythagorean triple.
+Scaled by a factor of x=[x:1]. TODO
+
+Roll out dough into a right triangle with legs of length a={a:3} and b={b:4} and hypotenuse c={c:}.
+Then eat it.
 
 Sanity check: {a^2 + b^2 = c^2}
 `,
@@ -70,8 +73,10 @@ Scaled by a factor of {x:1}
 `,
 // -----------------------------------------------------------------------------
 'simeq': `\
-12*{x} + 13*{y} = {12x + 13y = 163}
--2*{x} + 100*{y} = {-2x + 100y = 688}
+2*{x:} + 3*{y:} = {2x + 3y = 33}
+5*{x} - 4*{y} = {5x - 4y = 2}
+
+(Expected solution: x=6, y=7)
 `,
 // -----------------------------------------------------------------------------
 'OLDshortcakeSCHDEL': `\
@@ -273,10 +278,10 @@ function preprocessLabels(blocks) {
       return {
         ...block,
         label: `_var${String(nonceCounter++).padStart(3, '0')}`,
-        isNonceLabel: true
+        isNonce: true
       }
     }
-    return { ...block, isNonceLabel: false }
+    return { ...block, isNonce: false }
   })
 }
 
@@ -356,7 +361,7 @@ function buildSymbolTable(blocks) {
   
   // First pass: collect all defined labels
   for (const block of blocks) {
-    if (!block.isNonceLabel) {
+    if (!block.isNonce) {
       if (symbols[block.label]) {
         errors.push(`Duplicate label: "${block.label}" defined multiple times`)
       } else {
@@ -364,7 +369,8 @@ function buildSymbolTable(blocks) {
           definedBy: block.id,
           value: null,
           fixed: false,
-          expressions: block.expressions
+          expressions: block.expressions,
+          isNonce: false
         }
       }
     } else {
@@ -403,16 +409,15 @@ function buildSymbolTable(blocks) {
         return vars.size > 0
       })
       if (!selfRefs) {
-        // It's a bare value like {tau: 6.28} - only warn if never used
-        // For now, we'll allow it but could make this an error
-        // errors.push(`Disconnected variable: "${name}" is defined but never used`)
+        // Case 6: human-labeled variable that's completely disconnected
+        errors.push(`Disconnected variable: "${name}" is defined but never used`)
       }
     }
   }
   
   // Fourth pass: check for bare numbers in anonymous expressions
   for (const block of blocks) {
-    if (block.isNonceLabel && block.expressions.length === 1) {
+    if (block.isNonce && block.expressions.length === 1) {
       const expr = block.expressions[0]
       const vars = findVariables(expr)
       if (vars.size === 0) {
@@ -881,8 +886,9 @@ function renderRecipe() {
   }
   
   // Check for critical errors (will show banner but still render everything)
-  const criticalErrors = state.errors.filter(e => 
-    e.includes('Undefined') || e.includes('Duplicate') || e.includes('Contradiction')
+  const criticalErrors = state.errors.filter(e =>
+    e.includes('Undefined') || e.includes('Duplicate') || e.includes('Contradiction') ||
+    e.includes('Disconnected') || e.includes('Bare')
   )
 
   // Find all HTML comment ranges to strip them from output
