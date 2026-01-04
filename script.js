@@ -1074,19 +1074,27 @@ function handleFieldInput(e) {
   
   // Check if constraints are satisfied
   const violations = checkConstraints(state.blocks, testValues)
-  
-  if (violations.length === 0) {
-    // Success - commit the valid values
-    state.values = testValues
-    input.classList.remove('invalid')
 
-    // Update all fields with the new valid values (including current, in case solver adjusted it)
+  // Build set of block IDs with violated constraints
+  const violatedBlockIds = new Set(violations.map(v => v.block.id))
+
+  if (violations.length === 0) {
+    // Success - commit the valid values and update all fields
+    state.values = testValues
     $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
       field.value = formatNum(state.values[field.dataset.label])
+      field.classList.remove('invalid')
     })
   } else {
-    // Constraints violated - mark invalid but don't change state.values
-    input.classList.add('invalid')
+    // Constraints violated - don't commit, but mark all violated constraint fields as invalid
+    // (The current field keeps the user's input; other fields keep their current display)
+    $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
+      if (violatedBlockIds.has(field.dataset.blockId)) {
+        field.classList.add('invalid')
+      } else {
+        field.classList.remove('invalid')
+      }
+    })
   }
 }
 
@@ -1129,17 +1137,16 @@ function recomputeValues(blocks, values) {
   return newValues
 }
 
-function handleFieldBlur(e) {
-  const input = e.target
-  const label = input.dataset.label
-  
-  // If field is invalid, revert to the valid value from state.values
+function handleFieldBlur(_e) {
+  // If any field is invalid, revert ALL fields to state.values (which is always consistent)
   // Per README: "as soon as you clicked away from field c, it would recompute
   // itself as the only value that makes all the equations true"
-  if (input.classList.contains('invalid')) {
-    // state.values always contains consistent values, so just display them
-    input.value = formatNum(state.values[label])
-    input.classList.remove('invalid')
+  const hasInvalid = $('recipeOutput').querySelector('input.recipe-field.invalid')
+  if (hasInvalid) {
+    $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
+      field.value = formatNum(state.values[field.dataset.label])
+      field.classList.remove('invalid')
+    })
   }
 }
 
