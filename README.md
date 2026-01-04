@@ -243,3 +243,9 @@ and David Yang's monitor resolution calculator if I can find that.
 (Include a link to Calca.io as an example of prior art.)
 6. Don't show the nonce variables in the hovertext. Show the urtext.
 7. Bug: when a value changes, the slider should change in real time.
+8. Currently you can freeze a field by double-clicking it and it turns blue.
+That's not bad but it's not discoverable or obvious. Especially if you make
+edits such that the constraints can't be satisfied by editing the nonfrozen
+fields, it needs to be obvious you should unfreeze some fields. Possibly we want
+an affordance for unfreezing everything. It's even possible that that should 
+happen automatically if there's no other way to satisfy the constraints.

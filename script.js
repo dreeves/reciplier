@@ -638,8 +638,15 @@ function solve(expr, varName, target, values) {
       hi = mid
     }
   }
-  
-  return (lo + hi) / 2
+
+  // Verify the result is actually close to target before returning
+  const finalVal = (lo + hi) / 2
+  test[varName] = finalVal
+  const finalRes = evaluate(expr, test)
+  if (finalRes.error || Math.abs(finalRes.value - target) > Math.abs(target) * 0.01 + 0.01) {
+    return null  // Couldn't find a valid solution
+  }
+  return finalVal
 }
 
 // Find a constraint involving varName and solve for it
@@ -1028,6 +1035,10 @@ function handleFieldInput(e) {
   const expr = block.expressions[0]
   const varsInExpr = findVariables(expr)
   
+  // Track which variables are in the user's expression (shouldn't be adjusted by constraint solver)
+  const userExprVars = new Set(varsInExpr)
+
+  let solveSucceeded = false
   if (varsInExpr.size > 0) {
     // This field's value comes from an expression - solve for an unfixed variable
     const unfixed = [...varsInExpr].filter(v => !state.fixedVars.has(v))
@@ -1035,19 +1046,28 @@ function handleFieldInput(e) {
       const solved = solve(expr, unfixed[0], newValue, testValues)
       if (solved !== null) {
         testValues[unfixed[0]] = solved
+        solveSucceeded = true
       }
     }
   } else {
     // This field is a simple value - set it directly
     testValues[label] = newValue
+    solveSucceeded = true
+    userExprVars.add(label)  // The label IS the variable being set, so protect it
   }
-  
-  // Temporarily treat this variable as fixed while solving constraints
+
+  // If we couldn't solve for the user's input, mark invalid and stop
+  if (!solveSucceeded) {
+    input.classList.add('invalid')
+    return
+  }
+
+  // Temporarily treat variables in user's expression as fixed while solving constraints
   const tempFixed = new Set(state.fixedVars)
-  tempFixed.add(label)
-  
+  userExprVars.forEach(v => tempFixed.add(v))
+
   // Try to solve all constraints with the new value
-  testValues = solveConstraints(state.blocks, testValues, tempFixed, label)
+  testValues = solveConstraints(state.blocks, testValues, tempFixed, null)
   
   // Recompute derived values
   testValues = recomputeValues(state.blocks, testValues)
@@ -1059,12 +1079,10 @@ function handleFieldInput(e) {
     // Success - commit the valid values
     state.values = testValues
     input.classList.remove('invalid')
-    
-    // Update all other fields with the new valid values
+
+    // Update all fields with the new valid values (including current, in case solver adjusted it)
     $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
-      if (field !== input) {
-        field.value = formatNum(state.values[field.dataset.label])
-      }
+      field.value = formatNum(state.values[field.dataset.label])
     })
   } else {
     // Constraints violated - mark invalid but don't change state.values
