@@ -72,7 +72,7 @@ Scaled by a factor of {x:1}
 `,
 // -----------------------------------------------------------------------------
 'simeq': `\
-2*{x:} + 3*{y:} = {2x + 3y = 33}
+2*{x:6} + 3*{y:} = {2x + 3y = 33}
 5*{x} - 4*{y} = {5x - 4y = 2}
 
 (Expected solution: x=6, y=7)
@@ -138,14 +138,15 @@ Scaled by a factor of {x:1}
 `,
 // -----------------------------------------------------------------------------
 'breakaway': `\
-The riders in the break have a {m:1}:{s:30}s gap with {d:20}km ({0.621371d}mi) to go.
-So if the break does {vb:40}km/h ({0.621371vb}mph) then the peloton needs to do {vp: pd/t}km/h ({0.621371vp}mph) to catch them at the line.
+The riders in the break have a {m:1}:{s:30}s gap with {d:20}km ({k*d}mi) to go.
+So if the break averages {vb:40}km/h ({k*vb}mph) then the peloton needs to average {vp: pd/t}km/h ({k*vp}mph) to catch them at the line.
 
 Scratchpad:
+* Miles in a kilometer: {k: 0.621371}mi/km
 * Gap in hours: {gt: m/60+s/3600} (ie, {m+s/60 = gt*60}m or {60m+s = gt*3600}s)
-* Gap distance: {gd: vb*gt}km ({0.621371gd}mi) (I think vb not vp for this?)
-* Breakaway's time till finish: {t: d/vb}
-* Peloton's distance to the line: {pd: d+gd}
+* Gap distance: {gd: vb*gt}km ({k*gd}mi) <!-- I think vb not vp for this?) -->
+* Breakaway's time till finish: {t: d/vb} hours
+* Peloton's distance to the line: {pd: d+gd}km ({k*pd}mi)
 `,
 // -----------------------------------------------------------------------------
 'biketour': `\
