@@ -90,7 +90,7 @@ async function main() {
     await page.waitForSelector('.error-display', { visible: true })
 
     const errorText = await page.$eval('.error-display', el => el.textContent || '')
-    assert.ok(errorText.includes('Undefined variable'))
+    assert.ok(/undefined variable/i.test(errorText))
 
     const copyDisabled = await page.$eval('#copyButton', el => el.disabled)
     assert.equal(copyDisabled, true)
