@@ -99,7 +99,7 @@ Bake =30 to =40 minutes @ =325°F
 `,
 // -----------------------------------------------------------------------------
 'shortcake': `\
-Preheat oven to 325°F. Line bottom of {9}x{9x}-inch pan with parchment paper.
+Preheat oven to 325°F. Line bottom of 9x{9x}-inch pan with parchment paper.
 
 * {2x}    C   flour (can do half/half cake flour)
 * {1x}    C   sugar
@@ -364,7 +364,7 @@ function buildSymbolTable(cells) {
   for (const cell of cells) {
     if (!cell.isNonce) {
       if (symbols[cell.label]) {
-        errors.push(`Duplicate label: "${cell.label}" defined multiple times`)
+        errors.push(`${cell.label} defined multiple times`)
       } else {
         symbols[cell.label] = {
           definedBy: cell.id,
@@ -411,7 +411,8 @@ function buildSymbolTable(cells) {
       })
       if (!selfRefs) {
         // Case 6: human-labeled variable that's completely disconnected
-        errors.push(`Disconnected variable: "${name}" is defined but never used`)
+        errors.push(`${name} = ${JSON.stringify(sym.expressions[0])} ` + 
+                    `is defined but never used`)
       }
     }
   }
@@ -423,7 +424,8 @@ function buildSymbolTable(cells) {
       const vars = findVariables(expr)
       if (vars.size === 0) {
         // This is a bare number like {5}
-        errors.push(`Bare number: "${cell.raw}" has no variables and no label. Give it a label or add a variable reference.`)
+        errors.push(`"${cell.raw}" is a bare number ` + 
+                    `which doesn't make sense to put in a cell`)
       }
     }
   }
@@ -767,6 +769,16 @@ function checkConstraints(cells, values) {
 function solveConstraints(cells, values, fixedVars, changedVar) {
   const newValues = { ...values }
 
+  const cellByLabel = new Map(cells.map(cell => [cell.label, cell]))
+
+  function isEmptyExprVar(varName) {
+    const cell = cellByLabel.get(varName)
+    if (!cell) return false
+    if (cell.expressions.length === 0) return true
+    const expr = cell.expressions[0]
+    return !expr || expr.trim() === ''
+  }
+
   /*
   // Previous approach (commented out): heuristic prioritization of which variable to solve for.
   // Replaced with a try-each-variable approach that reverts on failure.
@@ -804,7 +816,9 @@ function solveConstraints(cells, values, fixedVars, changedVar) {
       if (cell.expressions.length < 2) continue
       
       // Find all variables and which are adjustable
-      const adjustable = varsInConstraintInOrder(cell).filter(v => !fixedVars.has(v) && v !== changedVar)
+      const adjustable = varsInConstraintInOrder(cell)
+        .filter(v => !fixedVars.has(v) && v !== changedVar)
+        .sort((a, b) => Number(isEmptyExprVar(b)) - Number(isEmptyExprVar(a)))
       if (adjustable.length === 0) continue
 
       const violationsBefore = checkConstraints(cells, newValues)
@@ -1109,7 +1123,7 @@ function handleFieldInput(e) {
   userExprVars.forEach(v => tempFixed.add(v))
 
   // Try to solve all constraints with the new value
-  testValues = solveConstraints(state.cells, testValues, tempFixed, null)
+  testValues = solveConstraints(state.cells, testValues, tempFixed, label)
   
   // Recompute derived values
   testValues = recomputeValues(state.cells, testValues)

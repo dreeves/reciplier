@@ -2,6 +2,10 @@
   "name": "reciplier",
   "description": "Recipe Multiplier and Calculator Calculator",
 
+  "scripts": {
+    "quals": "node quals/run_quals.js"
+  },
+
   "devDependencies": {
     "puppeteer": "^24.34.0"
   }
