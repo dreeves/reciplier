@@ -44,9 +44,9 @@ Scaled by a factor of {x:1}
 `,
 // -----------------------------------------------------------------------------
 'pyzza': `\
-Scaled by a factor of x=[x:1]. TODO
+Scaled by a factor of x={x:1}.
 
-Roll out dough into a right triangle with legs of length a={a:3} and b={b:4} and hypotenuse c={c:}.
+Roll out dough into a right triangle with legs of length a={a:3x} and b={b:4x} and hypotenuse c={c:}.
 Then eat it.
 
 Sanity check: {a^2 + b^2 = c^2}
@@ -173,7 +173,7 @@ Nutrition info for healthy stuff (e.g., Greek yogurt):
 * {sigma:5} grams of sugar per serving
 
 Nutrition info for junk food (e.g., Go-gurt):
-* {w:} grams per serving (don't actually need to know this)
+* {w:} grams per serving (don't actually need to know this) <!-- {w} -->
 * {c:150} calories per serving
 * {s:23} grams of sugar per serving
 

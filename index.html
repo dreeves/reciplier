@@ -54,7 +54,28 @@ content="Paste in a recipe and scale it up or down. Also a SAT solver, why not."
     hidden
   >
     <div class="help-popover-inner text-sm text-gray-600">
-      Auxilium: formulae includantur in cellis curvatis (exempli gratia, <span class="font-mono">{2x}</span> vel <span class="font-mono">{x:1}</span>). Variabiles nominatae cum colon (exempli gratia, <span class="font-mono">x:</span>) definiri possunt, et aequationes cum signo <span class="font-mono">=</span> coniungi possunt. Exemplum prioris artis: <a href="https://calca.io" target="_blank" rel="noopener noreferrer">Calca.io</a>.
+      <p>
+This is kind of a free-form spreadsheet.
+Check out the example "recipes" and it will gradually make sense.
+The idea is you create cells with curly braces that contain optional names and then expressions or equations, like
+<span class="font-mono">{2x}</span> or 
+<span class="font-mono">{x:1}</span> or
+<span class="font-mono">{squaredHypotenuse: a^2 + b^2 = c^2}</span>. 
+(Nerds: "2x" is short for "2*x" &mdash; it supports Mathematica-style math.)
+      </p>
+      <p>
+This was originally vibe-coded by Cantor Soule-Reeves and Daniel Reeves with
+<a href="https://claude.ai" title="This was before Sonnet 4.5; not sure which exactly">Claude</a>
+and then mostly
+<a href="https://codebuff.com/referrals/ref-146ce36c-53e8-435c-a7f6-e180206dd0ee" title="Referral link that gets you (and me, dreev) free credits">Codebuff</a>
+for a while and then a mix of a bunch of things.
+See 
+<a href="https://calca.io" target="_blank" rel="noopener noreferrer">Calca.io</a>
+for an example of some prior art.
+      </p>
+      <p>
+<a href="https://github.com/dreeves/reciplier">Source code on GitHub</a>.
+      </p>
     </div>
   </div>
 </div>
@@ -105,17 +126,12 @@ content="Paste in a recipe and scale it up or down. Also a SAT solver, why not."
       id="copyButton"
       class="w-full bg-gray-100 text-gray-800 py-2 rounded mb-2"
     >
-      Copy Scaled Recipe to Clipboard
+      Copy Snapshot to Clipboard
     </button>
     <div id="notification" class="notification text-center" style="display: none;"></div>
   </div>
   
   <div class="text-center text-gray-400 text-sm mt-4">
-    Vibe-coded by Cantor Soule-Reeves and Daniel Reeves with
-    <a href="https://claude.ai" title="This was before Sonnet 4.5; not sure which exactly">Claude</a>
-    initially and then mostly
-    <a href="https://codebuff.com/referrals/ref-146ce36c-53e8-435c-a7f6-e180206dd0ee" title="Referral link that gets you (and me, dreev) free credits">Codebuff</a>
-    (<a href="https://github.com/dreeves/reciplier">source code on GitHub</a>)
     <div class="text-gray-300 text-xs mt-1">
       v2026.01.04-e
     </div>

@@ -231,33 +231,39 @@ with treating this as an error and reconsider if it's too annoying in practice.
 ## Future Work
 
 1. Markdown rendering
+
 2. Instead of making a slider for whatever variable is called "x", make a slider
 for all labeled variables, and make it easy to dismiss ones you don't need.
+
 3. Direct links to recipes. Option 1: encode the entire template verbatim in the
 query string.
 Option 2: encode which template file and encode every variable explicitly in the
 query string.
-4. Add redirects from old Sheeq URLs:
-[Sugar Calculator](https://sheeq.replit.app/?eq=%28Calories_per_gram_of_sugar%2520*%2520%250AGrams_of_sugar_per_serving_in_healthy_stuff%2520*%2520%250AGrams_of_healthy_stuff%2520%252F%2520%250AGrams_per_serving_in_healthy_stuff%2520%252B%2520%250ACalories_per_gram_of_brown_sugar%2520*%2520%250AGrams_of_brown_sugar_to_add%2520%29%2520%252F%2520%28%250ACalories_per_serving_in_healthy_stuff%2520*%2520%250AGrams_of_healthy_stuff%2520%252F%2520%250AGrams_per_serving_in_healthy_stuff%2520%252B%2520%250ACalories_per_gram_of_brown_sugar%2520*%2520%250AGrams_of_brown_sugar_to_add%2520%29%2520%250A%253D%253D%2520%250ACalories_per_gram_of_sugar%2520*%2520%250AGrams_of_sugar_per_serving_in_junk_food%2520%252F%2520%250ACalories_per_serving_in_junk_food&vars=%257B%2522Calories_per_gram_of_sugar%2522%253A3.87%252C%2522Grams_of_sugar_per_serving_in_healthy_stuff%2522%253A5%252C%2522Grams_of_healthy_stuff%2522%253A233.5%252C%2522Grams_per_serving_in_healthy_stuff%2522%253A170%252C%2522Calories_per_gram_of_brown_sugar%2522%253A3.8%252C%2522Grams_of_brown_sugar_to_add%2522%253A46.10019431698941%252C%2522Calories_per_serving_in_healthy_stuff%2522%253A120%252C%2522Grams_of_sugar_per_serving_in_junk_food%2522%253A23%252C%2522Calories_per_serving_in_junk_food%2522%253A150%257D&infer=Grams_of_brown_sugar_to_add),
-[Pounds<->Kilograms Calculator](https://sheeq.replit.app/?eq=pounds%2520%253D%2520kilograms%2520%252F%25200.45359237&vars=%257B%2522p%2522%253A0%252C%2522po%2522%253A0%252C%2522pou%2522%253A0%252C%2522poun%2522%253A0%252C%2522pound%2522%253A0%252C%2522pounds%2522%253A154.3235835294143%252C%2522k%2522%253A0%252C%2522ki%2522%253A0%252C%2522kil%2522%253A0%252C%2522kilo%2522%253A0%252C%2522kilob%2522%253A0%252C%2522kilog%2522%253A0%252C%2522kilogr%2522%253A0%252C%2522kilogra%2522%253A0%252C%2522kilogram%2522%253A0%252C%2522kilograms%2522%253A70%257D&infer=pounds),
-and David Yang's monitor resolution calculator if I can find that.
-5. Currently you can freeze a field by double-clicking it and it turns blue.
+
+4. Currently you can freeze a field by double-clicking it and it turns blue.
 That's not bad but it's not discoverable or obvious. Especially if you make
 edits such that the constraints can't be satisfied by editing the nonfrozen
 fields, it needs to be obvious you should unfreeze some fields. Possibly we want
 an affordance for unfreezing everything. It's even possible that that should 
 happen automatically if there's no other way to satisfy the constraints.
-6. Related to the previous idea, I'm thinking we need to go more anti-magic.
+
+(I spoke too soon: double-clicking to freeze is terrible because I do that by
+muscle memory to highlight the current contents of a field in order to overwrite
+it.)
+
+5. Related to the previous idea, I'm thinking we need to go more anti-magic.
 Currently when you edit a field the system just tries changing other variables
 until something works. That's pretty magical. What if instead you could see
 other fields kind of cross themselves out and show the new values implied by
 your edit? Or, like, if more than one cell can change to accommodate your edit
 you're forced to explicitly freeze cells until that's no longer the case.
-7. Wait, do we need a special case for a cell like {x: 0} which is just saying
+
+6. Wait, do we need a special case for a cell like {x: 0} which is just saying
 that x is initialized to 0, not that it's a constraint that x=0? How do we 
 distinguish that from something like {climbed + descended = 0} for a biking
 round trip where the net elevation is always definitionally zero? I think the
 answer is never use a special case (anti-magic!) and we just need to figure out
 the preceding future work item here, where the user just has to be explicit that
 the net-elevation cell is frozen.
-8. Fix the cheese wheel example in the spec and in the script.js.
+
+7. Fix the cheese wheel example in the spec and in the script.js.
