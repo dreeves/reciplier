@@ -3,7 +3,9 @@ Background at [AGI Friday](https://agifriday.substack.com/p/reciplier).
 
 See also http://doc.dreev.es/recipes which maybe I want to merge with this.
 
-And here's a spec for having this subsume my "calculator calculator":
+This is now more general than recipes and is kind of halfway to a spreadsheet.
+But also it's better than a spreadsheet in some ways.  It also subsume's my old
+"calculator calculator" app.
 
 ## Wild Generalization to Arbitrary Constraints
 
@@ -11,10 +13,11 @@ Consider a recipe that has you mix 1 egg and 3 wheels of cheese in a
 9-inch diameter pan. 
 
 But of course that 9 doesn't scale linearly with the ingredients. It's the area
-that does that. And the area in this case (since pi are square) comes out to 
-63.62 inches. If you doubled the recipe you'd double that area to 127.24 which
-implies you'd need a 12.73-inch diameter pan. And say we want to allow for a 
-rectangular pan as well.
+that does that, because there's a certain fixed thickness required, let's say.
+And the area in this case (since pi are square) comes out to 63.62 inches. If
+you doubled the recipe you'd double that area to 127.24 which implies you'd need
+a 12.73-inch diameter pan. And say we want to allow for a rectangular pan as
+well.
 
 Here's how we could do all that by annotating the recipe:
 
@@ -238,11 +241,23 @@ query string.
 [Sugar Calculator](https://sheeq.replit.app/?eq=%28Calories_per_gram_of_sugar%2520*%2520%250AGrams_of_sugar_per_serving_in_healthy_stuff%2520*%2520%250AGrams_of_healthy_stuff%2520%252F%2520%250AGrams_per_serving_in_healthy_stuff%2520%252B%2520%250ACalories_per_gram_of_brown_sugar%2520*%2520%250AGrams_of_brown_sugar_to_add%2520%29%2520%252F%2520%28%250ACalories_per_serving_in_healthy_stuff%2520*%2520%250AGrams_of_healthy_stuff%2520%252F%2520%250AGrams_per_serving_in_healthy_stuff%2520%252B%2520%250ACalories_per_gram_of_brown_sugar%2520*%2520%250AGrams_of_brown_sugar_to_add%2520%29%2520%250A%253D%253D%2520%250ACalories_per_gram_of_sugar%2520*%2520%250AGrams_of_sugar_per_serving_in_junk_food%2520%252F%2520%250ACalories_per_serving_in_junk_food&vars=%257B%2522Calories_per_gram_of_sugar%2522%253A3.87%252C%2522Grams_of_sugar_per_serving_in_healthy_stuff%2522%253A5%252C%2522Grams_of_healthy_stuff%2522%253A233.5%252C%2522Grams_per_serving_in_healthy_stuff%2522%253A170%252C%2522Calories_per_gram_of_brown_sugar%2522%253A3.8%252C%2522Grams_of_brown_sugar_to_add%2522%253A46.10019431698941%252C%2522Calories_per_serving_in_healthy_stuff%2522%253A120%252C%2522Grams_of_sugar_per_serving_in_junk_food%2522%253A23%252C%2522Calories_per_serving_in_junk_food%2522%253A150%257D&infer=Grams_of_brown_sugar_to_add),
 [Pounds<->Kilograms Calculator](https://sheeq.replit.app/?eq=pounds%2520%253D%2520kilograms%2520%252F%25200.45359237&vars=%257B%2522p%2522%253A0%252C%2522po%2522%253A0%252C%2522pou%2522%253A0%252C%2522poun%2522%253A0%252C%2522pound%2522%253A0%252C%2522pounds%2522%253A154.3235835294143%252C%2522k%2522%253A0%252C%2522ki%2522%253A0%252C%2522kil%2522%253A0%252C%2522kilo%2522%253A0%252C%2522kilob%2522%253A0%252C%2522kilog%2522%253A0%252C%2522kilogr%2522%253A0%252C%2522kilogra%2522%253A0%252C%2522kilogram%2522%253A0%252C%2522kilograms%2522%253A70%257D&infer=pounds),
 and David Yang's monitor resolution calculator if I can find that.
-5. Help text. 
-(Include a link to Calca.io as an example of prior art.)
-8. Currently you can freeze a field by double-clicking it and it turns blue.
+5. Currently you can freeze a field by double-clicking it and it turns blue.
 That's not bad but it's not discoverable or obvious. Especially if you make
 edits such that the constraints can't be satisfied by editing the nonfrozen
 fields, it needs to be obvious you should unfreeze some fields. Possibly we want
 an affordance for unfreezing everything. It's even possible that that should 
 happen automatically if there's no other way to satisfy the constraints.
+6. Related to the previous idea, I'm thinking we need to go more anti-magic.
+Currently when you edit a field the system just tries changing other variables
+until something works. That's pretty magical. What if instead you could see
+other fields kind of cross themselves out and show the new values implied by
+your edit? Or, like, if more than one cell can change to accommodate your edit
+you're forced to explicitly freeze cells until that's no longer the case.
+7. Wait, do we need a special case for a cell like {x: 0} which is just saying
+that x is initialized to 0, not that it's a constraint that x=0? How do we 
+distinguish that from something like {climbed + descended = 0} for a biking
+round trip where the net elevation is always definitionally zero? I think the
+answer is never use a special case (anti-magic!) and we just need to figure out
+the preceding future work item here, where the user just has to be explicit that
+the net-elevation cell is frozen.
+8. Fix the cheese wheel example in the spec and in the script.js.

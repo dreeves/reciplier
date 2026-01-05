@@ -11,6 +11,9 @@ const recipesShown = {
   'pancakes':  "Pancakes according to Claude",
   'breakaway': "Breakaway Biscuits",
   'biketour':  "Bike Tour Burritos",
+  'sugarcalc': "Sugar Calculator",
+  'kpounder':  "Pounds<->Kilograms Converter",
+  'cheesepan': "Cheese Wheels in a Pan",
   'blank':     "Blank -- go crazy",
 }
 
@@ -163,7 +166,63 @@ Avg speed:       {v: d/t} mph
 Unadjusted spd:  {u: d/w} mph
 `,
 // -----------------------------------------------------------------------------
-'blank': "",
+'sugarcalc': `\
+Nutrition info for healthy stuff (e.g., Greek yogurt):
+* {omega:170} grams per serving
+* {gamma:120} calories per serving
+* {sigma:5} grams of sugar per serving
+
+Nutrition info for junk food (e.g., Go-gurt):
+* {w:} grams per serving (don't actually need to know this)
+* {c:150} calories per serving
+* {s:23} grams of sugar per serving
+
+(Fun facts: There are {k: 3.87} calories per gram of normal sugar and {kappa: 3.80} calories per gram of brown sugar.)
+
+"Healthiness" in this context is the fraction of calories that are from sugar. For the Greek yogurt that's {h: k*omega/gamma} and for the Go-gurt it's {eta: k*s/c}.
+
+If you weigh out {y:} grams of Greek yogurt and add {x:} grams of brown sugar to it, the healthiness of the mixture is...
+
+{(k*sigma*y/omega + kappa*x)/(gamma*y/omega + kappa*x) = eta}
+`,
+/*
+(Calories_per_gram_of_sugar * 
+Grams_of_sugar_per_serving_in_healthy_stuff * 
+Grams_of_healthy_stuff / 
+Grams_per_serving_in_healthy_stuff + 
+Calories_per_gram_of_brown_sugar * 
+Grams_of_brown_sugar_to_add ) / (
+Calories_per_serving_in_healthy_stuff * 
+Grams_of_healthy_stuff / 
+Grams_per_serving_in_healthy_stuff + 
+Calories_per_gram_of_brown_sugar * 
+Grams_of_brown_sugar_to_add ) 
+== 
+Calories_per_gram_of_sugar * 
+Grams_of_sugar_per_serving_in_junk_food / 
+Calories_per_serving_in_junk_food
+*/
+// -----------------------------------------------------------------------------
+'kpounder': `\
+{p: 2.20462*x} pounds = {x: 70} kilograms
+`,
+// -----------------------------------------------------------------------------
+'cheesepan': `\
+Mix {1x} egg and {3x} wheels of cheese in a {d:9}-inch diameter pan.
+Or a {w:}x{h:}-inch rectangular pan (with a {z:}-inch diagonal) is fine.
+Or any pan as long as its area is {A*x} square inches.
+Heat at 350 degrees.
+
+This recipe is scaled by a factor of {x:1}.
+
+Constraints and sanity checks:
+* Radius = {r: d/2} (half the diameter, {d = 2r})
+* The true circle constant is {tau: 6.28}
+* The area of the pan before scaling is {A: 1/2*tau*r^2 = w*h}
+* The squared diagonal of the rectangular pan is {w^2 + h^2 = z^2}
+`,
+// -----------------------------------------------------------------------------
+'blank': ``,
 };
 
 // =============================================================================
@@ -282,62 +341,6 @@ function preprocessLabels(cells) {
 }
 
 // =============================================================================
-// Mathematica-style Syntax Conversion
-// =============================================================================
-
-// Convert expression syntax to JavaScript
-// Supports: implicit multiplication (2x -> 2*x), ^ for exponentiation, math functions, pi
-function toJavaScript(expr) {
-  if (typeof expr !== 'string' || expr.trim() === '') {
-    throw new Error(`Invalid expression: ${String(expr)}`)
-  }
-  
-  let js = expr
-  
-  // Implicit multiplication: number followed by letter (but not inside identifiers)
-  // We need to be careful: 2x -> 2*x, but b3h stays b3h
-  // Strategy: only match when digit is NOT preceded by a letter
-  js = js.replace(/(?<![a-zA-Z_])(\d+\.?\d*)([a-zA-Z_])/g, '$1*$2')
-  
-  // Math functions
-  js = js.replace(/\b(sqrt|floor|ceil|round|min|max|sin|cos|tan|asin|acos|atan|log|exp|abs)\s*\(/g, 'Math.$1(')
-  js = js.replace(/\bpi\b/gi, 'Math.PI')
-  
-  // Exponentiation: x^2 -> Math.pow(x,2)
-  for (let i = 0; i < 10; i++) {
-    const before = js
-    js = js.replace(/(\w+|\d+\.?\d*|\))\s*\^\s*(\w+|\d+\.?\d*|\([^()]*\))/g, 
-      (_, base, exp) => `Math.pow(${base},${exp})`)
-    if (js === before) break
-  }
-  
-  return js
-}
-
-// Evaluate an expression with given variable values
-function evaluate(expr, vars) {
-  try {
-    const jsExpr = deoctalize(toJavaScript(expr))
-
-    // Build variable assignments
-    const assignments = Object.entries(vars)
-      .map(([name, val]) => `const ${name} = ${val};`)
-      .join('\n')
-
-    // Use Function constructor to evaluate in isolated scope
-    const fn = new Function(`
-      "use strict";
-      ${assignments}
-      return (${jsExpr});
-    `)
-    const result = fn()
-    return { value: result, error: null }
-  } catch (e) {
-    return { value: null, error: e.message }
-  }
-}
-
-// =============================================================================
 // Symbol Table and Validation
 // =============================================================================
 
@@ -451,7 +454,7 @@ function computeInitialValues(cells, symbols) {
       
       // If the expression has no variables, it's a literal value
       if (vars.size === 0) {
-        const result = evaluate(expr, {})
+        const result = vareval(expr, {})
         if (result.error) {
           errors.push(`Error in cell ${cell.raw}: ${result.error}`)
         } else {
@@ -487,7 +490,7 @@ function computeInitialValues(cells, symbols) {
       const allAvailable = [...vars].every(v => values[v] !== undefined)
       
       if (allAvailable) {
-        const result = evaluate(expr, values)
+        const result = vareval(expr, values)
         if (!result.error && result.value !== null && isFinite(result.value)) {
           values[cell.label] = result.value
           changed = true
@@ -541,7 +544,7 @@ function computeInitialValues(cells, symbols) {
       // Try with current partial values
       const expr = cell.expressions[0]
       if (expr && expr.trim() !== '') {
-        const result = evaluate(expr, values)
+        const result = vareval(expr, values)
         if (!result.error && result.value !== null && isFinite(result.value)) {
           values[cell.label] = result.value
           continue
@@ -571,7 +574,7 @@ function solve(expr, varName, target, values) {
   function tryGuess(guess) {
     if (!isFinite(guess)) return null
     test[varName] = guess
-    const r = evaluate(expr, test)
+    const r = vareval(expr, test)
     if (!r.error && isFinite(r.value) && Math.abs(r.value - target) < tol) {
       return guess
     }
@@ -608,9 +611,9 @@ function solve(expr, varName, target, values) {
   // Find valid bounds
   for (let scale = 1; scale < 1e10; scale *= 10) {
     test[varName] = scale
-    const hiRes = evaluate(expr, test)
+    const hiRes = vareval(expr, test)
     test[varName] = -scale  
-    const loRes = evaluate(expr, test)
+    const loRes = vareval(expr, test)
     
     if (!hiRes.error && !loRes.error) {
       if ((hiRes.value - target) * (loRes.value - target) <= 0) {
@@ -621,7 +624,7 @@ function solve(expr, varName, target, values) {
     }
     
     test[varName] = 0
-    const zeroRes = evaluate(expr, test)
+    const zeroRes = vareval(expr, test)
     if (!hiRes.error && !zeroRes.error) {
       if ((hiRes.value - target) * (zeroRes.value - target) <= 0) {
         lo = 0
@@ -635,13 +638,13 @@ function solve(expr, varName, target, values) {
   for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2
     test[varName] = mid
-    const r = evaluate(expr, test)
+    const r = vareval(expr, test)
     if (r.error) return null
     
     if (Math.abs(r.value - target) < tol) return mid
     
     test[varName] = lo
-    const loRes = evaluate(expr, test)
+    const loRes = vareval(expr, test)
     if (loRes.error) return null
     
     if ((loRes.value - target) * (r.value - target) > 0) {
@@ -654,7 +657,7 @@ function solve(expr, varName, target, values) {
   // Verify the result is actually close to target before returning
   const finalVal = (lo + hi) / 2
   test[varName] = finalVal
-  const finalRes = evaluate(expr, test)
+  const finalRes = vareval(expr, test)
   if (finalRes.error || Math.abs(finalRes.value - target) > Math.abs(target) * 0.01 + 0.01) {
     return null  // Couldn't find a valid solution
   }
@@ -685,7 +688,7 @@ function solveFromConstraints(varName, cells, values) {
     if (![...allVars].every(v => values[v] !== undefined)) continue
     
     // Evaluate target
-    const targetRes = evaluate(targetExpr, values)
+    const targetRes = vareval(targetExpr, values)
     if (targetRes.error || !isFinite(targetRes.value)) continue
     
     // Solve
@@ -717,7 +720,7 @@ function checkInitialContradictions(cells, values, emptyExprVars) {
       // This is a constraint - all expressions should evaluate equal
       const results = cell.expressions.map(expr => {
         if (!expr || expr.trim() === '') return null
-        const r = evaluate(expr, values)
+        const r = vareval(expr, values)
         return r.error ? null : r.value
       })
       
@@ -750,7 +753,7 @@ function checkConstraints(cells, values) {
     if (cell.expressions.length < 2) continue
     
     const results = cell.expressions.map(expr => {
-      const r = evaluate(expr, values)
+      const r = vareval(expr, values)
       return r.error ? null : r.value
     })
     
@@ -845,7 +848,7 @@ function solveConstraints(cells, values, fixedVars, changedVar) {
 
         if (!targetExpr || !solveExpr) continue
 
-        const targetRes = evaluate(targetExpr, newValues)
+        const targetRes = vareval(targetExpr, newValues)
         if (targetRes.error) continue
 
         const oldVal = newValues[varToSolve]
@@ -1204,7 +1207,7 @@ function recomputeValues(cells, values) {
       // If all variables are defined, recompute this value
       const allDefined = [...vars].every(v => newValues[v] !== undefined)
       if (allDefined && vars.size > 0) {
-        const result = evaluate(expr, newValues)
+        const result = vareval(expr, newValues)
         if (!result.error && isFinite(result.value)) {
           const oldVal = newValues[cell.label]
           if (oldVal === undefined || Math.abs(result.value - oldVal) > 1e-10) {
