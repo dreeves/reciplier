@@ -37,7 +37,7 @@ function toJavaScript(expr) {
   return js
 }
 
-// Evaluate an expression with given variable values
+// Evaluate an expression with given variable values [TODO: example?]
 // Returns { value, error } where error is null on success
 function vareval(expr, vars) {
   try {
@@ -59,4 +59,21 @@ function vareval(expr, vars) {
   } catch (e) {
     return { value: null, error: e.message }
   }
+}
+
+// An equation is a list of expressions taken to all be equal.
+// This function takes a list of equations and a hash of variables with initial
+// numerical assignments and returns a satisfying assignment of numeric values
+// to the variables. For example, 
+// satsolve([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0]) returns {x: 6, y: 7}.
+// It does this by trying each variable one at a time and doing a binary search
+// for a value that satisfies the equations. So in this example, it only works 
+// because one of the variables was already correct. If initial values of 
+// {x: 0, y: 0} were passed in, it would fail to find a satisfying assignment.
+// (In the future if we have a use case for soving simultaneous equations we can
+// extend this. For linear equations it's perfectly doable with Gaussian 
+// elimination. And we could get arbitrarily fancy, like calling out to
+// something like Mathematica's NMinimize or whatever.)
+function satsolve(eqns, vars) {
+
 }

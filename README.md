@@ -7,10 +7,10 @@ This is now more general than recipes and is kind of halfway to a spreadsheet.
 But also it's better than a spreadsheet in some ways.  It also subsume's my old
 "calculator calculator" app.
 
-## Wild Generalization to Arbitrary Constraints
+# Functional Spec for Generalized Reciplier
 
-Consider a recipe that has you mix 1 egg and 3 wheels of cheese in a 
-9-inch diameter pan. 
+Consider a recipe that has you mix 1 egg and 3 wheels of cheese in a 9-inch
+diameter pan. 
 
 But of course that 9 doesn't scale linearly with the ingredients. It's the area
 that does that, because there's a certain fixed thickness required, let's say.
@@ -19,10 +19,10 @@ you doubled the recipe you'd double that area to 127.24 which implies you'd need
 a 12.73-inch diameter pan. And say we want to allow for a rectangular pan as
 well.
 
-Here's how we could do all that by annotating the recipe:
+Here's how we do all that by annotating the recipe:
 
 ```
-Mix {1x} egg and {3x} wheels of cheese in a {d:9}-inch diameter pan.
+Mix {1x} egg(s) and {3x} wheels of cheese in a {d:9}-inch diameter pan.
 Or a {w:}x{h:}-inch rectangular pan (with a {z:}-inch diagonal) is fine.
 Or any pan as long as its area is {A*x} square inches.
 Heat at 350 degrees.
@@ -44,26 +44,25 @@ factor, x.
 (Technical note: We support Mathematica-style arithmetic syntax where "2x" means
 "2*x".)
 
-Every expression optionally has a variable name aka label for referencing it in
-other expressions. It's an error if you specify the same label for two
+Every expression optionally has a variable name (vname) for referencing it in 
+other expressions. It's an error if you specify the same vname for two
 expressions but you can reference a variable as much as you want. Like how the 
 first line of the above recipe labels the diameter as d and later in the 
 bulleted list we define r as d/2 and mention the diameter again. It's actually
 unnecessary there to say {d = 2r} rather than just {d} since we've defined r as
 d/2, which is equivalent, but it doesn't hurt to add a redundant constraint.
 
-(Implementation note: As a preprocessing pass, add nonce labels to every 
+(Implementation note: As a preprocessing pass, add nonce vnames to every 
 expression that doesn't have one. E.g., {1x} and {3x} become {var01: 1x} and
-{var02: 3x}. That way the rest of the code can count on a consistent format of a
-label, a colon, and then one or more expressions separated by equal-signs.)
+{var02: 3x}. That way the rest of the code can count on a consistent format: a
+vname, a colon, and then one or more expressions separated by equal-signs.)
 
-[Alternate syntax idea for later: Emulate ERB (Embedded Ruby) syntax which has 
-`<% code to just evaluate %>` and `<%= code to print the output of %>` and 
-`<%# comments %>`.]
+(Note on prior art: Embedded Ruby (ERB) syntax has `<% code to just evaluate %>`
+and `<%= code to print the output of %>` and `<%# comments %>`.)
 
 Regardless, each expression in curly braces is shown as a numeric field in the 
 Reciplier UI and the system searches for values for all the variables that make
-all the equations true. In this case we'd see something like this initially:
+all the equations true. In this case we see something like this initially:
 
 ```
 Mix [1] egg(s) and [3] wheels of cheese in a [9]-inch pan.
@@ -80,20 +79,56 @@ Constraints and sanity checks:
 * The squared diagonal of the rectangular pan is [40471547]
 ```
 
-The width and height of the rectangular pan are silly but the system doesn't
-know that. It's just the first solution to the equations it found, favoring 
-positive, finite numbers. You could change the bare {w:} in the template to 
-{w:8} or {w:8x} and it would calculate h as the non-silly 7.95. Of course both 
-w=8 and w=8x yield more silliness if you scale way up. By setting w=8 and x=100,
-you'd get an 8x795 pan. By setting w=8x and x=100, you'd get an 800x7.95 pan. Of
-course what you actually want to do is replace the bare {z:} with something like
-{z:11x} so the pan's diagonal scales with the recipe and the pan doesn't become
-stupidly skinny as the recipe scales.
+The computed width and height of the rectangular pan are silly but the system
+doesn't know that. It's just the first solution to the equations it found,
+favoring positive, finite numbers. You could change the bare {w:} in the
+template to {w:8} or {w:8x} and it would calculate h as the non-silly 7.95. Of
+course both w=8 and w=8x yield more silliness if you scale way up. By setting
+w=8 and x=100, you'd get an 8x795 pan. By setting w=8x and x=100, you'd get an 
+800x7.95 pan. Of course what you actually want to do is replace the bare {z:}
+with something like {z:11x} so the pan's diagonal scales with the recipe and the
+pan doesn't become stupidly skinny as the recipe scales.
 
 As always with Reciplier, changing any of those fields causes the rest to
 insta-update.
 
-### Use Cases Beyond Recipes
+## Data Structures and Business Logic
+
+A cell is a data structure that includes the following three fields:
+
+1. `vname` is the name of the variable corresponding to this cell
+2. `value` is the current value assigned to variable `vname`
+3. `elist` is the list of expressions that are constrained to be equal to each
+other and to `value`
+
+For example, a cell defined as `{x: 3y = z}` will have `vname` set to `x` and 
+`elist` set to [`x`, `3y`, `z`] with `value` initially undefined. A cell defined
+as `{x: y = 1}` will have `vname` set to `x`, `elist` set to [`x`, `y`] and
+`value` set to `1`. Note that `elist` excludes any expressions in the equation
+that are bare numbers; instead `value` is set to the bare number (more than one
+bare number in the definition of a cell is an error).
+
+Every cell has a corresponding field in the UI and `value` is always the current
+value assigned to that cell's variable and shown in that cell's field. (Since 
+there's a one-to-one correspondence between cells and fields and variables, we
+use all three terms interchangeably but, conceptually, a cell is an abstraction
+representing an assignment of a value to a variable along with constraints, and
+a field is a UI element.)
+
+At every moment, every cell's field is shown in red if `value` differs from any
+of the expressions in `elist`, given the assignments of all variables.
+
+Now say the user edits cell c, having a `vname` of x, to have `value` v. We add
+v to the `elist` for c and then we send all the `elist`s to the SAT solver, with
+the current `value`s as the initial assignments. Any cell marked frozen gets its
+`value` appended to `elist` as well. That causes the current assignments to 
+frozen variables to be treated as additional constraints.
+
+If the SAT solver finds a solution, all the cells insta-update. If not, and if
+any cells besides c are frozen (c's frozen status doesn't matter since we're 
+editing it), put up a banner saying "Overconstrained! Try unfreezing cells.".
+
+## Use Cases Beyond Recipes
 
 Consider this, which does exactly what you'd expect:
 
@@ -136,8 +171,8 @@ What if the initial template is impossible? Like:
 <!-- Hidden constraint: {a^2 + b^2 = c^2} -->
 ```
 
-We want to fail loudly in that case and make it impossible to miss where the
-problem is. Anti-magic FTW.
+We fail loudly in that case and make it impossible to miss where the problem is.
+Anti-magic FTW.
 
 Side note for that example: We want to support arbitrary markdown, including 
 html, so you can, for example, put intermediate equations you don't want 
@@ -178,34 +213,20 @@ Unadjusted spd:  {u: d/w}                   <!-- {u = d/(e-s)}             -->
 Wall clock time: {wh:}h{wm:}m               <!-- {w: wh+wm/60 = e-s}       -->
 Riding time:     {th:}h{tm:}m               <!-- {t: th+tm/60 = e-s-b}     -->
 ```
+TODO: the recipe in the dropdown is a much nicer version of this now.
 
 (This was originally
 [a spreadsheet](https://docs.google.com/spreadsheets/d/1LQUDFSLpxtOojcSSLMFWPyRS70eCP59TQHppnu14Px0/edit?gid=0#gid=0)
-but it was surprisingly cumbersome that way. For starters I think many of the 
-constraints above aren't actually necessary to specify in the above version 
-since they're implied by others. I plan to remove them one at a time when this
-is implemented, which should serve as a nice sanity check.)
+but it was surprisingly cumbersome that way. For starters, you have to give
+explicit formulas for each variable you may want to infer from the others. You 
+also have to keep values and formulas separate in a spreadsheet.)
 
-
-### Math Notes
-
-Searching for variable assignments that satisfy the equations is easy for things
-like scaled recipes but it would be cool for this to be super general. 
-Mathematica's NMinimize could be a place to start.
-
-I think currently we just pick a variable and do a binary search to find a valid
-assignment for it. But if we try that for every variable and nothing works it's 
-possible there's a solution that can only be found by changing more than one 
-variable at once.
-
-We'll worry about that when we find use cases where it matters.
-
-### Errors and Corner Cases
+## Errors and Corner Cases
 
 Fail loudly in the following cases:
 
-1. Any variable is referenced in any expression that's never defined via a label
-on some other expression.
+1. Any expression in any `elist` contains a symbol that does not match the
+`vname` of any cell.
 
 2. The template itself contains contradictions. As discussed in the example with
 Pythagorean triples.
@@ -215,37 +236,39 @@ Pythagorean triples.
 4. Other errors we haven't thought of yet or ways the template file violates any
 expectations. Anti-Postel FTW.
 
-5. If any expression is a bare number without a human-assigned label. Reasons to
-treat it as an error: (1) It doesn't make sense to have a field that when you
+5. If any expression is a bare number without a human-assigned `vname`. Reasons
+to treat it as an error: (1) It doesn't make sense to have a field that when you
 change it it has zero effect on anything else. (2) If you really want that for
-some reason, give the field a label. Even if you never use that label, it
-demonstrates that you're creating that disconnected field intentionally.
+some reason, give the field an explicit `vname`.
 
-6. Although, come to think of it, maybe we want to treat it as an error when any
-field is disconnected from all others? Like if you define {tau: 6.28} and then
-never use it. That would be nice to at least be warned about. The workaround if
-you intentionally want to define something you're not currently using would be
-something like `{tau: 6.28} <!-- {tau} not currently used -->`. So let's start 
-with treating this as an error and reconsider if it's too annoying in practice.
+6. A labeled cell (one with an explicit `vname`) isn't referenced by any other
+cell. Like if you define {tau: 6.28} and then never use it. If you're doing that
+on purpose, like you want that constant defined for use in the future, the
+workaround is somehting like `{tau: 6.28} <!-- {tau} not currently used -->`.
+You're basically adding a comment that makes the linter shut up.
+
+7. A cell has more than one numerical value, even if it's the same value. Like
+{x: 1 = 2} or {x: 1 = y*z = 1}.
+
+8. A cell includes a bare x in the equation if x is also the 
 
 ## Future Work
 
 1. Markdown rendering
 
 2. Instead of making a slider for whatever variable is called "x", make a slider
-for all labeled variables, and make it easy to dismiss ones you don't need.
+for all labeled cells, and make it easy to dismiss ones you don't need.
 
 3. Direct links to recipes. Option 1: encode the entire template verbatim in the
-query string.
-Option 2: encode which template file and encode every variable explicitly in the
-query string.
+query string. Option 2: encode which template file and encode every variable
+explicitly in the query string.
 
 4. Currently you can freeze a field by double-clicking it and it turns blue.
-That's not bad but it's not discoverable or obvious. Especially if you make
-edits such that the constraints can't be satisfied by editing the nonfrozen
-fields, it needs to be obvious you should unfreeze some fields. Possibly we want
-an affordance for unfreezing everything. It's even possible that that should 
-happen automatically if there's no other way to satisfy the constraints.
+That's not discoverable or obvious. Especially if you make edits such that the
+constraints can't be satisfied by editing the nonfrozen fields, it needs to be
+obvious you should unfreeze some fields. Possibly we want an affordance for
+unfreezing everything. It's even possible that that should happen automatically
+if there's no other way to satisfy the constraints.
 
 (I spoke too soon: double-clicking to freeze is terrible because I do that by
 muscle memory to highlight the current contents of a field in order to overwrite
@@ -267,3 +290,9 @@ the preceding future work item here, where the user just has to be explicit that
 the net-elevation cell is frozen.
 
 7. Fix the cheese wheel example in the spec and in the script.js.
+
+8. Bug report: Load the Pythagorean Triple Pizza recipe and change the "x" cell from 1 to 10. Expectata: Cell "a" changes to 30 since it's 3x, cell "b" changes to 40 since it's "4x", and cell "c" ... 
+
+ah, crap, the problem is we have to let the constraints propagate? How should we do this? stand by...
+
+9. Add Beeminder commitment dial example.
