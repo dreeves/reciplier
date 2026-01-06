@@ -109,6 +109,11 @@ are bare numbers. Instead, `value` is set to any bare number specified in the
 cell definition. (More than one bare number in the definition of a cell is an
 error).
 
+(Note: The previous paragraph says that a cell with no bare number would yield a
+`value` that was initially undefined. I think that's fine and the solver, if we
+pass it a set of initial assignments that includes any that are undefined, it
+should use 1 as an initial guess.)
+
 Every cell has a corresponding field in the UI and `value` is always the current
 value assigned to that cell's variable and shown in that cell's field. (Since 
 there's a one-to-one correspondence between cells and fields and variables, we
@@ -293,10 +298,22 @@ answer is never use a special case (anti-magic!) and we just need to figure out
 the preceding future work item here, where the user just has to be explicit that
 the net-elevation cell is frozen.
 
-7. Fix the cheese wheel example in the spec and in the script.js.
+7. Fix the cheese wheel example in the spec and in script.js.
 
-8. Bug report: Load the Pythagorean Triple Pizza recipe and change the "x" cell from 1 to 10. Expectata: Cell "a" changes to 30 since it's 3x, cell "b" changes to 40 since it's "4x", and cell "c" ... 
-
-ah, crap, the problem is we have to let the constraints propagate? How should we do this? stand by...
+8. Bug report: Load the Pythagorean Triple Pizza recipe and change the "x" cell from 1 to 10. Expectata: Cell "a" changes to 30 since it's 3x, cell "b" changes to 40 since it's "4x", and cell "c" ... TODO
 
 9. Add Beeminder commitment dial example.
+
+---
+
+To clarify in the spec:
+
+1. Editing a cell adds, while editing, a temporary constraint x = v (not permanent elist mutation).
+2. Freezing a cell adds y = value(y) to the elist. Unfreezing removes it again. But what if the cell already contains a bare number in the cell definition. Do we need to keep track of that? Like {y: 3x = 7} you can toggle that frozen/unfrozen and the "= 7" constraint will be appended to elist or not. So far so good. For {y: 3x} if you freeze that at a value of 7, we add the "= 7" to elist, but then unfreezing it needs to go back to just {y: 3x} not {y: 3x = 7}. Or, wait, maybe that doesn't actually matter? Maybe everything is fine with no special cases? Maybe that's true!
+3. Define “overconstrained” as unsat under (base + frozen + edit) constraints, and banner conditions. [huh?]
+4. If editing a frozen cell, does it stay frozen at the new value? (by default yes, but see future work item 4)
+5. Should “overconstrained” banner show only on blur/Enter or live while typing? (by default, live)
+6. Bare numeric literals are initial assignments, not constraints unless frozen/equated.
+
+TODO: crap, i think we do need to privilege cells with bare numbers in the definition. 
+Or, wait, I think the anti-magic answer is that the inclusion of a bare number means the cell is frozen until you unfreeze it.

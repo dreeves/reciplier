@@ -65,12 +65,22 @@ function vareval(expr, vars) {
 // numerical assignments and returns a satisfying assignment of numeric values
 // to the variables. 
 // (An equation is a list of expressions taken to all be equal.)
-// For example, solvem([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0]) returns 
-// {x: 6, y: 7}. It does this by trying each variable one at a time and doing a
-// binary search for a value that satisfies the equations. So in this example,
-// it only works because one of the variables was already correct. If initial
-// values of {x: 0, y: 0} were passed in, it would fail to find a satisfying
-// assignment.
+// Examples:
+// solvem([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0]) returns {x: 6, y: 7}. 
+// It does this by trying each variable one at a time and doing a binary search
+// for a value that satisfies the equations. So in this example, it only works
+// because one of the variables was already correct. If initial values of 
+// {x: 0, y: 0} were passed in, it would fail to find a satisfying assignment.
+// solvem([['x', 1], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
+//        {x: 1, a: 1, b: 1, c: 1, v1: 1}) returns 
+// {x: 1, a: 3, b: 4, c: 5, v1: 25}. 
+// In this case we fail to find a satisfying value for x so we continue to a. We
+// also fail to find a satisfying value for a but since the equation with a on
+// the lefthand side only includes variable x elsewhere in the equation, we 
+// tentatively set a to what '3x' evaluates to using the current value of x. In
+// other words, we let the constraints propagate. I'm not sure the elegant 
+// algorithm for this yet...
+// 
 // (In the future if we have a use case for soving simultaneous equations we can
 // extend this. For linear equations it's perfectly doable with Gaussian 
 // elimination. And we could get arbitrarily fancy, like calling out to
