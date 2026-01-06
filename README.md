@@ -99,14 +99,15 @@ A cell is a data structure that includes the following three fields:
 1. `vname` is the name of the variable corresponding to this cell
 2. `value` is the current value assigned to variable `vname`
 3. `elist` is the list of expressions that are constrained to be equal to each
-other and to `value`
+other and to `value` (but not any bare numbers)
 
 For example, a cell defined as `{x: 3y = z}` will have `vname` set to `x` and 
 `elist` set to [`x`, `3y`, `z`] with `value` initially undefined. A cell defined
 as `{x: y = 1}` will have `vname` set to `x`, `elist` set to [`x`, `y`] and
-`value` set to `1`. Note that `elist` excludes any expressions in the equation
-that are bare numbers; instead `value` is set to the bare number (more than one
-bare number in the definition of a cell is an error).
+`value` set to `1`. Again, `elist` excludes any expressions in the equation that
+are bare numbers. Instead, `value` is set to any bare number specified in the 
+cell definition. (More than one bare number in the definition of a cell is an
+error).
 
 Every cell has a corresponding field in the UI and `value` is always the current
 value assigned to that cell's variable and shown in that cell's field. (Since 
@@ -119,14 +120,15 @@ At every moment, every cell's field is shown in red if `value` differs from any
 of the expressions in `elist`, given the assignments of all variables.
 
 Now say the user edits cell c, having a `vname` of x, to have `value` v. We add
-v to the `elist` for c and then we send all the `elist`s to the SAT solver, with
-the current `value`s as the initial assignments. Any cell marked frozen gets its
+v to the `elist` for c and then we send all the `elist`s to the solver, with the
+current `value`s as the initial assignments. Any cell marked frozen gets its
 `value` appended to `elist` as well. That causes the current assignments to 
 frozen variables to be treated as additional constraints.
 
-If the SAT solver finds a solution, all the cells insta-update. If not, and if
-any cells besides c are frozen (c's frozen status doesn't matter since we're 
-editing it), put up a banner saying "Overconstrained! Try unfreezing cells.".
+If the solver finds a solution, all the cells insta-update. If not, and if any
+cells besides c are frozen (c's frozen status doesn't matter since we're editing
+it), put up a banner saying "Overconstrained! Try unfreezing cells.". If the
+solver finds no solution despite all cells other than c being unfrozen
 
 ## Use Cases Beyond Recipes
 
@@ -225,32 +227,34 @@ also have to keep values and formulas separate in a spreadsheet.)
 
 Fail loudly in the following cases:
 
-1. Any expression in any `elist` contains a symbol that does not match the
-`vname` of any cell.
+1. Undefined symbol: Any expression in any `elist` contains a symbol that does
+not match the `vname` of any cell.
 
-2. The template itself contains contradictions. As discussed in the example with
-Pythagorean triples.
+2. Logical impossibility: The template itself contains contradictions. As
+discussed in the example with Pythagorean triples.
 
-3. Any syntax error.
+3. Syntax error. E.g., nested curly braces or anything else we can't parse.
 
-4. Other errors we haven't thought of yet or ways the template file violates any
-expectations. Anti-Postel FTW.
+4. Unlabeled constant: If any expression is a bare number without a
+human-assigned `vname`. Reasons to treat it as an error: (1) It doesn't make
+sense to have a field that when you change it it has zero effect on anything
+else. (2) If you really want that for some reason, give the field an explicit
+`vname`.
 
-5. If any expression is a bare number without a human-assigned `vname`. Reasons
-to treat it as an error: (1) It doesn't make sense to have a field that when you
-change it it has zero effect on anything else. (2) If you really want that for
-some reason, give the field an explicit `vname`.
-
-6. A labeled cell (one with an explicit `vname`) isn't referenced by any other
-cell. Like if you define {tau: 6.28} and then never use it. If you're doing that
-on purpose, like you want that constant defined for use in the future, the
-workaround is somehting like `{tau: 6.28} <!-- {tau} not currently used -->`.
+5. Unreferenced variable: A labeled cell (one with an explicit `vname`) isn't
+referenced by any other cell. Like if you define {tau: 6.28} and then never use
+it. If you're doing that on purpose, like you want that constant defined for use
+in the future, the workaround is somehting like 
+`{tau: 6.28} <!-- {tau} not currently used -->`.
 You're basically adding a comment that makes the linter shut up.
 
-7. A cell has more than one numerical value, even if it's the same value. Like
-{x: 1 = 2} or {x: 1 = y*z = 1}.
+6. Multiple values: A cell has more than one numerical value, even if it's the
+same value. Like {x: 1 = 2} or {x: 1 = y*z = 1}.
 
-8. A cell includes a bare x in the equation if x is also the 
+7. Self-reference: A cell references its own `vname` and no other variables.
+
+8. Unknown unknowns: Other errors we haven't thought of yet or ways the template
+file violates any expectations. Anti-Postel FTW.
 
 ## Future Work
 
