@@ -243,12 +243,49 @@ function formatNum(num) {
 // Expression Parser
 // =============================================================================
 
+// Check for syntax errors like nested or unbalanced braces
+function checkBraceSyntax(text) {
+  const errors = []
+  let depth = 0
+  let braceStart = -1
+
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '{') {
+      if (depth === 0) braceStart = i
+      depth++
+      if (depth > 1) {
+        // Found nested brace
+        const context = text.substring(braceStart, Math.min(braceStart + 30, text.length))
+        errors.push(`Nested braces at position ${i}: "${context}..."`)
+        // Skip to end of outermost brace to avoid duplicate errors
+        while (i < text.length && depth > 0) {
+          i++
+          if (text[i] === '{') depth++
+          if (text[i] === '}') depth--
+        }
+      }
+    } else if (text[i] === '}') {
+      depth--
+      if (depth < 0) {
+        errors.push(`Unmatched closing brace at position ${i}`)
+        depth = 0  // Reset to continue checking
+      }
+    }
+  }
+
+  if (depth > 0) {
+    errors.push(`Unclosed brace starting at position ${braceStart}`)
+  }
+
+  return errors
+}
+
 // Extract all {...} cells from text, noting which are inside HTML comments
 // TODO: no, we shouldn't care whether anything's in an html comment
 function extractCells(text) {
   const cells = []
   let cellId = 0
-  
+
   // First, find all HTML comments and their ranges
   const commentRanges = []
   const commentRegex = /<!--[\s\S]*?-->/g
@@ -259,12 +296,12 @@ function extractCells(text) {
       end: commentMatch.index + commentMatch[0].length
     })
   }
-  
+
   // Helper to check if position is inside a comment
   function inComment(pos) {
     return commentRanges.some(r => pos >= r.start && pos < r.end)
   }
-  
+
   // Find all {...} cells (simple non-nested matching)
   const cellRegex = /\{([^{}]*)\}/g
   let match
@@ -279,7 +316,7 @@ function extractCells(text) {
       endIndex: match.index + match[0].length
     })
   }
-  
+
   return cells
 }
 
@@ -463,6 +500,21 @@ function buildSymbolTable(cells) {
         // This is a bare number like {5} with a nonce cvar
         errors.push(`Cell ${cell.raw} is a bare number ` +
                     `which doesn't make sense to put in a cell`)
+      }
+    }
+  }
+
+  // Fifth pass: check for self-reference (case 8)
+  // A cell that references its own cvar and no other variables is an error
+  for (const cell of cells) {
+    // Only check expressions in ceqn[1:] (ceqn[0] is the cvar itself)
+    for (let i = 1; i < cell.ceqn.length; i++) {
+      const expr = cell.ceqn[i]
+      const vars = findVariables(expr)
+      // Error if the only variable referenced is the cell's own cvar
+      if (vars.size === 1 && vars.has(cell.cvar)) {
+        errors.push(`Cell ${cell.raw} references only itself`)
+        break
       }
     }
   }
@@ -934,12 +986,15 @@ function parseRecipe() {
 
   // Clear user edits when recipe changes
   state.userEditedVars = new Set()
-  
+
+  // Check for syntax errors (nested/unbalanced braces)
+  const syntaxErrors = checkBraceSyntax(text)
+
   // Parse
   let cells = extractCells(text)
   cells = cells.map(parseCell)
   cells = preprocessLabels(cells)
-  
+
   // Build symbol table
   const { symbols, errors: symbolErrors } = buildSymbolTable(cells)
   
@@ -949,7 +1004,7 @@ function parseRecipe() {
   // Check for contradictions in initial values (skip constraints involving empty-expr vars)
   const contradictions = checkInitialContradictions(cells, values, emptyExprVars)
 
-  const allErrors = [...symbolErrors, ...valueErrors, ...contradictions]
+  const allErrors = [...syntaxErrors, ...symbolErrors, ...valueErrors, ...contradictions]
 
   if (allErrors.length > 0) {
     for (const cell of cells) {
@@ -1280,9 +1335,21 @@ function recomputeValues(cells, values, skipVars = new Set()) {
 }
 
 function handleFieldBlur(e) {
-  // Revert ALL fields to state.values (which is always consistent)
   // Per README: "as soon as you clicked away from field c, it would recompute
   // itself as the only value that makes all the equations true"
+  // Re-solve without the temporary edit constraint to find correct values.
+  const eqns = state.cells.map(c => {
+    const eqn = [...c.ceqn]
+    if (state.fixedVars.has(c.cvar)) {
+      eqn.push(state.values[c.cvar])  // Frozen cells stay at their value
+    }
+    return eqn
+  })
+
+  const frozen = new Set(state.fixedVars)
+  state.values = solvem(eqns, state.values, frozen)
+  state.solveBanner = ''
+
   const violatedCellIds = getViolatedCellIds(state.cells, state.values)
 
   $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
@@ -1293,6 +1360,10 @@ function handleFieldBlur(e) {
       field.classList.remove('invalid')
     }
   })
+
+  // Clear the solve banner on blur
+  const banner = $('solveBanner')
+  if (banner) banner.hidden = true
 
   updateSliderDisplay()
 }
@@ -1448,21 +1519,27 @@ function updateSliderDisplay() {
 function handleSliderChange(e) {
   const newX = toNum(e.target.value)
   if (newX === null || newX <= 0) return
-  
-  // Update x value
-  state.values.x = newX
-  state.fixedVars.add('x') // Temporarily fix x while sliding
-  
-  // Recompute all values
-  recomputeAllValues()
-  
-  // Update display
+
+  // Build equations with x temporarily frozen at new value
+  const eqns = state.cells.map(c => {
+    const eqn = [...c.ceqn]
+    if (c.cvar === 'x') {
+      eqn.push(newX)  // Freeze x at slider value
+    } else if (state.fixedVars.has(c.cvar)) {
+      eqn.push(state.values[c.cvar])  // Keep other frozen cells frozen
+    }
+    return eqn
+  })
+
+  // Solve with x frozen
+  const frozen = new Set(state.fixedVars)
+  frozen.add('x')
+  const seedValues = { ...state.values, x: newX }
+  state.values = solvem(eqns, seedValues, frozen)
+
+  // Update display and re-render
   updateSliderDisplay()
-  
-  // Re-render to update all fields
   renderRecipe()
-  
-  state.fixedVars.delete('x') // Unfix x after
 }
 
 // =============================================================================

@@ -327,8 +327,6 @@ answer is never use a special case (anti-magic!) and we just need to figure out
 the preceding future work item here, where the user just has to be explicit that
 the net-elevation cell is frozen.
 
-7. Fix the cheese wheel example in the spec and in script.js.
-
 SCRATCH AREA:
 
 Bug reports (also add quals for these, TDD-style)...

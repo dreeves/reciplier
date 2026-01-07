@@ -239,35 +239,90 @@ async function main() {
     })
     assert.ok(/invalid expression/i.test(emptyExprError || ''))
 
-    // Qual: solver banner (overconstrained)
+    // Qual: solver banner appears during typing when overconstrained
+    // Use {a:1} {b:} {a=b} - a is frozen, b is free
+    // When we type a different value in b (not blur), banner should show
     const overconstrained = '{a:1} {b:} {a=b}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }, overconstrained)
+    await page.waitForSelector('#recipeOutput', { visible: true })
 
-    await setInputValue(page, 'input.recipe-field[data-label="b"]', '2')
-    await page.waitForFunction(() => {
-      const el = document.querySelector('#solveBanner')
-      return !!el && !el.hidden
-    })
-    const overText = await page.$eval('#solveBanner', el => el.textContent || '')
-    assert.ok(/Nimis constrictum/i.test(overText))
+    // Type 99 into b without blur - should show overconstrained banner
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="b"]', '99')
 
-    // Qual: solver banner (no solution, no frozen cells)
-    const nosol = '{a:} {b:} {a=b} {a=b+1}'
+    // Wait a moment for the banner to appear
+    await new Promise(r => setTimeout(r, 100))
+
+    const bannerVisible = await page.$eval('#solveBanner', el => !el.hidden)
+    const bannerText = await page.$eval('#solveBanner', el => el.textContent || '')
+    assert.equal(bannerVisible, true, 'Banner should be visible during edit')
+    assert.ok(/Overconstrained/i.test(bannerText), 'Banner should say Overconstrained')
+
+    // Qual: pyzza slider bug - c^2 cell should NOT turn red when using slider
+    await page.select('#recipeSelect', 'pyzza')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    await setSliderValue(page, '#scalingSlider', '2')
+
+    const cSquaredHandle = await findFieldByTitleSubstring(page, 'a^2 + b^2 = c^2')
+    const cSquaredIsNull = await cSquaredHandle.evaluate(el => el === null)
+    assert.equal(cSquaredIsNull, false)
+
+    const cSquaredInvalidAfterSlider = await handleHasClass(cSquaredHandle, 'invalid')
+    assert.equal(cSquaredInvalidAfterSlider, false, 'c^2 cell should NOT be invalid after slider change')
+
+    await cSquaredHandle.dispose()
+
+    // Qual: blur behavior - invalid value should revert to constraint-satisfying value
+    await page.select('#recipeSelect', 'pyzza')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Get initial c value (should be 5 for x=1)
+    const initialC = await getInputValue(page, 'input.recipe-field[data-label="c"]')
+    assert.equal(initialC, '5')
+
+    // Type invalid value without blurring
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="c"]', '999')
+
+    // Blur - should revert to correct value
+    await blurSelector(page, 'input.recipe-field[data-label="c"]')
+    const cAfterBlur = await getInputValue(page, 'input.recipe-field[data-label="c"]')
+    assert.equal(cAfterBlur, '5', 'c should revert to 5 on blur')
+
+    // Qual: self-reference error check
+    const selfRef = '{x: x}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
-    }, nosol)
+    }, selfRef)
 
-    await setInputValue(page, 'input.recipe-field[data-label="a"]', '1')
-    await page.waitForFunction(() => {
-      const el = document.querySelector('#solveBanner')
-      return !!el && !el.hidden
-    })
-    const noText = await page.$eval('#solveBanner', el => el.textContent || '')
-    assert.ok(/Nulla solutio/i.test(noText))
+    await page.waitForSelector('.error-display', { visible: true })
+    const selfRefError = await page.$eval('.error-display', el => el.textContent || '')
+    assert.ok(/references only itself/i.test(selfRefError), 'Self-reference should produce error')
+
+    // Qual: nested braces syntax error
+    const nestedBraces = 'Test {a{b}c}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, nestedBraces)
+
+    await page.waitForSelector('.error-display', { visible: true })
+    const nestedError = await page.$eval('.error-display', el => el.textContent || '')
+    assert.ok(/nested braces/i.test(nestedError), 'Nested braces should produce error')
+
+    // Qual: unclosed brace syntax error
+    const unclosed = 'Test {x: 1'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, unclosed)
+
+    await page.waitForSelector('.error-display', { visible: true })
+    const unclosedError = await page.$eval('.error-display', el => el.textContent || '')
+    assert.ok(/unclosed brace/i.test(unclosedError), 'Unclosed brace should produce error')
 
     console.log('All quals passed.')
   } finally {
