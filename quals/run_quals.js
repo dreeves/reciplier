@@ -77,6 +77,13 @@ async function main() {
     const utilQualsResult = await page.evaluate(() => runQuals())
     assert.equal(utilQualsResult, 'All quals passed!')
 
+    // Qual: Cheese Wheels tau constant should not drift to 0
+    await page.waitForSelector('#recipeSelect', { visible: true })
+    await page.select('#recipeSelect', 'cheesepan')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const tauVal = await getInputValue(page, 'input.recipe-field[data-label="tau"]')
+    assert.equal(tauVal, '6.28')
+
     // Qual 1: Pythagorean Pizza regression
     await page.waitForSelector('#recipeSelect', { visible: true })
     await page.select('#recipeSelect', 'pyzza')

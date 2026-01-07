@@ -29,13 +29,13 @@ const recipeHash = {
 
 Yield: roughly {29x} crepes
 
-Scaled by a factor of {x:1}
+Scaled by a factor of {x:} <!-- defaults to 1 -->
 
 (Flour notes: We did ~{440x}g for years via packed cups but {360x}g (up to {365x}g) is most likely what the recipe intended. Most recently we tried {420x}g and it worked well so we're trying lower.)
 `,
 // -----------------------------------------------------------------------------
 'pyzza': `\
-Scaled by a factor of x={x:1}.
+Scaled by a factor of x={x:}. <!-- defaults to 1 -->
 
 Roll out dough into a right triangle with legs of length a={a:3x} and b={b:4x} and hypotenuse c={c:}.
 Then eat it.
@@ -62,7 +62,7 @@ Drop rounded teaspoonfuls onto greased baking sheets, about 2 inches apart. Bake
 
 Yield: {54x} cookies, 117 cal (17g carb) per cookie.
 
-Scaled by a factor of {x:1}
+Scaled by a factor of {x:} <!-- defaults to 1 -->
 `,
 // -----------------------------------------------------------------------------
 'simeq': `\
@@ -91,7 +91,7 @@ Pour into the prepared cake pan, spread evenly.
 
 Bake 30 to 40 minutes @ 325°F
 
-Scaled by a factor of {x:1}
+Scaled by a factor of {x:} <!-- defaults to 1 -->
 `,
 // -----------------------------------------------------------------------------
 'pancakes': `\
@@ -108,7 +108,7 @@ Cook on a greased griddle at 350°F for about 2 minutes per side until golden.
 
 Makes {8x} pancakes, 120 calories each.
 
-Scaled by a factor of {x:1}
+Scaled by a factor of {x:} <!-- prius: x:1 -->
 `,
 // -----------------------------------------------------------------------------
 'breakaway': `\
@@ -200,7 +200,7 @@ Or a {w:}x{h:}-inch rectangular pan (with a {z:}-inch diagonal) is fine.
 Or any pan as long as its area is {A:} square inches.
 Heat at 350 degrees.
 
-This recipe is scaled by a factor of {x:1}.
+This recipe is scaled by a factor of {x:}. <!-- defaults to 1 -->
 
 Constraints and sanity checks:
 * The original pan diameter at 1x scale is {d1: 9} (radius {r1: d1/2})
@@ -470,9 +470,9 @@ function buildEquations(cells) {
   for (const cell of cells) {
     const eqn = [...cell.ceqn]  // elist[0] is cvar, rest are expressions
     // If cell has a bare number value, add it as a constraint
-    // if (cell.cval !== undefined) {
-    //   eqn.push(cell.cval)
-    // }
+    if (cell.cval !== undefined) {
+      eqn.push(cell.cval)
+    }
     eqns.push(eqn)
   }
   return eqns
@@ -494,14 +494,13 @@ function buildInitialValues(cells) {
 // Get frozen variables: cells with bare number values are frozen
 // Per spec: "If its ceqn includes a bare number, it's frozen"
 function getFrozenVars(cells) {
-  // const frozen = new Set()
-  // for (const cell of cells) {
-  //   if (cell.cval !== undefined) {
-  //     frozen.add(cell.cvar)
-  //   }
-  // }
-  // return frozen
-  return new Set()
+  const frozen = new Set()
+  for (const cell of cells) {
+    if (cell.cval !== undefined) {
+      frozen.add(cell.cvar)
+    }
+  }
+  return frozen
 }
 
 // Compute initial values for all variables using solvem()
@@ -519,8 +518,7 @@ function computeInitialValues(cells, symbols) {
   // Build equations, initial values, and frozen set, then solve
   const eqns = buildEquations(cells)
   const seedValues = buildInitialValues(cells)
-  // const frozen = getFrozenVars(cells)
-  const frozen = new Set()
+  const frozen = getFrozenVars(cells)
   const values = solvem(eqns, seedValues, frozen)
 
   // Check for any undefined values
@@ -956,7 +954,8 @@ function parseRecipe() {
   state.symbols = symbols
   state.values = values
   state.errors = allErrors
-  state.fixedVars = new Set()
+  // Per README future-work item 8: cells defined with bare numbers start frozen.
+  state.fixedVars = getFrozenVars(cells)
   
   updateRecipeDropdown()
   renderRecipe()
