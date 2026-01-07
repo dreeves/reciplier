@@ -283,22 +283,23 @@ function extractCells(text) {
   return cells
 }
 
-// Parse a single cell's content into vname, value, and elist
-// Format: [vname:] expr1 [= expr2 [= expr3 ...]]
-// Per spec: elist includes vname, excludes bare numbers; value is set to bare number if present
+// Parse a single cell's content into cvar, cval, and ceqn
+// Format: [cvar:] expr1 [= expr2 [= expr3 ...]]
+// Per spec: ceqn includes cvar, excludes bare numbers; cval is set to whichever
+// of expr1, expr2, etc is a constant, if any.
 function parseCell(cell) {
   const content = cell.content.trim()
 
-  // Check for vname (identifier followed by colon)
-  // vname pattern: starts with letter or underscore, followed by alphanumerics
-  const vnameMatch = content.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/)
+  // Check for cvar (identifier followed by colon)
+  // cvar pattern: starts with letter or underscore, followed by alphanumerics
+  const cvarMatch = content.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/)
 
   let cvar = null
   let exprPart = content
 
-  if (vnameMatch) {
-    cvar = vnameMatch[1]
-    exprPart = vnameMatch[2]
+  if (cvarMatch) {
+    cvar = cvarMatch[1]
+    exprPart = cvarMatch[2]
   }
 
   // Split by = to get constraint expressions (but be careful with == or !=)
@@ -306,37 +307,47 @@ function parseCell(cell) {
   const parts = exprPart.split(/(?<![=!<>])=(?!=)/).map(e => e.trim()).filter(e => e !== '')
 
   // Separate bare numbers from expressions
-  // Per spec: bare numbers go to value field, not elist
+  // Per spec: bare numbers go to cval field, not ceqn
   const bareNumbers = []
   const expressions = []
   for (const part of parts) {
     const asNum = toNum(part)
     if (asNum !== null) {
       bareNumbers.push(asNum)
-    } else {
-      expressions.push(part)
+      continue
     }
+
+    const vars = findVariables(part)
+    if (vars.size === 0) {
+      const r = vareval(part, {})
+      if (!r.error && typeof r.value === 'number' && isFinite(r.value)) {
+        bareNumbers.push(r.value)
+        continue
+      }
+    }
+
+    expressions.push(part)
   }
 
   // Error flag if multiple bare numbers (spec case 7)
   const multipleNumbers = bareNumbers.length > 1
 
-  // value is the bare number (if exactly one), otherwise undefined
+  // cval is the bare number (if exactly one), otherwise undefined
   const cval = bareNumbers.length === 1 ? bareNumbers[0] : undefined
 
-  // elist: will include vname after preprocessLabels adds it
+  // ceqn: will include cvar after preprocessLabels adds it
   // For now, just store the non-bare-number expressions
   return {
     ...cell,
     cvar,
     cval,
-    expressions,  // will become elist after vname is added
+    expressions,  // will become ceqn after cvar is added
     hasConstraint: expressions.length > 1 || (expressions.length >= 1 && bareNumbers.length >= 1),
     multipleNumbers  // error flag
   }
 }
 
-// Add nonce vnames to cells that don't have them, and build elist
+// Add nonce cvars to cells that don't have them, and build ceqn
 function preprocessLabels(cells) {
   let nonceCounter = 1
   return cells.map(cell => {
@@ -348,7 +359,7 @@ function preprocessLabels(cells) {
       isNonce = true
     }
 
-    // Build elist: vname followed by all expressions (per spec)
+    // Build ceqn: cvar followed by all expressions (per spec)
     const ceqn = [cvar, ...cell.expressions]
 
     return {
@@ -383,7 +394,7 @@ function buildSymbolTable(cells) {
   const symbols = {}
   const errors = []
 
-  // First pass: collect all defined vnames and check for errors
+  // First pass: collect all defined cvars and check for errors
   for (const cell of cells) {
     // Error case 7: multiple bare numbers in a cell
     if (cell.multipleNumbers) {
@@ -406,10 +417,10 @@ function buildSymbolTable(cells) {
   }
 
   // Second pass: find all referenced variables and check they're defined
-  // Note: elist[0] is the vname itself, so we skip it when checking references
+  // Note: ceqn[0] is the cvar itself, so we skip it when checking references
   const allReferenced = new Set()
   for (const cell of cells) {
-    // Check expressions in elist (skip index 0 which is the vname)
+    // Check expressions in ceqn (skip index 0 which is the cvar)
     for (let i = 1; i < cell.ceqn.length; i++) {
       const expr = cell.ceqn[i]
       const vars = findVariables(expr)
@@ -423,10 +434,10 @@ function buildSymbolTable(cells) {
   }
 
   // Third pass: check for disconnected variables (defined but never referenced)
-  // Skip nonce vnames for this check
+  // Skip nonce cvars for this check
   for (const [name, sym] of Object.entries(symbols)) {
     if (!sym.isNonce && !allReferenced.has(name)) {
-      // Check if the variable references itself or other vars (in elist[1:])
+      // Check if the variable references itself or other vars (in ceqn[1:])
       const selfRefs = sym.ceqn.slice(1).some(expr => {
         const vars = findVariables(expr)
         return vars.size > 0
@@ -439,17 +450,17 @@ function buildSymbolTable(cells) {
     }
   }
 
-  // Fourth pass: check for bare numbers in anonymous cells (nonce vname, no expressions)
+  // Fourth pass: check for bare numbers in anonymous cells (nonce cvar, no expressions)
   for (const cell of cells) {
     if (cell.isNonce && cell.ceqn.length === 1 && cell.cval === undefined) {
-      // elist only has vname and no expressions, and no value - shouldn't happen normally
-      // But if original was like {5} it would have value=5 and elist=[vname]
+      // ceqn only has cvar and no expressions, and no cval - shouldn't happen normally
+      // But if original was like {5} it would have cval=5 and ceqn=[cvar]
     }
     // If cell is nonce and has no expressions and no other vars, it's effectively bare
     if (cell.isNonce && cell.ceqn.length === 1) {
       const hasVars = cell.ceqn.slice(1).some(expr => findVariables(expr).size > 0)
       if (!hasVars && cell.cval !== undefined) {
-        // This is a bare number like {5} with a nonce vname
+        // This is a bare number like {5} with a nonce cvar
         errors.push(`Cell ${cell.raw} is a bare number ` +
                     `which doesn't make sense to put in a cell`)
       }
@@ -468,8 +479,8 @@ function buildSymbolTable(cells) {
 function buildEquations(cells) {
   const eqns = []
   for (const cell of cells) {
-    const eqn = [...cell.ceqn]  // elist[0] is cvar, rest are expressions
-    // If cell has a bare number value, add it as a constraint
+    const eqn = [...cell.ceqn]  // ceqn[0] is cvar, rest are expressions
+    // If cell has a bare number cval, add it as a constraint
     if (cell.cval !== undefined) {
       eqn.push(cell.cval)
     }
@@ -491,7 +502,7 @@ function buildInitialValues(cells) {
   return values
 }
 
-// Get frozen variables: cells with bare number values are frozen
+// Get frozen variables: cells with bare number cvals are frozen
 // Per spec: "If its ceqn includes a bare number, it's frozen"
 function getFrozenVars(cells) {
   const frozen = new Set()
@@ -636,13 +647,13 @@ function solve(expr, varName, target, values) {
 }
 
 // Find a constraint involving varName and solve for it
-// Uses elist which includes vname at index 0
+// Uses ceqn which includes cvar at index 0
 function solveFromConstraints(varName, cells, values) {
   for (const cell of cells) {
     if (!cell.hasConstraint) continue  // Only look at cells with actual constraints
 
     // Find expressions with and without the variable
-    // Skip elist[0] which is the vname (nonce variable)
+    // Skip ceqn[0] which is the cvar (nonce variable)
     let targetExpr = null, solveExpr = null
     for (let i = 1; i < cell.ceqn.length; i++) {
       const expr = cell.ceqn[i]
@@ -700,7 +711,7 @@ function checkInitialContradictions(cells, values, emptyExprVars) {
       const involvesEmptyVar = [...varsInConstraint].some(v => emptyExprVars.has(v))
       if (involvesEmptyVar) continue
 
-      // This is a constraint - all expressions in elist should evaluate equal
+      // This is a constraint - all expressions in ceqn should evaluate equal
       const results = cell.ceqn.map(expr => {
         if (!expr || expr.trim() === '') return null
         const r = vareval(expr, values)
@@ -715,7 +726,7 @@ function checkInitialContradictions(cells, values, emptyExprVars) {
       const tolerance = Math.abs(first) * 1e-6 + 1e-6
       for (let i = 1; i < results.length; i++) {
         if (Math.abs(results[i] - first) > tolerance) {
-          const exprStr = cell.ceqn.slice(1).join(' = ')  // Display without vname
+          const exprStr = cell.ceqn.slice(1).join(' = ')  // Display without cvar
           const valuesStr = results.map(r => formatNum(r)).join(' ≠ ')
           errors.push(`Contradiction: {${exprStr}} evaluates to ${valuesStr}`)
           break
@@ -771,7 +782,7 @@ function checkConstraints(cells, values) {
     // Only check cells that actually have constraints (multiple expressions or expr=number)
     if (!cell.hasConstraint) continue
 
-    // Skip elist[0] (the vname/nonce) - only check actual expressions in elist[1:]
+    // Skip ceqn[0] (the cvar/nonce) - only check actual expressions in ceqn[1:]
     const exprs = cell.ceqn.slice(1)
     if (exprs.length < 2) continue  // Need at least 2 expressions to compare
 
@@ -798,7 +809,7 @@ function checkConstraints(cells, values) {
 }
 
 // Solve constraints by adjusting unfixed variables
-// Uses elist which includes vname at index 0
+// Uses ceqn which includes cvar at index 0
 function solveConstraints(cells, values, fixedVars, changedVar) {
   const newValues = { ...values }
 
@@ -807,9 +818,9 @@ function solveConstraints(cells, values, fixedVars, changedVar) {
   function isEmptyExprVar(varName) {
     const cell = cellByCvar.get(varName)
     if (!cell) return false
-    // Empty if elist only has vname and no other expressions
+    // Empty if ceqn only has cvar and no other expressions
     if (cell.ceqn.length <= 1) return true
-    const expr = cell.ceqn[1]  // First expression after vname
+    const expr = cell.ceqn[1]  // First expression after cvar
     return !expr || expr.trim() === ''
   }
 
@@ -845,7 +856,7 @@ function solveConstraints(cells, values, fixedVars, changedVar) {
 
       for (const varToSolve of adjustable) {
         // Find target (expression without varToSolve) and solve expression (one that contains varToSolve)
-        // Skip elist[0] which is the vname - we want actual expressions
+        // Skip ceqn[0] which is the cvar - we want actual expressions
         let targetExpr = null, solveExpr = null
 
         for (let i = 1; i < cell.ceqn.length; i++) {
@@ -897,6 +908,7 @@ let state = {
   fixedVars: new Set(),
   userEditedVars: new Set(),  // Track variables the user has directly edited
   errors: [],
+  solveBanner: '',
   currentRecipeKey: ''
 }
 
@@ -956,6 +968,7 @@ function parseRecipe() {
   state.errors = allErrors
   // Per README future-work item 8: cells defined with bare numbers start frozen.
   state.fixedVars = getFrozenVars(cells)
+  state.solveBanner = ''
   
   updateRecipeDropdown()
   renderRecipe()
@@ -1078,6 +1091,10 @@ function renderRecipe() {
       </div>`
     : ''
 
+  const solveBanner = `<div id="solveBanner" class="error-display solve-display"${state.solveBanner ? '' : ' hidden'}>
+        <div class="error-message">⚠️ ${escapeHtml(state.solveBanner)}</div>
+      </div>`
+
   // Update slider display
   updateSliderDisplay()
   
@@ -1087,7 +1104,7 @@ function renderRecipe() {
     return
   }
   
-  output.innerHTML = `${errorBanner}${renderRecipeBody({ disableInputs: false, invalidCellIds: violatedCellIds })}`
+  output.innerHTML = `${errorBanner}${solveBanner}${renderRecipeBody({ disableInputs: false, invalidCellIds: violatedCellIds })}`
   output.style.display = 'block'
   copySection.style.display = 'block'
 
@@ -1112,14 +1129,35 @@ function escapeHtml(text) {
 // Event Handlers
 // =============================================================================
 
+// TODO: ugh, hundreds of occurrences of "value", many but not all of which
+// should be "cval"
+
 function handleFieldInput(e) {
   const input = e.target
   const cellId = input.dataset.cellId
   const newValue = toNum(input.value)
 
+  function updateSolveBannerInDom() {
+    const banner = $('solveBanner')
+    if (!banner) return
+
+    if (!state.solveBanner) {
+      banner.hidden = true
+      const msg = banner.querySelector('.error-message')
+      if (msg) msg.textContent = ''
+      return
+    }
+
+    banner.hidden = false
+    const msg = banner.querySelector('.error-message')
+    if (msg) msg.textContent = `⚠️ ${state.solveBanner}`
+  }
+
   // Invalid number format - just mark invalid, don't change state
   if (newValue === null || !isFinite(newValue)) {
     input.classList.add('invalid')
+    state.solveBanner = ''
+    updateSolveBannerInDom()
     return
   }
 
@@ -1155,6 +1193,18 @@ function handleFieldInput(e) {
   const seedValues = { ...state.values, [cell.cvar]: newValue }
   const newValues = solvem(eqns, seedValues, frozen)
 
+  const constraintsSatisfied = eqnsSatisfied(eqns, newValues)
+  if (!constraintsSatisfied) {
+    const anyOtherFrozen = [...state.fixedVars].some(v => v !== cell.cvar)
+    state.solveBanner = anyOtherFrozen
+      ? 'Overconstrained! Try unfreezing cells.'
+      : 'No solution found.'
+  } else {
+    state.solveBanner = ''
+  }
+
+  updateSolveBannerInDom()
+
   // Commit the new values
   state.values = newValues
 
@@ -1189,8 +1239,8 @@ function recomputeAllValues() {
 }
 
 // Pure version: recompute derived values and return new values object
-// Uses elist where [0] is vname and [1:] are expressions
-// skipVars: optional Set of vnames that should not be recomputed (user-edited vars)
+// Uses ceqn where [0] is cvar and [1:] are expressions
+// skipVars: optional Set of cvars that should not be recomputed (user-edited vars)
 function recomputeValues(cells, values, skipVars = new Set()) {
   const newValues = { ...values }
 
@@ -1202,7 +1252,7 @@ function recomputeValues(cells, values, skipVars = new Set()) {
       // Don't recompute user-edited variables - their values should stick
       if (skipVars.has(cell.cvar)) continue
 
-      // elist[1] is the first expression (elist[0] is vname)
+      // ceqn[1] is the first expression (ceqn[0] is cvar)
       if (cell.ceqn.length < 2) continue
       const expr = cell.ceqn[1]
       if (!expr || expr.trim() === '') continue

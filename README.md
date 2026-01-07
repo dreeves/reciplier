@@ -1,11 +1,13 @@
+# Reciplier
+
 Hosted at [reciplier.dreev.es](https://reciplier.dreev.es).
 Background at [AGI Friday](https://agifriday.substack.com/p/reciplier).
 
 See also http://doc.dreev.es/recipes which maybe I want to merge with this.
 
 This is now more general than recipes and is kind of halfway to a spreadsheet.
-But also it's better than a spreadsheet in some ways.  It also subsume's my old
-"calculator calculator" app.
+But also it's better than a spreadsheet in some ways. It also subsume's my old
+"calculator calculator" app that I called Sheeq.
 
 # Functional Spec for Generalized Reciplier
 
@@ -22,17 +24,18 @@ well.
 Here's how we do all that by annotating the recipe:
 
 ```
-Mix {1x} egg(s) and {3x} wheels of cheese in a {d:9}-inch diameter pan.
+Mix {1x} egg and {3x} wheels of cheese in a {d:}-inch diameter pan.
 Or a {w:}x{h:}-inch rectangular pan (with a {z:}-inch diagonal) is fine.
-Or any pan as long as its area is {A*x} square inches.
+Or any pan as long as its area is {A:} square inches.
 Heat at 350 degrees.
 
-This recipe is scaled by a factor of {x:1}.
+This recipe is scaled by a factor of {x:}. <!-- defaults to 1 -->
 
 Constraints and sanity checks:
-* Radius = {r: d/2} (half the diameter, {d = 2r})
+* The original pan diameter at 1x scale is {d1: 9} (radius {r1: d1 / 2})
+* Scaled radius = {r: d/2} (half the diameter, {d = 2r})
 * The true circle constant is {tau: 6.28}
-* The area of the pan before scaling is {A: 1/2*tau*r^2 = w*h}
+* The area, again, is {A = 1/2*tau*r^2 = 1/2*tau*r1^2*x = w*h}
 * The squared diagonal of the rectangular pan is {w^2 + h^2 = z^2}
 ```
 
@@ -44,18 +47,13 @@ factor, x.
 (Technical note: We support Mathematica-style arithmetic syntax where "2x" means
 "2*x".)
 
-Every expression optionally has a variable name (see next section) for 
+Every expression optionally has a variable name (see next section) for
 referencing it in other expressions. It's an error if you specify the same name
-for two expressions but you can reference a variable as much as you want. Like how the 
-first line of the above recipe labels the diameter as d and later in the 
+for two expressions but you can reference a variable as much as you want. Like
+how the first line of the above recipe labels the diameter as d and later in the 
 bulleted list we define r as d/2 and mention the diameter again. It's actually
 unnecessary there to say {d = 2r} rather than just {d} since we've defined r as
 d/2, which is equivalent, but it doesn't hurt to add a redundant constraint.
-
-(Implementation note: As a preprocessing pass, add nonce cvars to every 
-expression that doesn't have one. E.g., {1x} and {3x} become {var01: 1x} and
-{var02: 3x}. That way the rest of the code can count on a consistent format: a
-cvar, a colon, and then one or more expressions separated by equal-signs.)
 
 (Note on prior art: Embedded Ruby (ERB) syntax has `<% code to just evaluate %>`
 and `<%= code to print the output of %>` and `<%# comments %>`.)
@@ -100,19 +98,25 @@ A cell is a data structure that includes the following three fields:
 * `cval` [previously `value`] is the current value assigned to this cell's variable
 * `ceqn` [previously `elist`] (pronounced "sequin") is a list of one or more expressions that are constrained to be equal to each other and to cval
 
-Initially we exclude from ceqn any expressions that are bare numbers. Instead,
-cval is set to any bare number specified in the cell definition. (More than one
-bare number in the definition of a cell is an error).
+(Implementation note: As a preprocessing pass, add nonce cvars to every 
+expression that doesn't have one. E.g., {1x} and {3x} become {var01: 1x} and
+{var02: 3x}. That way the rest of the code can count on a consistent format: a
+cvar, a colon, and then one or more expressions separated by equal-signs.)
+
+Initially we exclude from ceqn any expressions that are constants (either a bare
+number or an arithmetic expression that evaluate to a number -- so no 
+variables). Instead, cval is set to any constant specified in the cell 
+definition. (More than one constant in the definition of a cell is an error).
 
 For example, a cell defined as `{x: 3y = z}` will have cvar set to `x` and ceqn
 set to [`x`, `3y`, `z`] with cval initially undefined. A cell defined as 
 `{x: y = 1}` will have cvar set to `x`, ceqn set to [`x`, `y`] and cval set 
 to 1. A cell like `{v:}` will have cvar `v`, cval undefined, and ceqn [`v`].
 
-(Note that the solver needs initial values for it's solving and if you pass in
-any that are undefined it defaults them to 1, so `{v:}` is functionally the same
-as `{v:1}` and similarly for the other examples, where no bare number in the 
-equations after the colon is functionally the same as including an `= 1`.)
+(Note that the solver needs initial values and if you pass in variables that are
+undefined it defaults them to 1, so `{v:}` is functionally the same as `{v:1}`.
+There's a key difference though: specifying a constant in the definition of a
+cell marks it as frozen. See below.)
 
 Every cell has a corresponding field in the UI and cval is always the current
 value assigned to that cell's variable and shown in that cell's field. That
@@ -129,17 +133,21 @@ explicit assignments of values to variables or see those values change.)
 At every moment, every cell's field is shown in red if cval differs from any of
 the expressions in ceqn, given the assignments of all variables.
 
+### Freezing and unfreezing cells
+
 Any cell at any time may be marked as frozen. The effect of that is the cell's
 cval is appended to its ceqn. In other words, cvar = cval is treated as one of
 the contraints. Unfreezing removes cval from ceqn again, meaning ceqn once again
-has no bare numbers. A cell is always treated temporarily as frozen while it's
+has no constants. A cell is always treated temporarily as frozen while it's
 being edited. If it started frozen and you edit it, it stays frozen at its new
 value.
 
 There's no extra flag or state variable for whether a cell is frozen. If its
-ceqn includes a bare number, it's frozen; if not, it isn't. Freezing appends
-cval to ceqn; unfreezing removes any bare number from ceqn. (Again, more than
-one bare number in ceqn is an error.)
+ceqn includes a constant, it's frozen; if not, it isn't. Freezing appends
+cval to ceqn; unfreezing removes any constant from ceqn. (Again, more than
+one constant in ceqn is an error.)
+
+### Always Be Solving
 
 Say the user edits cell c, defined with `{x: 3y = 6}` so having a cvar of `x`,
 to have a cval of 12 instead of the initial 6. And suppose c is marked unfrozen,
@@ -262,15 +270,15 @@ discussed in the example with Pythagorean triples.
 
 4. Syntax error. E.g., nested curly braces or anything else we can't parse.
 
-5. Unlabeled constant: If any expression is a bare number without a
-human-assigned cvar. Reasons to treat it as an error: (1) It doesn't make sense
-to have a field that when you change it it has zero effect on anything else. (2)
-If you really want that for some reason, just give the field an explicit cvar.
+5. Unlabeled constant: If any expression is a constant without a human-assigned
+cvar. Reasons to treat it as an error: (1) It doesn't make sense to have a field
+that when you change it it has zero effect on anything else. (2) If you really
+want that for some reason, just give the field an explicit cvar.
 
 6. Unreferenced variable: A labeled cell (one with an explicit cvar) isn't
 referenced by any other cell. Like if you define {tau: 6.28} and then never use
 it. If you're doing that on purpose, like you want that constant defined for use
-in the future, the workaround is somehting like 
+in the future, the workaround is something like 
 `{tau: 6.28} <!-- {tau} not currently used -->`.
 You're basically adding a comment that makes the linter shut up.
 
@@ -321,17 +329,13 @@ the net-elevation cell is frozen.
 
 7. Fix the cheese wheel example in the spec and in script.js.
 
-8. Bug: any cell that's defined with a bare number, like {x: 1}, should start
-out frozen. Again, having a bare number in ceqn is what it means for a cell to
-be frozen. 
-
-9. Any arithmetic expression that evaluates to a number is a "bare number" the
-way we've defined it here. (Probably go through this spec and use a better term,
-like "constant".)
-
 SCRATCH AREA:
 
 Bug reports (also add quals for these, TDD-style)...
+
+---
+
+Bug: Using the slider for pyzza, makes the c^2 cell turn red.
 
 ---
 

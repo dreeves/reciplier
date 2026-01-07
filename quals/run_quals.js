@@ -206,8 +206,10 @@ async function main() {
     }, contradictory)
 
     // Freeze a and b so the contradiction is real under the spec
-    await page.click('input.recipe-field[data-label="a"]', { clickCount: 2 })
-    await page.click('input.recipe-field[data-label="b"]', { clickCount: 2 })
+    // NOTE: With "bare number => starts frozen" semantics, {a:1} and {b:2}
+    // are already frozen; double-clicking would unfreeze them.
+    // await page.click('input.recipe-field[data-label="a"]', { clickCount: 2 })
+    // await page.click('input.recipe-field[data-label="b"]', { clickCount: 2 })
 
     await setInputValue(page, 'input.recipe-field[data-label="a"]', '1')
     await setInputValue(page, 'input.recipe-field[data-label="b"]', '2')
@@ -236,6 +238,36 @@ async function main() {
       }
     })
     assert.ok(/invalid expression/i.test(emptyExprError || ''))
+
+    // Qual: solver banner (overconstrained)
+    const overconstrained = '{a:1} {b:} {a=b}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, overconstrained)
+
+    await setInputValue(page, 'input.recipe-field[data-label="b"]', '2')
+    await page.waitForFunction(() => {
+      const el = document.querySelector('#solveBanner')
+      return !!el && !el.hidden
+    })
+    const overText = await page.$eval('#solveBanner', el => el.textContent || '')
+    assert.ok(/Nimis constrictum/i.test(overText))
+
+    // Qual: solver banner (no solution, no frozen cells)
+    const nosol = '{a:} {b:} {a=b} {a=b+1}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, nosol)
+
+    await setInputValue(page, 'input.recipe-field[data-label="a"]', '1')
+    await page.waitForFunction(() => {
+      const el = document.querySelector('#solveBanner')
+      return !!el && !el.hidden
+    })
+    const noText = await page.$eval('#solveBanner', el => el.textContent || '')
+    assert.ok(/Nulla solutio/i.test(noText))
 
     console.log('All quals passed.')
   } finally {
