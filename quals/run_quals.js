@@ -73,6 +73,10 @@ async function main() {
     const hasCalcaLink = await page.$eval('a[href="https://calca.io"]', el => !!el)
     assert.equal(hasCalcaLink, true)
 
+    // Qual: util.js runQuals() passes
+    const utilQualsResult = await page.evaluate(() => runQuals())
+    assert.equal(utilQualsResult, 'All quals passed!')
+
     // Qual 1: Pythagorean Pizza regression
     await page.waitForSelector('#recipeSelect', { visible: true })
     await page.select('#recipeSelect', 'pyzza')
@@ -87,16 +91,16 @@ async function main() {
     const bVal = await getInputValue(page, 'input.recipe-field[data-label="b"]')
     const cVal = await getInputValue(page, 'input.recipe-field[data-label="c"]')
 
-    assert.equal(aVal, '5')
+    assert.equal(aVal, '9')
     assert.equal(bVal, '12')
-    assert.equal(cVal, '13')
+    assert.equal(cVal, '15')
 
     const sanityHandle = await findFieldByTitleSubstring(page, 'a^2 + b^2 = c^2')
     const sanityIsNull = await sanityHandle.evaluate(el => el === null)
     assert.equal(sanityIsNull, false)
 
     const sanityVal = await getHandleValue(sanityHandle)
-    assert.equal(sanityVal, '169')
+    assert.equal(sanityVal, '225')
 
     const sanityInvalid = await handleHasClass(sanityHandle, 'invalid')
     assert.equal(sanityInvalid, false)
@@ -131,6 +135,29 @@ async function main() {
     await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="x"]', '3')
     const sliderDisplayAfterTyping = await page.$eval('#scalingDisplay', el => el.textContent || '')
     assert.equal(sliderDisplayAfterTyping, '3')
+
+    // Qual: Editing derived field should solve for underlying variable
+    // Bug report: Load crepes, change eggs from 12 to 24, expect x=2 and all fields double
+    await page.select('#recipeSelect', 'crepes')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Find the eggs field (first field, which is 12x)
+    const eggsField = await page.$('input.recipe-field')
+    const initialEggs = await eggsField.evaluate(el => el.value)
+    assert.equal(initialEggs, '12')  // Initially 12 (since x=1)
+
+    // Change eggs to 24 - should solve for x=2
+    await setInputValue(page, 'input.recipe-field', '24')
+
+    // x should now be 2
+    const xAfterEdit = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.equal(xAfterEdit, '2')
+
+    // Eggs field should show 24 and NOT be invalid
+    const eggsAfterEdit = await page.$eval('input.recipe-field', el => el.value)
+    assert.equal(eggsAfterEdit, '24')
+    const eggsInvalid = await page.$eval('input.recipe-field', el => el.classList.contains('invalid'))
+    assert.equal(eggsInvalid, false)
 
     // Qual 2: Simultaneous equations should not start violated
     await page.select('#recipeSelect', 'simeq')
@@ -170,6 +197,13 @@ async function main() {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }, contradictory)
+
+    // Freeze a and b so the contradiction is real under the spec
+    await page.click('input.recipe-field[data-label="a"]', { clickCount: 2 })
+    await page.click('input.recipe-field[data-label="b"]', { clickCount: 2 })
+
+    await setInputValue(page, 'input.recipe-field[data-label="a"]', '1')
+    await setInputValue(page, 'input.recipe-field[data-label="b"]', '2')
 
     const aEqBHandle = await findFieldByTitleSubstring(page, 'a=b')
     const aEqBIsNull = await aEqBHandle.evaluate(el => el === null)

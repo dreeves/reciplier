@@ -11,23 +11,14 @@ const recipesShown = {
   'pancakes':  "Pancakes according to Claude",
   'breakaway': "Breakaway Biscuits",
   'biketour':  "Bike Tour Burritos",
+  'dial':      "Beeminder Commitment Dial",
   'sugarcalc': "Sugar Calculator",
-  'kpounder':  "Pounds<->Kilograms Converter",
+  'kpounder':  "Pounds ↔ Kilograms Converter",
   'cheesepan': "Cheese Wheels in a Pan",
   'blank':     "Blank -- go crazy",
 }
 
 const recipeHash = {
-// -----------------------------------------------------------------------------
-'OLDcrepesSCHDEL': `\
-* eggs: 12 large ones
-* milk: 5.333 cups (1.262 liters or 1301 grams)
-* flour: 3 cups (380 grams)
-* butter: 8 tbsp melted (112 grams)
-* salt: 2 tsp (14 grams) 
-
-Yield: roughly 29 crepes
-`,
 // -----------------------------------------------------------------------------
 'crepes': `\
 * Eggs: {12x} large
@@ -49,7 +40,7 @@ Scaled by a factor of x={x:1}.
 Roll out dough into a right triangle with legs of length a={a:3x} and b={b:4x} and hypotenuse c={c:}.
 Then eat it.
 
-Sanity check: {a^2 + b^2 = c^2}
+Sanity check: {a}^2 + {b}^2 = {a^2} + {b^2} = {a^2 + b^2 = c^2}
 `,
 // -----------------------------------------------------------------------------
 'cookies': `\
@@ -79,26 +70,6 @@ Scaled by a factor of {x:1}
 5*{x} - 4*{y} = {5x - 4y = 2}
 
 (Expected solution: x=6, y=7)
-`,
-// -----------------------------------------------------------------------------
-'OLDshortcakeSCHDEL': `\
-Preheat oven to =325°F. Line bottom of =9x9 square pan with parchment paper.
-
-* 2   C   flour (can do half/half cake flour)
-* 1   C   sugar
-* 1/2 C   butter (1 stick)
-* 2   tsp baking powder
-* 1/2 tsp salt
-* 3/4 C   milk
-* 1   tsp vanilla
-
-Mix together dry ingredients. Add cold butter cut up into pieces and then cut into the flour as for making pastry, until it resembles coarse crumbs.
-
-Add milk and vanilla and mix well.
-
-Pour into the prepared cake pan, spread evenly. 
-
-Bake =30 to =40 minutes @ =325°F
 `,
 // -----------------------------------------------------------------------------
 'shortcake': `\
@@ -166,6 +137,22 @@ Avg speed:       {v: d/t} mph
 Unadjusted spd:  {u: d/w} mph
 `,
 // -----------------------------------------------------------------------------
+dial: `\
+* Start: {y0:2026}/{m0:12}/{d0:25} weighing {vini:73}kg
+* End: {y:2026}/{m:12}/{d:25} weighing {vfin:70} ({(tfin-tini)/SID} days later)
+* Rate: {r*SID} per day = {r*SIW} per week = {r*SIM} per month
+
+<!--
+TODO: helper functions to turn dates to unixtime
+{tini: unixtime(y0, m0, d0)}
+{tfin: unixtime(y, m, d)}
+{r: (vfin-vini)/(tfin-tini)}
+{SID: 86400}
+{SIW: SID*7}
+{SIM: SID*365.25/12}
+-->
+`,
+// -----------------------------------------------------------------------------
 'sugarcalc': `\
 Nutrition info for healthy stuff (e.g., Greek yogurt):
 * {omega:170} grams per serving
@@ -185,7 +172,7 @@ If you weigh out {y:} grams of Greek yogurt and add {x:} grams of brown sugar to
 
 {(k*sigma*y/omega + kappa*x)/(gamma*y/omega + kappa*x) = eta}
 `,
-/*
+/* In the Sheeq version we had to do this:
 (Calories_per_gram_of_sugar * 
 Grams_of_sugar_per_serving_in_healthy_stuff * 
 Grams_of_healthy_stuff / 
@@ -208,17 +195,18 @@ Calories_per_serving_in_junk_food
 `,
 // -----------------------------------------------------------------------------
 'cheesepan': `\
-Mix {1x} egg and {3x} wheels of cheese in a {d:9}-inch diameter pan.
+Mix {1x} egg and {3x} wheels of cheese in a {d:}-inch diameter pan.
 Or a {w:}x{h:}-inch rectangular pan (with a {z:}-inch diagonal) is fine.
-Or any pan as long as its area is {A*x} square inches.
+Or any pan as long as its area is {A:} square inches.
 Heat at 350 degrees.
 
 This recipe is scaled by a factor of {x:1}.
 
 Constraints and sanity checks:
-* Radius = {r: d/2} (half the diameter, {d = 2r})
+* The original pan diameter at 1x scale is {d1: 9} (radius {r1: d1/2})
+* Scaled radius = {r: d/2} (half the diameter, {d = 2r})
 * The true circle constant is {tau: 6.28}
-* The area of the pan before scaling is {A: 1/2*tau*r^2 = w*h}
+* The area, again, is {A = 1/2*tau*r^2 = 1/2*tau*r1^2*x = w*h}
 * The squared diagonal of the rectangular pan is {w^2 + h^2 = z^2}
 `,
 // -----------------------------------------------------------------------------
@@ -295,48 +283,82 @@ function extractCells(text) {
   return cells
 }
 
-// Parse a single cell's content into label and expressions
-// Format: [label:] expr1 [= expr2 [= expr3 ...]]
+// Parse a single cell's content into vname, value, and elist
+// Format: [vname:] expr1 [= expr2 [= expr3 ...]]
+// Per spec: elist includes vname, excludes bare numbers; value is set to bare number if present
 function parseCell(cell) {
   const content = cell.content.trim()
-  
-  // Check for label (identifier followed by colon)
-  // Label pattern: starts with letter or underscore, followed by alphanumerics
-  const labelMatch = content.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/)
-  
-  let label = null
+
+  // Check for vname (identifier followed by colon)
+  // vname pattern: starts with letter or underscore, followed by alphanumerics
+  const vnameMatch = content.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/)
+
+  let cvar = null
   let exprPart = content
-  
-  if (labelMatch) {
-    label = labelMatch[1]
-    exprPart = labelMatch[2]
+
+  if (vnameMatch) {
+    cvar = vnameMatch[1]
+    exprPart = vnameMatch[2]
   }
-  
+
   // Split by = to get constraint expressions (but be careful with == or !=)
   // We want to split on single = that's not part of == or !=
-  // Simple approach: split on = and filter empty strings
-  const expressions = exprPart.split(/(?<![=!<>])=(?!=)/).map(e => e.trim()).filter(e => e !== '')
-  
+  const parts = exprPart.split(/(?<![=!<>])=(?!=)/).map(e => e.trim()).filter(e => e !== '')
+
+  // Separate bare numbers from expressions
+  // Per spec: bare numbers go to value field, not elist
+  const bareNumbers = []
+  const expressions = []
+  for (const part of parts) {
+    const asNum = toNum(part)
+    if (asNum !== null) {
+      bareNumbers.push(asNum)
+    } else {
+      expressions.push(part)
+    }
+  }
+
+  // Error flag if multiple bare numbers (spec case 7)
+  const multipleNumbers = bareNumbers.length > 1
+
+  // value is the bare number (if exactly one), otherwise undefined
+  const cval = bareNumbers.length === 1 ? bareNumbers[0] : undefined
+
+  // elist: will include vname after preprocessLabels adds it
+  // For now, just store the non-bare-number expressions
   return {
     ...cell,
-    label,
-    expressions,
-    hasConstraint: expressions.length > 1
+    cvar,
+    cval,
+    expressions,  // will become elist after vname is added
+    hasConstraint: expressions.length > 1 || (expressions.length >= 1 && bareNumbers.length >= 1),
+    multipleNumbers  // error flag
   }
 }
 
-// Add nonce labels to cells that don't have them
+// Add nonce vnames to cells that don't have them, and build elist
 function preprocessLabels(cells) {
   let nonceCounter = 1
   return cells.map(cell => {
-    if (cell.label === null) {
-      return {
-        ...cell,
-        label: `_var${String(nonceCounter++).padStart(3, '0')}`,
-        isNonce: true
-      }
+    let cvar = cell.cvar
+    let isNonce = false
+
+    if (cvar === null) {
+      cvar = `_var${String(nonceCounter++).padStart(3, '0')}`
+      isNonce = true
     }
-    return { ...cell, isNonce: false }
+
+    // Build elist: vname followed by all expressions (per spec)
+    const ceqn = [cvar, ...cell.expressions]
+
+    return {
+      ...cell,
+      cvar,
+      ceqn,
+      isNonce,
+      // Keep label as alias for backward compatibility during refactor
+      label: cvar
+    }
   })
 }
 
@@ -360,29 +382,36 @@ function findVariables(expr) {
 function buildSymbolTable(cells) {
   const symbols = {}
   const errors = []
-  
-  // First pass: collect all defined labels
 
+  // First pass: collect all defined vnames and check for errors
   for (const cell of cells) {
-    if (symbols[cell.label]) {
+    // Error case 7: multiple bare numbers in a cell
+    if (cell.multipleNumbers) {
+      errors.push(`Cell ${cell.raw} has more than one numerical value`)
+    }
+
+    if (symbols[cell.cvar]) {
       errors.push(
-        `Cell ${cell.raw} overrides previous definition of ${cell.label}`)
+        `Cell ${cell.raw} overrides previous definition of ${cell.cvar}`)
       //continue // keeping this means later def'ns don't override earlier ones
     }
-    symbols[cell.label] = {
+    symbols[cell.cvar] = {
       definedBy: cell.id,
-      value: null,
+      cval: cell.cval,
       fixed: false,
-      expressions: cell.expressions,
+      ceqn: cell.ceqn,
       raw: cell.raw,
       isNonce: cell.isNonce
     }
   }
-  
+
   // Second pass: find all referenced variables and check they're defined
+  // Note: elist[0] is the vname itself, so we skip it when checking references
   const allReferenced = new Set()
   for (const cell of cells) {
-    for (const expr of cell.expressions) {
+    // Check expressions in elist (skip index 0 which is the vname)
+    for (let i = 1; i < cell.ceqn.length; i++) {
+      const expr = cell.ceqn[i]
       const vars = findVariables(expr)
       vars.forEach(v => {
         allReferenced.add(v)
@@ -392,36 +421,41 @@ function buildSymbolTable(cells) {
       })
     }
   }
-  
+
   // Third pass: check for disconnected variables (defined but never referenced)
-  // Skip nonce labels for this check
+  // Skip nonce vnames for this check
   for (const [name, sym] of Object.entries(symbols)) {
     if (!sym.isNonce && !allReferenced.has(name)) {
-      // Check if the variable references itself or other vars
-      const selfRefs = sym.expressions.some(expr => {
+      // Check if the variable references itself or other vars (in elist[1:])
+      const selfRefs = sym.ceqn.slice(1).some(expr => {
         const vars = findVariables(expr)
         return vars.size > 0
       })
       if (!selfRefs) {
         // Case 6: human-labeled variable that's completely disconnected
-        errors.push(`${name} = ${sym.expressions[0]} is defined but never used`)
+        const displayExpr = sym.ceqn.length > 1 ? sym.ceqn[1] : sym.cval
+        errors.push(`${name} = ${displayExpr} is defined but never used`)
       }
     }
   }
-  
-  // Fourth pass: check for bare numbers in anonymous expressions
+
+  // Fourth pass: check for bare numbers in anonymous cells (nonce vname, no expressions)
   for (const cell of cells) {
-    if (cell.isNonce && cell.expressions.length === 1) {
-      const expr = cell.expressions[0]
-      const vars = findVariables(expr)
-      if (vars.size === 0) {
-        // This is a bare number like {5}
-        errors.push(`Cell ${cell.raw} is a bare number ` + 
+    if (cell.isNonce && cell.ceqn.length === 1 && cell.cval === undefined) {
+      // elist only has vname and no expressions, and no value - shouldn't happen normally
+      // But if original was like {5} it would have value=5 and elist=[vname]
+    }
+    // If cell is nonce and has no expressions and no other vars, it's effectively bare
+    if (cell.isNonce && cell.ceqn.length === 1) {
+      const hasVars = cell.ceqn.slice(1).some(expr => findVariables(expr).size > 0)
+      if (!hasVars && cell.cval !== undefined) {
+        // This is a bare number like {5} with a nonce vname
+        errors.push(`Cell ${cell.raw} is a bare number ` +
                     `which doesn't make sense to put in a cell`)
       }
     }
   }
-  
+
   return { symbols, errors }
 }
 
@@ -429,134 +463,73 @@ function buildSymbolTable(cells) {
 // Initial Value Assignment
 // =============================================================================
 
-// Try to compute initial values for all variables
-function computeInitialValues(cells, symbols) {
+// Build equations list for solvem() from cells
+// Each equation is an array of expressions that should all be equal
+function buildEquations(cells) {
+  const eqns = []
+  for (const cell of cells) {
+    const eqn = [...cell.ceqn]  // elist[0] is cvar, rest are expressions
+    // If cell has a bare number value, add it as a constraint
+    // if (cell.cval !== undefined) {
+    //   eqn.push(cell.cval)
+    // }
+    eqns.push(eqn)
+  }
+  return eqns
+}
+
+// Build initial values for solvem() from cells
+function buildInitialValues(cells) {
   const values = {}
-  const errors = []
-  const emptyExprVars = new Set() // Track variables with empty expressions like {c:}
-  
-  // Sort cells by dependency order (simple topological sort attempt)
-  // Variables that only reference already-computed vars should be computed first
-  
-  // Start with explicit values: {d:9} means d=9
-  // Also track variables with empty expressions that need solving
   for (const cell of cells) {
-    if (cell.expressions.length === 1) {
-      const expr = cell.expressions[0]
-      
-      // Check for empty expression like {c:}
-      if (!expr || expr.trim() === '') {
-        emptyExprVars.add(cell.label)
-        continue
-      }
-      
-      const vars = findVariables(expr)
-      
-      // If the expression has no variables, it's a literal value
-      if (vars.size === 0) {
-        const result = vareval(expr, {})
-        if (result.error) {
-          errors.push(`Error in cell ${cell.raw}: ${result.error}`)
-        } else {
-          values[cell.label] = result.value
-        }
-      }
-    } else if (cell.expressions.length === 0) {
-      emptyExprVars.add(cell.label)
-    }
-  }
-  
-  // Iteratively compute values for remaining variables
-  // Keep going until no more progress is made
-  let changed = true
-  let iterations = 0
-  const maxIterations = 100
-  
-  while (changed && iterations < maxIterations) {
-    changed = false
-    iterations++
-    
-    for (const cell of cells) {
-      if (values[cell.label] !== undefined) continue // Already computed
-      if (emptyExprVars.has(cell.label)) continue // Skip empty-expr vars for now
-      
-      // Try to evaluate the first expression with current values
-      const expr = cell.expressions[0]
-      if (!expr || expr.trim() === '') continue
-      
-      const vars = findVariables(expr)
-      
-      // Check if all required variables are available
-      const allAvailable = [...vars].every(v => values[v] !== undefined)
-      
-      if (allAvailable) {
-        const result = vareval(expr, values)
-        if (!result.error && result.value !== null && isFinite(result.value)) {
-          values[cell.label] = result.value
-          changed = true
-        }
-      }
-    }
-    
-    // Also try to solve empty-expr vars in each iteration (they may become solvable)
-    for (const varName of emptyExprVars) {
-      if (values[varName] !== undefined) continue
-      const solved = solveFromConstraints(varName, cells, values)
-      if (solved !== null) {
-        values[varName] = solved
-        changed = true
-      }
-    }
-  }
-
-  // Seed empty-expr vars and try solving constraints globally (eg, simultaneous equations).
-  for (const varName of emptyExprVars) {
-    if (values[varName] === undefined) {
-      values[varName] = 1
-    }
-  }
-
-  if (emptyExprVars.size > 0) {
-    const solved = solveConstraints(cells, values, new Set(), null)
-    const recomputed = recomputeValues(cells, solved)
-    for (const varName of emptyExprVars) {
-      if (typeof recomputed[varName] === 'number' && isFinite(recomputed[varName])) {
-        values[varName] = recomputed[varName]
-      }
-    }
-  }
-  
-  // Now try to solve for empty-expression variables using constraints
-  for (const varName of emptyExprVars) {
-    if (values[varName] !== undefined) continue
-    
-    const solved = solveFromConstraints(varName, cells, values)
-    if (solved !== null) {
-      values[varName] = solved
+    if (cell.cval !== undefined) {
+      values[cell.cvar] = cell.cval
     } else {
-      errors.push(`Can't find valid assignment for ${varName}`)
+      values[cell.cvar] = 1  // default seed value
     }
   }
-  
-  // For any remaining undefined variables, set default value
+  return values
+}
+
+// Get frozen variables: cells with bare number values are frozen
+// Per spec: "If its ceqn includes a bare number, it's frozen"
+function getFrozenVars(cells) {
+  // const frozen = new Set()
+  // for (const cell of cells) {
+  //   if (cell.cval !== undefined) {
+  //     frozen.add(cell.cvar)
+  //   }
+  // }
+  // return frozen
+  return new Set()
+}
+
+// Compute initial values for all variables using solvem()
+function computeInitialValues(cells, symbols) {
+  const errors = []
+  const emptyExprVars = new Set()
+
+  // Identify empty-expression variables for error reporting
   for (const cell of cells) {
-    if (values[cell.label] === undefined) {
-      // Try with current partial values
-      const expr = cell.expressions[0]
-      if (expr && expr.trim() !== '') {
-        const result = vareval(expr, values)
-        if (!result.error && result.value !== null && isFinite(result.value)) {
-          values[cell.label] = result.value
-          continue
-        }
-        if (result.error) {
-          errors.push(`Error in cell ${cell.raw}: ${result.error}`)
-        }
-      }
-      errors.push(`Cell ${cell.raw} has no valid assignment that we could find`)
+    if (cell.ceqn.length === 1 && cell.cval === undefined) {
+      emptyExprVars.add(cell.cvar)
     }
   }
-  
+
+  // Build equations, initial values, and frozen set, then solve
+  const eqns = buildEquations(cells)
+  const seedValues = buildInitialValues(cells)
+  // const frozen = getFrozenVars(cells)
+  const frozen = new Set()
+  const values = solvem(eqns, seedValues, frozen)
+
+  // Check for any undefined values
+  for (const cell of cells) {
+    if (values[cell.cvar] === undefined || !isFinite(values[cell.cvar])) {
+      errors.push(`Can't find valid assignment for ${cell.cvar}`)
+    }
+  }
+
   return { values, errors, emptyExprVars }
 }
 
@@ -665,13 +638,16 @@ function solve(expr, varName, target, values) {
 }
 
 // Find a constraint involving varName and solve for it
+// Uses elist which includes vname at index 0
 function solveFromConstraints(varName, cells, values) {
   for (const cell of cells) {
-    if (cell.expressions.length < 2) continue
-    
+    if (!cell.hasConstraint) continue  // Only look at cells with actual constraints
+
     // Find expressions with and without the variable
+    // Skip elist[0] which is the vname (nonce variable)
     let targetExpr = null, solveExpr = null
-    for (const expr of cell.expressions) {
+    for (let i = 1; i < cell.ceqn.length; i++) {
+      const expr = cell.ceqn[i]
       const vars = findVariables(expr)
       if (vars.has(varName)) {
         solveExpr = expr
@@ -679,20 +655,28 @@ function solveFromConstraints(varName, cells, values) {
         targetExpr = expr
       }
     }
-    
+
     if (!solveExpr) continue // Variable not in this constraint
-    if (!targetExpr) continue // No target expression without the variable
-    
-    // Check all other variables have values
-    const allVars = findVariables(targetExpr)
-    if (![...allVars].every(v => values[v] !== undefined)) continue
-    
-    // Evaluate target
-    const targetRes = vareval(targetExpr, values)
-    if (targetRes.error || !isFinite(targetRes.value)) continue
-    
+
+    // Get target value - either from expression or from cell's value
+    let targetValue = null
+    if (targetExpr) {
+      // Check all other variables have values
+      const allVars = findVariables(targetExpr)
+      if (![...allVars].every(v => values[v] !== undefined)) continue
+      // Evaluate target expression
+      const targetRes = vareval(targetExpr, values)
+      if (targetRes.error || !isFinite(targetRes.value)) continue
+      targetValue = targetRes.value
+    } else if (values[cell.cvar] !== undefined) {
+      // Use cell's current value (from bare number or prior solving) as target
+      targetValue = values[cell.cvar]
+    } else {
+      continue // No target available
+    }
+
     // Solve
-    const result = solve(solveExpr, varName, targetRes.value, values)
+    const result = solve(solveExpr, varName, targetValue, values)
     if (result !== null) return result
   }
   return null
@@ -702,37 +686,38 @@ function solveFromConstraints(varName, cells, values) {
 // Skip checking constraints that involve variables with empty expressions (those need solving)
 function checkInitialContradictions(cells, values, emptyExprVars) {
   const errors = []
-  
+
   for (const cell of cells) {
-    if (cell.expressions.length > 1) {
+    // Only check cells that actually have constraints
+    if (cell.hasConstraint) {
       // Check if this constraint involves any variable that needs to be computed
       const varsInConstraint = new Set()
-      cell.expressions.forEach(expr => {
+      cell.ceqn.forEach(expr => {
         if (expr && expr.trim() !== '') {
           findVariables(expr).forEach(v => varsInConstraint.add(v))
         }
       })
-      
+
       // Skip if any variable in this constraint has an empty expression (needs solving)
       const involvesEmptyVar = [...varsInConstraint].some(v => emptyExprVars.has(v))
       if (involvesEmptyVar) continue
-      
-      // This is a constraint - all expressions should evaluate equal
-      const results = cell.expressions.map(expr => {
+
+      // This is a constraint - all expressions in elist should evaluate equal
+      const results = cell.ceqn.map(expr => {
         if (!expr || expr.trim() === '') return null
         const r = vareval(expr, values)
         return r.error ? null : r.value
       })
-      
+
       // Skip if any expression couldn't be evaluated
       if (results.some(r => r === null)) continue
-      
+
       // Check if all results are approximately equal
       const first = results[0]
       const tolerance = Math.abs(first) * 1e-6 + 1e-6
       for (let i = 1; i < results.length; i++) {
         if (Math.abs(results[i] - first) > tolerance) {
-          const exprStr = cell.expressions.join(' = ')
+          const exprStr = cell.ceqn.slice(1).join(' = ')  // Display without vname
           const valuesStr = results.map(r => formatNum(r)).join(' ≠ ')
           errors.push(`Contradiction: {${exprStr}} evaluates to ${valuesStr}`)
           break
@@ -740,28 +725,68 @@ function checkInitialContradictions(cells, values, emptyExprVars) {
       }
     }
   }
-  
+
   return errors
 }
 
-// Check if all constraints are satisfied with given values
+// Check if a cell's cval matches all expressions in its ceqn
+// Per spec: "cell's field is shown in red if cval differs from any of the expressions in ceqn"
+function isCellViolated(cell, values) {
+  const cval = values[cell.cvar]
+  if (cval === undefined) return true
+
+  const tol = 1e-6  // Matches solver tolerance for practical floating-point comparisons
+  const tolerance = Math.abs(cval) * tol + tol
+
+  // Check each expression in ceqn (skip index 0 which is the cvar)
+  for (let i = 1; i < cell.ceqn.length; i++) {
+    const expr = cell.ceqn[i]
+    if (!expr || expr.trim() === '') continue
+
+    const result = vareval(expr, values)
+    if (result.error) return true
+
+    if (Math.abs(result.value - cval) > tolerance) return true
+  }
+
+  return false
+}
+
+// Get set of cell IDs that are violated (for UI highlighting)
+function getViolatedCellIds(cells, values) {
+  const violatedIds = new Set()
+  for (const cell of cells) {
+    if (isCellViolated(cell, values)) {
+      violatedIds.add(cell.id)
+    }
+  }
+  return violatedIds
+}
+
+// Check constraints for solver purposes (only cells with explicit constraints like a=b)
+// Used by solveConstraints to know which constraints to try to satisfy
 function checkConstraints(cells, values) {
   const violations = []
   const tol = 1e-9
-  
+
   for (const cell of cells) {
-    if (cell.expressions.length < 2) continue
-    
-    const results = cell.expressions.map(expr => {
+    // Only check cells that actually have constraints (multiple expressions or expr=number)
+    if (!cell.hasConstraint) continue
+
+    // Skip elist[0] (the vname/nonce) - only check actual expressions in elist[1:]
+    const exprs = cell.ceqn.slice(1)
+    if (exprs.length < 2) continue  // Need at least 2 expressions to compare
+
+    const results = exprs.map(expr => {
       const r = vareval(expr, values)
       return r.error ? null : r.value
     })
-    
+
     if (results.some(r => r === null)) {
       violations.push({ cell, message: 'Evaluation error' })
       continue
     }
-    
+
     const first = results[0]
     const tolerance = Math.abs(first) * tol + tol
     for (let i = 1; i < results.length; i++) {
@@ -775,38 +800,25 @@ function checkConstraints(cells, values) {
 }
 
 // Solve constraints by adjusting unfixed variables
+// Uses elist which includes vname at index 0
 function solveConstraints(cells, values, fixedVars, changedVar) {
   const newValues = { ...values }
 
-  const cellByLabel = new Map(cells.map(cell => [cell.label, cell]))
+  const cellByCvar = new Map(cells.map(cell => [cell.cvar, cell]))
 
   function isEmptyExprVar(varName) {
-    const cell = cellByLabel.get(varName)
+    const cell = cellByCvar.get(varName)
     if (!cell) return false
-    if (cell.expressions.length === 0) return true
-    const expr = cell.expressions[0]
+    // Empty if elist only has vname and no other expressions
+    if (cell.ceqn.length <= 1) return true
+    const expr = cell.ceqn[1]  // First expression after vname
     return !expr || expr.trim() === ''
   }
-
-  /*
-  // Previous approach (commented out): heuristic prioritization of which variable to solve for.
-  // Replaced with a try-each-variable approach that reverts on failure.
-  const cellByLabel = new Map(cells.map(cell => [cell.label, cell]))
-  function varPriority(varName) {
-    const cell = cellByLabel.get(varName)
-    if (!cell) return 3
-    const expr = cell.expressions[0]
-    if (!expr || expr.trim() === '') return 0
-    const vars = findVariables(expr)
-    if (vars.size === 0) return 2
-    return 1
-  }
-  */
 
   function varsInConstraintInOrder(cell) {
     const vars = []
     const seen = new Set()
-    for (const expr of cell.expressions) {
+    for (const expr of cell.ceqn) {
       for (const v of findVariables(expr)) {
         if (seen.has(v)) continue
         seen.add(v)
@@ -815,15 +827,15 @@ function solveConstraints(cells, values, fixedVars, changedVar) {
     }
     return vars
   }
-  
+
   for (let pass = 0; pass < 10; pass++) {
     const violations = checkConstraints(cells, newValues)
     if (violations.length === 0) break
-    
+
     let madeProgress = false
     for (const { cell } of violations) {
-      if (cell.expressions.length < 2) continue
-      
+      if (!cell.hasConstraint) continue  // Only solve cells with actual constraints
+
       // Find all variables and which are adjustable
       const adjustable = varsInConstraintInOrder(cell)
         .filter(v => !fixedVars.has(v) && v !== changedVar)
@@ -835,9 +847,11 @@ function solveConstraints(cells, values, fixedVars, changedVar) {
 
       for (const varToSolve of adjustable) {
         // Find target (expression without varToSolve) and solve expression (one that contains varToSolve)
+        // Skip elist[0] which is the vname - we want actual expressions
         let targetExpr = null, solveExpr = null
 
-        for (const expr of cell.expressions) {
+        for (let i = 1; i < cell.ceqn.length; i++) {
+          const expr = cell.ceqn[i]
           const vars = findVariables(expr)
           if (vars.has(varToSolve)) {
             if (!solveExpr) solveExpr = expr
@@ -866,10 +880,10 @@ function solveConstraints(cells, values, fixedVars, changedVar) {
         newValues[varToSolve] = oldVal
       }
     }
-    
+
     if (!madeProgress) break
   }
-  
+
   return newValues
 }
 
@@ -883,6 +897,7 @@ let state = {
   symbols: {},
   values: {},
   fixedVars: new Set(),
+  userEditedVars: new Set(),  // Track variables the user has directly edited
   errors: [],
   currentRecipeKey: ''
 }
@@ -899,12 +914,16 @@ function parseRecipe() {
     state.cells = []
     state.symbols = {}
     state.values = {}
+    state.userEditedVars = new Set()
     state.errors = []
     $('recipeOutput').style.display = 'none'
     $('copySection').style.display = 'none'
     updateRecipeDropdown()
     return
   }
+
+  // Clear user edits when recipe changes
+  state.userEditedVars = new Set()
   
   // Parse
   let cells = extractCells(text)
@@ -924,10 +943,10 @@ function parseRecipe() {
 
   if (allErrors.length > 0) {
     for (const cell of cells) {
-      if (values[cell.label] !== undefined) continue
-      const previousValue = previousValues[cell.label]
+      if (values[cell.cvar] !== undefined) continue
+      const previousValue = previousValues[cell.cvar]
       if (typeof previousValue === 'number' && isFinite(previousValue)) {
-        values[cell.label] = previousValue
+        values[cell.cvar] = previousValue
       }
     }
   }
@@ -962,7 +981,7 @@ function renderRecipe() {
   
   const criticalErrors = state.errors
 
-  const violatedCellIds = new Set(checkConstraints(state.cells, state.values).map(v => v.cell.id))
+  const violatedCellIds = getViolatedCellIds(state.cells, state.values)
 
   function renderRecipeBody({ disableInputs, invalidCellIds }) {
     // Find all HTML comment ranges to strip them from output
@@ -1005,14 +1024,14 @@ function renderRecipe() {
       }
 
       // Render the cell as input field
-      const value = state.values[cell.label]
+      const value = state.values[cell.cvar]
       const displayValue = formatNum(value)
-      const isFixed = state.fixedVars.has(cell.label)
+      const isFixed = state.fixedVars.has(cell.cvar)
       const isInvalid = invalidCellIds.has(cell.id)
       const title = `${cell.urtext}`.replace(/"/g, '&quot;')
       const disabledAttr = disableInputs ? ' disabled' : ''
 
-      html += `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''} ${isInvalid ? 'invalid' : ''}" data-label="${cell.label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}"${disabledAttr}>`
+      html += `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''} ${isInvalid ? 'invalid' : ''}" data-label="${cell.cvar}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}"${disabledAttr}>`
 
       lastIndex = cell.endIndex
     }
@@ -1096,93 +1115,73 @@ function escapeHtml(text) {
 
 function handleFieldInput(e) {
   const input = e.target
-  const label = input.dataset.label
   const cellId = input.dataset.cellId
   const newValue = toNum(input.value)
-  
+
   // Invalid number format - just mark invalid, don't change state
   if (newValue === null || !isFinite(newValue)) {
     input.classList.add('invalid')
     return
   }
-  
+
   const cell = state.cells.find(c => c.id === cellId)
   if (!cell) return
-  
-  // Work on a COPY of values - only commit if constraints can be satisfied
-  let testValues = { ...state.values }
-  
-  // Apply the new value
-  const expr = cell.expressions[0]
-  const varsInExpr = findVariables(expr)
-  
-  // Track which variables are in the user's expression (shouldn't be adjusted by constraint solver)
-  const userExprVars = new Set(varsInExpr)
 
-  let solveSucceeded = false
-  if (varsInExpr.size > 0) {
-    // This field's value comes from an expression - solve for an unfixed variable
-    const unfixed = [...varsInExpr].filter(v => !state.fixedVars.has(v))
-    if (unfixed.length > 0) {
-      const solved = solve(expr, unfixed[0], newValue, testValues)
-      if (solved !== null) {
-        testValues[unfixed[0]] = solved
-        solveSucceeded = true
-      }
+  // Build equations for solving
+  // Per spec: "A cell is always treated temporarily as frozen while it's being
+  // edited" - meaning we add its new value as a constraint.
+  // Per spec: "If its ceqn includes a bare number, it's frozen" - but initially
+  // bare numbers go to cval not ceqn, so cells with values are NOT frozen by
+  // default. Only user-frozen cells (state.fixedVars) are frozen.
+  const eqns = state.cells.map(c => {
+    const eqn = [...c.ceqn]  // Keep expressions (e.g., '12x')
+    if (c.id === cellId) {
+      // Edited cell: temporarily frozen at new value
+      eqn.push(newValue)
+    } else if (state.fixedVars.has(c.cvar)) {
+      // User-frozen cell: frozen at current value
+      eqn.push(state.values[c.cvar])
     }
-  } else {
-    // This field is a simple value - set it directly
-    testValues[label] = newValue
-    solveSucceeded = true
-    userExprVars.add(label)  // The label IS the variable being set, so protect it
-  }
+    // Note: cells with bare values in definition (cell.value) are NOT frozen
+    // by default - they just have initial values. The solver is free to change
+    // them to satisfy constraints.
+    return eqn
+  })
 
-  // If we couldn't solve for the user's input, mark invalid and stop
-  if (!solveSucceeded) {
-    input.classList.add('invalid')
-    return
-  }
+  // Frozen = only user-frozen cells (not the edited cell - we added its
+  // constraint above but the solver may need to derive other values from it)
+  const frozen = new Set(state.fixedVars)
 
-  // Temporarily treat variables in user's expression as fixed while solving constraints
-  const tempFixed = new Set(state.fixedVars)
-  userExprVars.forEach(v => tempFixed.add(v))
+  // Solve
+  const seedValues = { ...state.values, [cell.cvar]: newValue }
+  const newValues = solvem(eqns, seedValues, frozen)
 
-  // Try to solve all constraints with the new value
-  testValues = solveConstraints(state.cells, testValues, tempFixed, label)
-  
-  // Recompute derived values
-  testValues = recomputeValues(state.cells, testValues)
-  
-  // Check if constraints are satisfied
-  const violations = checkConstraints(state.cells, testValues)
+  // Commit the new values
+  state.values = newValues
 
-  // Build set of cell IDs with violated constraints
-  const violatedCellIds = new Set(violations.map(v => v.cell.id))
+  // Get ALL violated cells for UI highlighting
+  const violatedCellIds = getViolatedCellIds(state.cells, state.values)
 
-  if (violations.length === 0) {
-    // Success - commit the valid values and update all fields
-    state.values = testValues
-    $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
-      if (field === input) {
-        field.classList.remove('invalid')
-        return
-      }
-      field.value = formatNum(state.values[field.dataset.label])
-      field.classList.remove('invalid')
-    })
-
-    updateSliderDisplay()
-  } else {
-    // Constraints violated - don't commit, but mark all violated constraint fields as invalid
-    // (The current field keeps the user's input; other fields keep their current display)
-    $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
+  // Update all fields with new values and highlight violations
+  $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
+    if (field === input) {
+      // Don't overwrite what user is typing, but do update invalid status
       if (violatedCellIds.has(field.dataset.cellId)) {
         field.classList.add('invalid')
       } else {
         field.classList.remove('invalid')
       }
-    })
-  }
+      return
+    }
+    field.value = formatNum(state.values[field.dataset.label])
+    if (violatedCellIds.has(field.dataset.cellId)) {
+      field.classList.add('invalid')
+    } else {
+      field.classList.remove('invalid')
+    }
+  })
+
+  updateSliderDisplay()
 }
 
 // Recompute all field values based on current variable values (mutates state.values)
@@ -1191,45 +1190,51 @@ function recomputeAllValues() {
 }
 
 // Pure version: recompute derived values and return new values object
-function recomputeValues(cells, values) {
+// Uses elist where [0] is vname and [1:] are expressions
+// skipVars: optional Set of vnames that should not be recomputed (user-edited vars)
+function recomputeValues(cells, values, skipVars = new Set()) {
   const newValues = { ...values }
-  
+
   // Multiple passes to handle dependencies
   for (let pass = 0; pass < 10; pass++) {
     let changed = false
-    
+
     for (const cell of cells) {
-      const expr = cell.expressions[0]
+      // Don't recompute user-edited variables - their values should stick
+      if (skipVars.has(cell.cvar)) continue
+
+      // elist[1] is the first expression (elist[0] is vname)
+      if (cell.ceqn.length < 2) continue
+      const expr = cell.ceqn[1]
       if (!expr || expr.trim() === '') continue
-      
+
       const vars = findVariables(expr)
-      
+
       // If all variables are defined, recompute this value
       const allDefined = [...vars].every(v => newValues[v] !== undefined)
       if (allDefined && vars.size > 0) {
         const result = vareval(expr, newValues)
         if (!result.error && isFinite(result.value)) {
-          const oldVal = newValues[cell.label]
+          const oldVal = newValues[cell.cvar]
           if (oldVal === undefined || Math.abs(result.value - oldVal) > 1e-10) {
-            newValues[cell.label] = result.value
+            newValues[cell.cvar] = result.value
             changed = true
           }
         }
       }
     }
-    
+
     if (!changed) break
   }
-  
+
   return newValues
 }
 
 function handleFieldBlur(e) {
-  // If any field is invalid, revert ALL fields to state.values (which is always consistent)
+  // Revert ALL fields to state.values (which is always consistent)
   // Per README: "as soon as you clicked away from field c, it would recompute
   // itself as the only value that makes all the equations true"
-  const violations = checkConstraints(state.cells, state.values)
-  const violatedCellIds = new Set(violations.map(v => v.cell.id))
+  const violatedCellIds = getViolatedCellIds(state.cells, state.values)
 
   $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
     field.value = formatNum(state.values[field.dataset.label])
@@ -1304,7 +1309,7 @@ function getScaledRecipeText() {
     if (cell.inComment) {
       result += cell.raw
     } else {
-      result += formatNum(state.values[cell.label])
+      result += formatNum(state.values[cell.cvar])
     }
     
     lastIndex = cell.endIndex

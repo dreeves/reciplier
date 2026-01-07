@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Reciplier Quals</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #eee; }
+    h1 { color: #6cf; }
+    #output { white-space: pre-wrap; line-height: 1.6; }
+    .pass { color: #4f4; }
+    .fail { color: #f44; }
+  </style>
+</head>
+<body>
+  <h1>Reciplier Quals</h1>
+  <div id="output"></div>
+
+  <script src="util.js"></script>
+  <script>
+    // Capture console output to display in page
+    const output = document.getElementById('output')
+    const originalLog = console.log
+    console.log = function(...args) {
+      originalLog.apply(console, args)
+      const text = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')
+      const line = document.createElement('div')
+      if (text.startsWith('\u2713')) {
+        line.className = 'pass'
+      } else if (text.startsWith('\u2717')) {
+        line.className = 'fail'
+      }
+      line.textContent = text
+      output.appendChild(line)
+    }
+
+    // Run quals on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      const result = runQuals()
+      console.log('\n' + result)
+    })
+  </script>
+</body>
+</html>

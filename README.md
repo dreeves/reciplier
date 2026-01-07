@@ -44,18 +44,18 @@ factor, x.
 (Technical note: We support Mathematica-style arithmetic syntax where "2x" means
 "2*x".)
 
-Every expression optionally has a variable name (vname) for referencing it in 
-other expressions. It's an error if you specify the same vname for two
-expressions but you can reference a variable as much as you want. Like how the 
+Every expression optionally has a variable name (see next section) for 
+referencing it in other expressions. It's an error if you specify the same name
+for two expressions but you can reference a variable as much as you want. Like how the 
 first line of the above recipe labels the diameter as d and later in the 
 bulleted list we define r as d/2 and mention the diameter again. It's actually
 unnecessary there to say {d = 2r} rather than just {d} since we've defined r as
 d/2, which is equivalent, but it doesn't hurt to add a redundant constraint.
 
-(Implementation note: As a preprocessing pass, add nonce vnames to every 
+(Implementation note: As a preprocessing pass, add nonce cvars to every 
 expression that doesn't have one. E.g., {1x} and {3x} become {var01: 1x} and
 {var02: 3x}. That way the rest of the code can count on a consistent format: a
-vname, a colon, and then one or more expressions separated by equal-signs.)
+cvar, a colon, and then one or more expressions separated by equal-signs.)
 
 (Note on prior art: Embedded Ruby (ERB) syntax has `<% code to just evaluate %>`
 and `<%= code to print the output of %>` and `<%# comments %>`.)
@@ -96,44 +96,65 @@ insta-update.
 
 A cell is a data structure that includes the following three fields:
 
-1. `vname` is the name of the variable corresponding to this cell
-2. `value` is the current value assigned to variable `vname`
-3. `elist` is the list of expressions that are constrained to be equal to each
-other and to `value` (but not any bare numbers)
+* `cvar` [previously `vname`] is the name of the variable corresponding to this cell
+* `cval` [previously `value`] is the current value assigned to this cell's variable
+* `ceqn` [previously `elist`] (pronounced "sequin") is a list of one or more expressions that are constrained to be equal to each other and to cval
 
-For example, a cell defined as `{x: 3y = z}` will have `vname` set to `x` and 
-`elist` set to [`x`, `3y`, `z`] with `value` initially undefined. A cell defined
-as `{x: y = 1}` will have `vname` set to `x`, `elist` set to [`x`, `y`] and
-`value` set to `1`. Again, `elist` excludes any expressions in the equation that
-are bare numbers. Instead, `value` is set to any bare number specified in the 
-cell definition. (More than one bare number in the definition of a cell is an
-error).
+Initially we exclude from ceqn any expressions that are bare numbers. Instead,
+cval is set to any bare number specified in the cell definition. (More than one
+bare number in the definition of a cell is an error).
 
-(Note: The previous paragraph says that a cell with no bare number would yield a
-`value` that was initially undefined. I think that's fine and the solver, if we
-pass it a set of initial assignments that includes any that are undefined, it
-should use 1 as an initial guess.)
+For example, a cell defined as `{x: 3y = z}` will have cvar set to `x` and ceqn
+set to [`x`, `3y`, `z`] with cval initially undefined. A cell defined as 
+`{x: y = 1}` will have cvar set to `x`, ceqn set to [`x`, `y`] and cval set 
+to 1. A cell like `{v:}` will have cvar `v`, cval undefined, and ceqn [`v`].
 
-Every cell has a corresponding field in the UI and `value` is always the current
-value assigned to that cell's variable and shown in that cell's field. (Since 
-there's a one-to-one correspondence between cells and fields and variables, we
-use all three terms interchangeably but, conceptually, a cell is an abstraction
-representing an assignment of a value to a variable along with constraints, and
-a field is a UI element.)
+(Note that the solver needs initial values for it's solving and if you pass in
+any that are undefined it defaults them to 1, so `{v:}` is functionally the same
+as `{v:1}` and similarly for the other examples, where no bare number in the 
+equations after the colon is functionally the same as including an `= 1`.)
 
-At every moment, every cell's field is shown in red if `value` differs from any
-of the expressions in `elist`, given the assignments of all variables.
+Every cell has a corresponding field in the UI and cval is always the current
+value assigned to that cell's variable and shown in that cell's field. That
+stays true keystroke by keystroke as a cell is edited.
 
-Now say the user edits cell c, having a `vname` of x, to have `value` v. We add
-v to the `elist` for c and then we send all the `elist`s to the solver, with the
-current `value`s as the initial assignments. Any cell marked frozen gets its
-`value` appended to `elist` as well. That causes the current assignments to 
-frozen variables to be treated as additional constraints.
+(Terminology: Since there's a one-to-one correspondence between cells and fields
+and variables, we use all three terms interchangeably but, conceptually, a cell
+is an abstraction representing an assignment of a value to a variable along with
+constraints. A variable in this context means one of the symbols we're assigning
+to as part of the constraint satisfaction problem Reciplier is solving. And of
+course fields in this context refer to the UI elements where the user can make
+explicit assignments of values to variables or see those values change.)
+
+At every moment, every cell's field is shown in red if cval differs from any of
+the expressions in ceqn, given the assignments of all variables.
+
+Any cell at any time may be marked as frozen. The effect of that is the cell's
+cval is appended to its ceqn. In other words, cvar = cval is treated as one of
+the contraints. Unfreezing removes cval from ceqn again, meaning ceqn once again
+has no bare numbers. A cell is always treated temporarily as frozen while it's
+being edited. If it started frozen and you edit it, it stays frozen at its new
+value.
+
+There's no extra flag or state variable for whether a cell is frozen. If its
+ceqn includes a bare number, it's frozen; if not, it isn't. Freezing appends
+cval to ceqn; unfreezing removes any bare number from ceqn. (Again, more than
+one bare number in ceqn is an error.)
+
+Say the user edits cell c, defined with `{x: 3y = 6}` so having a cvar of `x`,
+to have a cval of 12 instead of the initial 6. And suppose c is marked unfrozen,
+so ceqn is [`3y`]. While c is being edited, we temporarily append the current
+cval of 12 to c's ceqn and send all the ceqns and cvals to the solver.
+(Implementation note: we're not literally appending to ceqn, we're just sending
+all the current ceqns as they are except we're sending c's ceqn with c's cval 
+tacked on.)
 
 If the solver finds a solution, all the cells insta-update. If not, and if any
 cells besides c are frozen (c's frozen status doesn't matter since we're editing
 it), put up a banner saying "Overconstrained! Try unfreezing cells.". If the
-solver finds no solution despite all cells other than c being unfrozen
+solver finds no solution despite all cells other than c being unfrozen, put up a
+banner saying "No solution found". These banners are shown live, while the user
+is typing, i.e., they're recomputed on every keystroke.
 
 ## Use Cases Beyond Recipes
 
@@ -151,7 +172,7 @@ Or without solving for the hypotenuse:
 Sanity check: {a^2 + b^2 = c^2} is the squared hypotenuse.
 ```
 
-We also want some slick UI to mark fields as fixed. Maybe you want to fix side b
+We also want a slick UI to mark fields as fixed. Maybe you want to fix side b
 and see how changing side a affects side c. Without that ability it would be 
 arbitrary which of the other fields would change when you edited one.
 
@@ -202,63 +223,63 @@ Scratchpad:
 * Peloton's distance to the line: {pd: d+gd}
 ```
 
-It's like making a spreadsheet and doing what-if analysis. We can put that in 
-the dropdown of recipes and call it "Breakaway Biscuits".
+It's like making a spreadsheet and doing what-if analysis. We've put that and 
+some of the other examples from this document in the dropdown of recipes.
 
 Here's a related one for making sure we finish a family bike tour on time:
 
 ```
-Distance:        {d:66} miles               <!-- {d = v*t}                 -->
-Start time:      {h:6}:{m:45}am             <!-- {s: h+m/60} & {s = e-d/u} -->
-End time:        {H:12}:{M:52} (24H format) <!-- {e: H+M/60} & {e = s+d/u} -->
-Break 1:         {b1h:0}h{b1m:26}m          <!-- {b1: b1h+b1m/60 }         -->
-Break 2:         {b2h:0}h{b2m:37}m          <!-- {b2: b2h+b2m/60 }         -->
-Break 3:         {b3h:0}h{b3m:00}m          <!-- {b3: b3h+b3m/60 }         -->
-Total breaks:    {b: b1+b2+b3}              <!-- {b = e-s-d/v}             -->
-Avg speed:       {v: d/t}                   <!-- {v = d/(e-s-b)}           -->
-Unadjusted spd:  {u: d/w}                   <!-- {u = d/(e-s)}             -->
-Wall clock time: {wh:}h{wm:}m               <!-- {w: wh+wm/60 = e-s}       -->
-Riding time:     {th:}h{tm:}m               <!-- {t: th+tm/60 = e-s-b}     -->
+Distance:        {d:66} miles
+Start time:      {h:6}:{m:45}am             <!-- {s: h+m/60} hours  -->
+End time:        {H:13}:{M:00} (24H format) <!-- {e: H+M/60} hours  -->
+Wall clock time: {w: e-s} hours = {floor(w)}h{(w-floor(w))*60} minutes
+Rest stop 1:     {b1:} hours = {b1*60 = 26} minutes
+Rest stop 2:     {b2:} hours = {b2*60 = 37} minutes
+Rest stop 3:     {b3:0} hours = {b3*60} minutes
+Total breaks:    {b: b1+b2+b3} hours
+Riding time:     {t: w-b} hours = {floor(t)}h{(t-floor(t))*60}m
+Avg speed:       {v: d/t} mph
+Unadjusted spd:  {u: d/w} mph
 ```
-TODO: the recipe in the dropdown is a much nicer version of this now.
 
 (This was originally
 [a spreadsheet](https://docs.google.com/spreadsheets/d/1LQUDFSLpxtOojcSSLMFWPyRS70eCP59TQHppnu14Px0/edit?gid=0#gid=0)
-but it was surprisingly cumbersome that way. For starters, you have to give
-explicit formulas for each variable you may want to infer from the others. You 
-also have to keep values and formulas separate in a spreadsheet.)
+but it was surprisingly cumbersome that way. You have to give explicit formulas
+for each variable you may want to infer from the others. You also have to keep
+values and formulas separate in a spreadsheet.)
 
 ## Errors and Corner Cases
 
 Fail loudly in the following cases:
 
-1. Undefined symbol: Any expression in any `elist` contains a symbol that does
-not match the `vname` of any cell.
+1. Duplicate variable: More than one cell with the same cvar.
 
-2. Logical impossibility: The template itself contains contradictions. As
+2. Undefined symbol: Any expression in any ceqn contains a symbol that does not
+match the cvar of any cell.
+
+3. Logical impossibility: The template itself contains contradictions. As
 discussed in the example with Pythagorean triples.
 
-3. Syntax error. E.g., nested curly braces or anything else we can't parse.
+4. Syntax error. E.g., nested curly braces or anything else we can't parse.
 
-4. Unlabeled constant: If any expression is a bare number without a
-human-assigned `vname`. Reasons to treat it as an error: (1) It doesn't make
-sense to have a field that when you change it it has zero effect on anything
-else. (2) If you really want that for some reason, give the field an explicit
-`vname`.
+5. Unlabeled constant: If any expression is a bare number without a
+human-assigned cvar. Reasons to treat it as an error: (1) It doesn't make sense
+to have a field that when you change it it has zero effect on anything else. (2)
+If you really want that for some reason, just give the field an explicit cvar.
 
-5. Unreferenced variable: A labeled cell (one with an explicit `vname`) isn't
+6. Unreferenced variable: A labeled cell (one with an explicit cvar) isn't
 referenced by any other cell. Like if you define {tau: 6.28} and then never use
 it. If you're doing that on purpose, like you want that constant defined for use
 in the future, the workaround is somehting like 
 `{tau: 6.28} <!-- {tau} not currently used -->`.
 You're basically adding a comment that makes the linter shut up.
 
-6. Multiple values: A cell has more than one numerical value, even if it's the
+7. Multiple values: A cell has more than one numerical value, even if it's the
 same value. Like {x: 1 = 2} or {x: 1 = y*z = 1}.
 
-7. Self-reference: A cell references its own `vname` and no other variables.
+8. Self-reference: A cell references its own cvar and no other variables.
 
-8. Unknown unknowns: Other errors we haven't thought of yet or ways the template
+9. Unknown unknowns: Other errors we haven't thought of yet or ways the template
 file violates any expectations. Anti-Postel FTW.
 
 ## Future Work
@@ -300,20 +321,48 @@ the net-elevation cell is frozen.
 
 7. Fix the cheese wheel example in the spec and in script.js.
 
-8. Bug report: Load the Pythagorean Triple Pizza recipe and change the "x" cell from 1 to 10. Expectata: Cell "a" changes to 30 since it's 3x, cell "b" changes to 40 since it's "4x", and cell "c" ... TODO
+8. Bug: any cell that's defined with a bare number, like {x: 1}, should start
+out frozen. Again, having a bare number in ceqn is what it means for a cell to
+be frozen. 
 
-9. Add Beeminder commitment dial example.
+9. Any arithmetic expression that evaluates to a number is a "bare number" the
+way we've defined it here. (Probably go through this spec and use a better term,
+like "constant".)
+
+SCRATCH AREA:
+
+Bug reports (also add quals for these, TDD-style)...
 
 ---
 
-To clarify in the spec:
+Replicata: 
 
-1. Editing a cell adds, while editing, a temporary constraint x = v (not permanent elist mutation).
-2. Freezing a cell adds y = value(y) to the elist. Unfreezing removes it again. But what if the cell already contains a bare number in the cell definition. Do we need to keep track of that? Like {y: 3x = 7} you can toggle that frozen/unfrozen and the "= 7" constraint will be appended to elist or not. So far so good. For {y: 3x} if you freeze that at a value of 7, we add the "= 7" to elist, but then unfreezing it needs to go back to just {y: 3x} not {y: 3x = 7}. Or, wait, maybe that doesn't actually matter? Maybe everything is fine with no special cases? Maybe that's true!
-3. Define “overconstrained” as unsat under (base + frozen + edit) constraints, and banner conditions. [huh?]
-4. If editing a frozen cell, does it stay frozen at the new value? (by default yes, but see future work item 4)
-5. Should “overconstrained” banner show only on blur/Enter or live while typing? (by default, live)
-6. Bare numeric literals are initial assignments, not constraints unless frozen/equated.
+1. Load the Pythagorean Triple Pizza recipe.
+2. Change the "x" cell from 1 to 10. 
 
-TODO: crap, i think we do need to privilege cells with bare numbers in the definition. 
-Or, wait, I think the anti-magic answer is that the inclusion of a bare number means the cell is frozen until you unfreeze it.
+Expectata: 
+
+Cell "a" changes to 30 since it's 3x, cell "b" changes to 40 since it's "4x", and cell "c" has TODO
+
+---
+
+Replicata:
+
+1. Load the crepes recipe
+2. Change the egg field from 12 to 24
+
+Expectata:
+
+That all the fields double. In particular, x=2.
+
+Resultata:
+
+The egg field just becomes red and nothing else changes.
+
+---
+
+Qual:
+
+solvem([['x', 1], ['eggs', '12x', 24]], {x:1, eggs:12})
+
+Expected result: No Solution.
