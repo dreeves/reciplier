@@ -233,6 +233,10 @@ function toNum(x) {
 
 function formatNum(num) {
   if (typeof num !== 'number' || !isFinite(num)) return '?'
+  // Snap to nearest integer if within 0.0001 (handles solver precision issues)
+  if (Math.abs(num - Math.round(num)) < 0.0001) {
+    num = Math.round(num)
+  }
   // Show up to 4 decimal places, trim trailing zeros
   let s = num.toFixed(4).replace(/\.?0+$/, '')
   if (s === '-0') s = '0'

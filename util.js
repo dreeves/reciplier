@@ -266,34 +266,100 @@ function solvem(eqns, vars, frozenVars = new Set()) {
     return countViolationsIn(values)
   }
 
-  function propagateDerivedIn(env) {
+  // directlyPinned: variables that appear in equations with literal numbers (truly frozen)
+  const directlyPinned = new Set()
+  for (const eq of eqns) {
+    const hasNumber = eq.some(e => typeof e === 'number')
+    if (hasNumber) {
+      for (const e of eq) {
+        if (isSimpleVar(e)) directlyPinned.add(e)
+      }
+    }
+  }
+
+  // pinnedVars: trustworthy values (includes transitive derivations from frozen vars)
+  // Used for target selection in solving, not for preventing updates
+  const pinnedVars = new Set(directlyPinned)
+  for (let i = 0; i < 10; i++) {
+    let added = false
+    for (const eq of eqns) {
+      if (eq.length !== 2) continue
+      const [e0, e1] = eq
+      for (const { simple, expr } of [{simple: e0, expr: e1}, {simple: e1, expr: e0}]) {
+        if (!isSimpleVar(simple) || pinnedVars.has(simple)) continue
+        if (typeof expr === 'number') { pinnedVars.add(simple); added = true; continue }
+        if (typeof expr !== 'string') continue
+        const vars = findVariables(expr)
+        if (vars.size > 0 && [...vars].every(v => pinnedVars.has(v))) {
+          pinnedVars.add(simple)
+          added = true
+        }
+      }
+    }
+    if (!added) break
+  }
+
+  // protected: vars that were just solved and shouldn't be overwritten
+  function propagateDerivedIn(env, protected = new Set()) {
     let changed = false
+    // Only directly pinned vars (frozen) and protected vars prevent overwrites
+    const effectivelyPinned = new Set([...directlyPinned, ...protected])
 
     for (const eqn of eqns) {
       if (eqn.length !== 2) continue
 
       const [e0, e1] = eqn
+
       const pairs = [
-        { lhs: e0, rhs: e1 },
-        { lhs: e1, rhs: e0 },
+        { simpleVar: e0, expr: e1 },
+        { simpleVar: e1, expr: e0 },
       ]
 
-      for (const { lhs, rhs } of pairs) {
-        if (typeof rhs !== 'string') continue
-        if (!isSimpleVar(lhs)) continue
-        if (frozen.has(lhs)) continue
+      for (const { simpleVar, expr } of pairs) {
+        if (!isSimpleVar(simpleVar)) continue
+        if (typeof expr !== 'string' && typeof expr !== 'number') continue
 
-        const rhsVars = findVariables(rhs)
-        const allKnown = [...rhsVars].every(v => env[v] !== undefined)
-        if (!allKnown) continue
+        const exprVars = typeof expr === 'string' ? findVariables(expr) : new Set()
+        const allExprVarsKnown = [...exprVars].every(v => env[v] !== undefined)
 
-        const r = vareval(rhs, env)
-        if (r.error || !isFinite(r.value)) continue
+        if (allExprVarsKnown) {
+          const exprResult = typeof expr === 'number'
+            ? { value: expr, error: null }
+            : vareval(expr, env)
+          if (exprResult.error || !isFinite(exprResult.value)) continue
 
-        const oldVal = env[lhs]
-        if (oldVal === undefined || Math.abs(r.value - oldVal) > tol) {
-          env[lhs] = r.value
-          changed = true
+          const oldVal = env[simpleVar]
+          if (oldVal === undefined) {
+            env[simpleVar] = exprResult.value
+            changed = true
+          } else if (Math.abs(exprResult.value - oldVal) > tol) {
+            // Conflict: try solving for unpinned vars in expr instead of overwriting
+            const unpinned = [...exprVars].filter(v => !effectivelyPinned.has(v))
+            if (effectivelyPinned.has(simpleVar) && unpinned.length > 0) {
+              for (const v of unpinned) {
+                const solved = solveFor(expr, v, oldVal, env)
+                if (solved !== null) {
+                  env[v] = solved
+                  changed = true
+                  break
+                }
+              }
+            } else if (!effectivelyPinned.has(simpleVar)) {
+              env[simpleVar] = exprResult.value
+              changed = true
+            }
+          }
+        } else if (typeof expr === 'string' && isSimpleVar(simpleVar) &&
+                   env[simpleVar] !== undefined) {
+          const unknowns = [...exprVars].filter(v => env[v] === undefined)
+          if (unknowns.length === 1) {
+            const varToSolve = unknowns[0]
+            const solved = solveFor(expr, varToSolve, env[simpleVar], env)
+            if (solved !== null) {
+              env[varToSolve] = solved
+              changed = true
+            }
+          }
         }
       }
     }
@@ -330,11 +396,16 @@ function solvem(eqns, vars, frozenVars = new Set()) {
 
     if (evaluable.length === 0) return candidates
 
-    // Sort to prefer: numbers first, then complex expressions, then simple variables
-    // This way we use complex expressions as targets and solve for simple variables
+    // Sort to prefer as target: numbers > pinned simple > fully-pinned complex > other complex > unpinned simple
     evaluable.sort((a, b) => {
       if (a.isNumber !== b.isNumber) return a.isNumber ? -1 : 1
-      if (a.isSimple !== b.isSimple) return a.isSimple ? 1 : -1  // simple vars last
+      const aPinnedSimple = a.isSimple && pinnedVars.has(a.expr)
+      const bPinnedSimple = b.isSimple && pinnedVars.has(b.expr)
+      if (aPinnedSimple !== bPinnedSimple) return aPinnedSimple ? -1 : 1
+      const aFullyPinned = !a.isSimple && a.vars && [...a.vars].every(v => pinnedVars.has(v))
+      const bFullyPinned = !b.isSimple && b.vars && [...b.vars].every(v => pinnedVars.has(v))
+      if (aFullyPinned !== bFullyPinned) return aFullyPinned ? -1 : 1
+      if (a.isSimple !== b.isSimple) return a.isSimple ? 1 : -1
       return 0
     })
 
@@ -385,50 +456,51 @@ function solvem(eqns, vars, frozenVars = new Set()) {
       const candidates = findSolvableCandidates(eqn)
       if (candidates.length === 0) continue
 
-      // Try each candidate and pick the one that improves things most
-      const violationsBefore = countViolations()
-      let bestCandidate = null
-      let bestViolations = violationsBefore + 1  // Accept changes that keep violations same
-      let bestSatisfiesCurrentEqn = false
-      let bestSatisfyingCandidate = null
-      let bestSatisfyingViolations = Infinity
-
+      // Group candidates by expression (can solve one var per distinct expr)
+      const byExpr = new Map()
       for (const cand of candidates) {
-        const { varName, expr, target } = cand
-        const newVal = solveFor(expr, varName, target, values)
-
-        const oldVal = values[varName]
-
-        if (newVal !== null && newVal !== oldVal) {
-          const temp = { ...values, [varName]: newVal }
-
-          for (let p = 0; p < 10; p++) {
-            if (!propagateDerivedIn(temp)) break
-          }
-
-          const violationsAfter = countViolationsIn(temp)
-          const satisfiesCurrentEqn = checkEquationIn(eqn, temp).satisfied
-
-          if (satisfiesCurrentEqn && violationsAfter < bestSatisfyingViolations) {
-            bestSatisfyingViolations = violationsAfter
-            bestSatisfyingCandidate = { varName, newVal, nextValues: temp }
-          }
-
-          if (violationsAfter < bestViolations) {
-            bestViolations = violationsAfter
-            bestCandidate = { varName, newVal, nextValues: temp }
-            bestSatisfiesCurrentEqn = satisfiesCurrentEqn
-          }
-        }
+        if (!byExpr.has(cand.expr)) byExpr.set(cand.expr, [])
+        byExpr.get(cand.expr).push(cand)
       }
 
-      // Commit the best change if it doesn't increase violations
-      const candidateToCommit = bestSatisfyingCandidate ?? bestCandidate
-      const candidateViolations = bestSatisfyingCandidate ? bestSatisfyingViolations : bestViolations
-      const candidateSatisfiesEqn = bestSatisfyingCandidate !== null ? true : bestSatisfiesCurrentEqn
+      // For each expression group, find best candidate (least violations)
+      const violationsBefore = countViolations()
+      const bestCandidates = []
+      for (const [, group] of byExpr) {
+        let bestCand = null
+        let bestViolations = Infinity
+        for (const cand of group) {
+          const trial = { ...values }
+          const newVal = solveFor(cand.expr, cand.varName, cand.target, trial)
+          if (newVal === null) continue
+          trial[cand.varName] = newVal
+          const v = countViolationsIn(trial)
+          if (v < bestViolations) {
+            bestViolations = v
+            bestCand = { ...cand, newVal }
+          }
+        }
+        if (bestCand) bestCandidates.push(bestCand)
+      }
 
-      if (candidateToCommit !== null && (candidateViolations <= violationsBefore || candidateSatisfiesEqn)) {
-        Object.assign(values, candidateToCommit.nextValues)
+      // Apply all best candidates together
+      const temp = { ...values }
+      for (const cand of bestCandidates) {
+        temp[cand.varName] = cand.newVal
+      }
+
+      // Propagate consequences, protecting the vars we just solved
+      const solvedVars = new Set(bestCandidates.map(c => c.varName))
+      for (let p = 0; p < 10; p++) {
+        if (!propagateDerivedIn(temp, solvedVars)) break
+      }
+
+      // Accept if this satisfies the equation or doesn't increase violations
+      const satisfiesCurrentEqn = checkEquationIn(eqn, temp).satisfied
+      const violationsAfter = countViolationsIn(temp)
+
+      if (satisfiesCurrentEqn || violationsAfter <= violationsBefore) {
+        Object.assign(values, temp)
         madeAnyChange = true
       }
     }
@@ -573,6 +645,27 @@ function runQuals() {
       solvem([['x', 1], ['eggs', '12x', 24]], {x: 1, eggs: 12})
     ),
     false)
+
+  // Cheesepan-style constraint chain: A frozen, derive r and d
+  // A = 1/2*tau*r^2 with A=63.585 => r=4.5
+  // r = d/2 => d=9
+  check('solvem: chain derivation from area to diameter',
+    solvem([
+      ['A', 63.585],                    // A frozen at 63.585
+      ['r', 'd/2'],                     // r = d/2
+      ['d'],                            // d is free
+      ['_v', 'A', '1/2*6.28*r^2'],      // constraint: A = 1/2*tau*r^2
+    ], {A: 63.585, r: 1, d: 1, _v: 1}, new Set(['A'])),
+    {A: 63.585, r: 4.5, d: 9})
+
+  // Cheesepan r1: transitive pinning with multi-expression constraint
+  check('solvem: cheesepan r1 transitive derivation',
+    solvem([
+      ['d1', 9], ['r1', 'd1/2'], ['tau', 6.28], ['x', 1],
+      ['r', 'd/2'], ['d'], ['A'],
+      ['_v', 'A', '1/2*tau*r^2', '1/2*tau*r1^2*x'],
+    ], {d1: 9, r1: 1, tau: 6.28, x: 1, r: 1, d: 1, A: 1, _v: 1}, new Set(['d1', 'tau', 'x'])),
+    {d1: 9, r1: 4.5, tau: 6.28, x: 1, r: 4.5, d: 9, A: 63.585, _v: 63.585})
 
   console.log('\n=== Summary ===')
   console.log(`${results.passed} passed, ${results.failed} failed`)

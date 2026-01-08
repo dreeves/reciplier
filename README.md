@@ -94,9 +94,10 @@ insta-update.
 
 A cell is a data structure that includes the following three fields:
 
-* `cvar` [previously `vname`] is the name of the variable corresponding to this cell
-* `cval` [previously `value`] is the current value assigned to this cell's variable
-* `ceqn` [previously `elist`] (pronounced "sequin") is a list of one or more expressions that are constrained to be equal to each other and to cval
+* `cvar` is the name of the variable corresponding to this cell
+* `cval` is the current value assigned to this cell's variable
+* `ceqn` (pronounced "sequin") is a list of one or more expressions that are 
+  constrained to be equal to each other and to cval
 
 (Implementation note: As a preprocessing pass, add nonce cvars to every 
 expression that doesn't have one. E.g., {1x} and {3x} become {var01: 1x} and
@@ -301,25 +302,78 @@ for all labeled cells, and make it easy to dismiss ones you don't need.
 query string. Option 2: encode which template file and encode every variable
 explicitly in the query string.
 
-4. Currently you can freeze a field by double-clicking it and it turns blue.
-That's not discoverable or obvious. Especially if you make edits such that the
-constraints can't be satisfied by editing the nonfrozen fields, it needs to be
-obvious you should unfreeze some fields. Possibly we want an affordance for
-unfreezing everything. It's even possible that that should happen automatically
-if there's no other way to satisfy the constraints.
+4. Double-clicking to freeze/unfreeze is pretty terrible. For one thing, I 
+double-click cells by muscle memory to highlight the current contents of a field
+in order to overwrite it. Worse, if you don't happen to ever double-click a
+cell, freezing/unfreezing is totally undiscoverable.
 
-(I spoke too soon: double-clicking to freeze is terrible because I do that by
-muscle memory to highlight the current contents of a field in order to overwrite
-it.)
+5. I'm thinking we need to go more anti-magic. Currently when you edit a field
+the system just tries changing other variables until something works. That's
+pretty magical. What if instead you could see other fields kind of cross
+themselves out and show the new values implied by your edit? Or, like, if more
+than one cell can change to accommodate your edit you're forced to explicitly
+freeze cells until that's no longer the case?
 
-5. Related to the previous idea, I'm thinking we need to go more anti-magic.
-Currently when you edit a field the system just tries changing other variables
-until something works. That's pretty magical. What if instead you could see
-other fields kind of cross themselves out and show the new values implied by
-your edit? Or, like, if more than one cell can change to accommodate your edit
-you're forced to explicitly freeze cells until that's no longer the case.
+6. Big Anti-Colon Refactor...
 
-6. Wait, do we need a special case for a cell like {x: 0} which is just saying
+
+* Every cell gets a nonce cval, unconditionally.
+* 
+
+
+* If a cell's urtext starts with "x = " or the urtext is just "x" then x is the cvar
+  for that cell.
+* If the first expression other than the cvar (if specified) is a constant then
+  the cell is initially frozen. So if you have a constraint like `{2x+3y = 33}`
+  then you need to write it as `{33 = 2x+3y}`.
+* If cell urtext starts with "x = " or is just "x" but there's already a cvar x
+  then use a nonce cvar and include both the nonce cvar and x in ceqn.
+* Or to remove if-statements, does it work to add nonce variables to every cell
+  unconditionally? Ooh, I kind of think it might...
+
+Consider this recipe template:
+
+```
+2*{x ~ 6} + 3*{y} = {33 = 2x + 3y}
+5*{x} - 4*{y} = {2 = 5x - 4y}
+
+(Expected solution: x=6, y=7)
+```
+
+We preprocess it like so:
+
+```
+2*{cvar: var01, cval: 6,    ceqn: [var01, x]} + 
+3*{cvar: var02, cval: null, ceqn: [var02, y]} = 
+  {cvar: var03, cval: 33,   ceqn: [var03, 33, 2x + 3y]}
+5*{cvar: var04, cval: null, ceqn: [var04, x]} - 
+4*{cvar: var05, cval: null, ceqn: [var05, y]} = 
+  {cvar: var06, cval: 2,    ceqn: [var06, 2, 5x - 4y]}
+```
+
+The solver treats var03 and var06 as constants. It also treats var01 and var04
+and x as aliases. Same for var02 and var05 and y. So the solver isn't actually
+slowed down by the superfluous cvars.
+
+[If this works] We use only equations -- one or more expressions separated by 
+equal signs -- to define cells. A cell is initially marked frozen if its urtext
+starts with a constant or with a symbol and then a constant. So `{7 = x+y}` and
+`{tau = 6.28}` would be initially marked frozen whereas `{x+y = 7}` and 
+`{tau/2 = 3.14}` would be initially marked unfrozen.
+
+Wait, or go more extreme anti-magic and remove that "or": the only way to make a
+cell start frozen is if the urtext starts with a constant. So you have to do
+`{6.28 = tau}` (or you can always manually mark it frozen in the UI).
+
+It's still the case that having a constant in the ceqn is what defines
+frozenness.
+
+Brainstorming: double square brackets could indicate frozen. or a symbol in all
+caps.
+
+SCRATCH AREA:
+
+Wait, do we need a special case for a cell like {x: 0} which is just saying
 that x is initialized to 0, not that it's a constraint that x=0? How do we 
 distinguish that from something like {climbed + descended = 0} for a biking
 round trip where the net elevation is always definitionally zero? I think the
@@ -327,44 +381,46 @@ answer is never use a special case (anti-magic!) and we just need to figure out
 the preceding future work item here, where the user just has to be explicit that
 the net-elevation cell is frozen.
 
-SCRATCH AREA:
+7. Do we want special syntax to distinguish "here's an initial default value for
+this cell but don't freeze it" vs "this is a constant we're defining that can't
+change or at least should be frozen unless the user explicitly unfreezes it"?
+First idea: `{tau: 6.28}` means `tau` is frozen and `{scale: (1)}` means `scale`
+is being set to 1 as a default but is unfrozen. Either way, the user can always
+toggle the frozenness at will.
 
-Bug reports (also add quals for these, TDD-style)...
+Candidates:
+1. Parens: `{x: 1}` => frozen; `{x: (1)}` => unfrozen
+2. Equal-sign: `{x = 1}` => frozen; `{x: 1}` => unfrozen
 
----
+Parens is a little gross and ad hoc.
+Equal-sign means an awkward special case. We have to detect the case of no
+explicit cvar and ceqn having two elements, a bare cvar and a constant.
 
-Bug: Using the slider for pyzza, makes the c^2 cell turn red.
+Oh man, now I'm questioning the whole colon thing. Can every cell have it's cvar
+just be explicit only if the cell definition starts with a variable and an equal
+sign? That sure makes a lot of things cleaner. Then we could even bring back the
+colon specifically to indicate "this is not a constraint, just the initial
+setting for this variable".
 
----
+Let's refactor this in stages:
 
-Replicata: 
+1. Replace all colons with equal signs.
+2. Except for things like `{x:}` -- that colon just goes away.
+3. Pick another symbol like "~" for "set but don't constrain".
+4. Make sure that all works.
+5. Change "~" to ":".
 
-1. Load the Pythagorean Triple Pizza recipe.
-2. Change the "x" cell from 1 to 10. 
+What about constraints like `{2x+3y = 33}`?
 
-Expectata: 
+...
 
-Cell "a" changes to 30 since it's 3x, cell "b" changes to 40 since it's "4x", and cell "c" has TODO
+Here's the version without universal noncing for comparison:
 
----
-
-Replicata:
-
-1. Load the crepes recipe
-2. Change the egg field from 12 to 24
-
-Expectata:
-
-That all the fields double. In particular, x=2.
-
-Resultata:
-
-The egg field just becomes red and nothing else changes.
-
----
-
-Qual:
-
-solvem([['x', 1], ['eggs', '12x', 24]], {x:1, eggs:12})
-
-Expected result: No Solution.
+```
+2*{cvar: x, cval: 6, ceqn: [x]} + 
+3*{cvar: y, cval: null, ceqn: [y]} = 
+{cvar: var01, cval: 33, ceqn: [var01, 33, 2x + 3y]}
+5*{cvar: var02, cval: null, ceqn: [var02, x]} - 
+4*{cvar: var03, cval: null, ceqn: [var03, y]} = 
+{cvar: var04, cval: 2, ceqn: [var04, 2, 5x - 4y]}
+```
