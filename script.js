@@ -116,11 +116,11 @@ The riders in the break have a {m:1}:{s:30}s gap with {d:20}km ({k*d}mi) to go.
 So if the break averages {vb:40}km/h ({k*vb}mph) then the peloton needs to average {vp: pd/t}km/h ({k*vp}mph) to catch them at the line.
 
 Scratchpad:
-* Miles in a kilometer: {k: 0.621371}mi/km
-* Gap in hours: {gt: m/60+s/3600} (ie, {m+s/60 = gt*60}m or {60m+s = gt*3600}s)
+* Gap time:     {gt: m/60+s/3600} hours = {m+s/60 = gt*60}m = {60m+s = gt*3600}s
 * Gap distance: {gd: vb*gt}km ({k*gd}mi) <!-- I think vb not vp for this?) -->
 * Breakaway's time till finish: {t: d/vb} hours
 * Peloton's distance to the line: {pd: d+gd}km ({k*pd}mi)
+* Miles in a kilometer: {k: 0.621371}mi/km
 `,
 // -----------------------------------------------------------------------------
 'biketour': `\
@@ -191,7 +191,8 @@ Calories_per_serving_in_junk_food
 */
 // -----------------------------------------------------------------------------
 'kpounder': `\
-{p: 2.20462*x} pounds = {x: 70} kilograms
+{p: x/P} pounds = {x: 70} kilograms
+<!-- exact definition of a pound is {0.45359237 = P} kilograms -->
 `,
 // -----------------------------------------------------------------------------
 'cheesepan': `\
@@ -419,7 +420,7 @@ function preprocessLabels(cells) {
 // =============================================================================
 
 // Find all variable names referenced in an expression
-// Works on the ORIGINAL expression (before toJavaScript transform) to preserve variable names
+// Works on the ORIGINAL expression (before preval transform) to preserve variable names
 function findVariables(expr) {
   if (!expr || expr.trim() === '') return new Set()
   
@@ -549,6 +550,10 @@ function buildEquations(cells) {
 function buildInitialValues(cells) {
   const values = {}
   for (const cell of cells) {
+    // TODO: this if-statement, like most, seems wrong-headed
+    if (cell.isNonce) {
+      continue
+    }
     if (cell.cval !== undefined) {
       values[cell.cvar] = cell.cval
     } else {
@@ -1339,6 +1344,8 @@ function recomputeValues(cells, values, skipVars = new Set()) {
 }
 
 function handleFieldBlur(e) {
+  const blurredLabel = e.target.dataset.label
+
   // Per README: "as soon as you clicked away from field c, it would recompute
   // itself as the only value that makes all the equations true"
   // Re-solve without the temporary edit constraint to find correct values.
@@ -1351,7 +1358,9 @@ function handleFieldBlur(e) {
   })
 
   const frozen = new Set(state.fixedVars)
-  state.values = solvem(eqns, state.values, frozen)
+  const seedValues = { ...state.values }
+  delete seedValues[blurredLabel]
+  state.values = solvem(eqns, seedValues, frozen)
   state.solveBanner = ''
 
   const violatedCellIds = getViolatedCellIds(state.cells, state.values)

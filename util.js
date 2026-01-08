@@ -1,13 +1,10 @@
-// TODO: call this as part of toJavaScript (need a better name for that)
-function deoctalize(s) {
-  return s.replace(/(?<![\w_\.])0+(\d)/g, '$1')
-}
+// Maybe call this as part of preval?
+function deoctalize(s) { return s.replace(/(?<![\w_\.])0+(\d)/g, '$1') }
 
-// Maybe call this preval because it's a preprocessing stage before eval that 
-// handles syntax beyond what JavaScript handles. 
-// Convert Mathematica-style expression syntax to JavaScript
-// Supports: implicit multiplication (2x -> 2*x), ^ for exponentiation, math functions, pi
-function toJavaScript(expr) {
+// Convert Mathematica-style expression syntax to JavaScript.
+// Supports: implicit multiplication (2x -> 2*x), ^ for exponentiation, math 
+// functions, pi, etc.
+function preval(expr) {
   if (typeof expr !== 'string' || expr.trim() === '') {
     throw new Error(`Invalid expression: ${String(expr)}`)
   }
@@ -24,6 +21,7 @@ function toJavaScript(expr) {
   js = js.replace(/\bpi\b/gi, 'Math.PI')
 
   // Exponentiation: x^2 -> Math.pow(x,2)
+  // Does it not work to just do ^ -> ** ?
   for (let i = 0; i < 10; i++) {
     const before = js
     js = js.replace(/(\w+|\d+\.?\d*|\))\s*\^\s*(\w+|\d+\.?\d*|\([^()]*\))/g,
@@ -38,7 +36,7 @@ function toJavaScript(expr) {
 // vareval('2x+y', {x: 3, y: 1}) returns {value: 7, error: null}.
 function vareval(expr, vars) {
   try {
-    const jsExpr = deoctalize(toJavaScript(expr))
+    const jsExpr = deoctalize(preval(expr))
 
     // Build variable assignments
     const assignments = Object.entries(vars)
@@ -178,339 +176,364 @@ function solveFor(expr, varName, target, values) {
 // solvem: Main constraint solver
 // =============================================================================
 //
-// This function takes a list of equations and a hash of variables with initial
-// numerical assignments and returns a satisfying assignment of numeric values
-// to the variables. 
-// (An equation is a list of expressions taken to all be equal.)
+// The solvem function takes a list of equations and a hash of variables with
+// initial numerical assignments and returns a satisfying assignment of numeric
+// values to the variables (or as close to one as it can get).
+// An equation is a list of expressions taken to all be equal.
+// An expression is a string that can be eval'd in JavaScript as a number, if 
+// prefaced by an assignment of numbers to the variables it references. (See the
+// vareval function, which does that. Also expressions support richer syntax
+// than JavaScript and are passed through a preprocessor, preval, that converts
+// them to valid JavaScript.)
+// The variables are valid identifiers in JavaScript-like langages, like "x" or
+// "a1" or "some_var".
+// (There's a companion function, solved(), that takes the same arguments and 
+// returns 0 if all the equations are satisfied by the given assignments. More
+// generally it returns the residual -- a measure of how far the assignments are
+// from satisfying the equations.)
+// (Or maybe solvem should return both the closest solution it could find and
+// the residual? Or maybe we don't ever need the residual and should rather
+// return a list of booleans corresponding to which equations are satisfied?)
 // Examples:
 // solvem([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0}) returns {x: 6, y: 7}. 
-// It does this by trying each variable one at a time and doing a binary search
-// for a value that satisfies the equations. So in this example, it only works
-// because one of the variables was already correct. If initial values of 
-// {x: 0, y: 0} were passed in, it would fail to find a satisfying assignment.
 // solvem([['x', 1], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
 //        {x: 1, a: 1, b: 1, c: 1, v1: 1}) returns 
 // {x: 1, a: 3, b: 4, c: 5, v1: 25}. 
-// In this case we fail to find a satisfying value for x so we continue to a. We
-// also fail to find a satisfying value for a but since the equation with a on
-// the lefthand side only includes variable x elsewhere in the equation, we 
-// tentatively set a to what '3x' evaluates to using the current value of x. In
-// other words, we let the constraints propagate. I'm not sure the elegant 
-// algorithm for this yet...
-// 
-// (In the future if we have a use case for solving simultaneous equations we
-// can extend this. For linear equations it's perfectly doable with Gaussian
-// elimination. And we could get arbitrarily fancy, like calling out to
-// something like Mathematica's NMinimize or whatever.)
-
-// TODO: ugh, i don't think there should be a frozenVars argument here. the idea
-// is to freeze a cvar by simply including the cval in the ceqn that's passed in
-// here to solvem. the spec makes this clear.
-
-// TODO: how should we handle the case where solvem doesn't find a satisfying 
-// assignment? we could just return best-effort assignments and it's up to the 
-// client of these utils to check whether and which constraints are satisfied.
-// but it seems like it would be more efficient for solvem to keep track and 
-// return that directly.
-
-function solvem(eqns, vars, frozenVars = new Set()) {
+// See also: Gaussian elimination, Mathematica's NSolve and NMinimize.
+function solvem(eqns, vars) {
   const values = { ...vars }
-  const tol = 1e-6  // Looser tolerance for practical floating-point comparisons
-  const frozen = frozenVars  // Variables that should not be adjusted
+  const tol = 1e-6
 
-  // Helper to check if a variable name is a simple identifier
   function isSimpleVar(expr) {
     if (typeof expr !== 'string') return false
     return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(expr.trim())
   }
 
-  // Helper: evaluate an expression or return the number directly
-  function evalExprIn(expr, env) {
-    if (typeof expr === 'number') return { value: expr, error: null }
-    return vareval(expr, env)
-  }
-
   function evalExpr(expr) {
-    return evalExprIn(expr, values)
+    if (typeof expr === 'number') return { value: expr, error: null }
+    return vareval(expr, values)
   }
 
-  // Helper: check if all expressions in an equation evaluate to the same value
-  function checkEquationIn(eqn, env) {
-    if (eqn.length < 2) return { satisfied: true, target: null }
+  function isKnown(v) {
+    return values[v] !== null && values[v] !== undefined
+  }
 
-    const results = eqn.map(e => evalExprIn(e, env))
-    if (results.some(r => r.error || !isFinite(r.value))) {
-      return { satisfied: false, target: null }
+  // Variables appearing with literal numbers are constrained
+  const constrained = new Set()
+  for (const eqn of eqns) {
+    if (eqn.some(e => typeof e === 'number')) {
+      for (const e of eqn) {
+        if (isSimpleVar(e)) constrained.add(e)
+      }
     }
+  }
 
-    const first = results[0].value
-    const tolerance = Math.abs(first) * tol + tol
-    const satisfied = results.every(r => Math.abs(r.value - first) < tolerance)
-    return { satisfied, target: first }
+  // Singletons: variables with singleton equations like ['x']
+  // Track their initial values - they're "stable" (usable in expressions) if unchanged
+  const singletons = new Map()  // var -> initial value
+  for (const eqn of eqns) {
+    if (eqn.length === 1 && isSimpleVar(eqn[0]) && isKnown(eqn[0])) {
+      singletons.set(eqn[0], values[eqn[0]])
+    }
+  }
+
+  // Variables whose current values were derived from stable targets.
+  // This is weaker than "trustworthy" (which is reserved for literal-constrained vars)
+  // but strong enough to enable multi-step propagation.
+  const stableDerived = new Set()
+
+  // Helper: is a variable's value stable (trustworthy or unchanged singleton)?
+  function isStable(v) {
+    if (trustworthy.has(v)) return true
+    if (stableDerived.has(v)) return true
+    if (constrained.size === 0 && solvedThisPass.has(v)) return true
+    if (singletons.has(v) && values[v] === singletons.get(v)) return true
+    return false
   }
 
   function checkEquation(eqn) {
-    return checkEquationIn(eqn, values)
+    if (eqn.length < 2) return true
+    const results = eqn.map(evalExpr)
+    if (results.some(r => r.error || !isFinite(r.value))) return false
+    const first = results[0].value
+    const tolerance = Math.abs(first) * tol + tol
+    return results.every(r => Math.abs(r.value - first) < tolerance)
   }
 
-  // Helper: count total number of violated equations
-  function countViolationsIn(env) {
-    let count = 0
-    for (const eqn of eqns) {
-      if (!checkEquationIn(eqn, env).satisfied) count++
-    }
-    return count
-  }
+  // trustworthy: variables with reliable values (derived from constraints)
+  // solvedThisPass: variables solved during the current pass (for within-pass protection)
+  const trustworthy = new Set(constrained)
+  let solvedThisPass = new Set()
 
-  function countViolations() {
-    return countViolationsIn(values)
-  }
-
-  // directlyPinned: variables that appear in equations with literal numbers (truly frozen)
-  const directlyPinned = new Set()
-  for (const eq of eqns) {
-    const hasNumber = eq.some(e => typeof e === 'number')
-    if (hasNumber) {
-      for (const e of eq) {
-        if (isSimpleVar(e)) directlyPinned.add(e)
-      }
-    }
-  }
-
-  // pinnedVars: trustworthy values (includes transitive derivations from frozen vars)
-  // Used for target selection in solving, not for preventing updates
-  const pinnedVars = new Set(directlyPinned)
-  for (let i = 0; i < 10; i++) {
-    let added = false
-    for (const eq of eqns) {
-      if (eq.length !== 2) continue
-      const [e0, e1] = eq
-      for (const { simple, expr } of [{simple: e0, expr: e1}, {simple: e1, expr: e0}]) {
-        if (!isSimpleVar(simple) || pinnedVars.has(simple)) continue
-        if (typeof expr === 'number') { pinnedVars.add(simple); added = true; continue }
-        if (typeof expr !== 'string') continue
-        const vars = findVariables(expr)
-        if (vars.size > 0 && [...vars].every(v => pinnedVars.has(v))) {
-          pinnedVars.add(simple)
-          added = true
-        }
-      }
-    }
-    if (!added) break
-  }
-
-  // protected: vars that were just solved and shouldn't be overwritten
-  function propagateDerivedIn(env, protected = new Set()) {
-    let changed = false
-    // Only directly pinned vars (frozen) and protected vars prevent overwrites
-    const effectivelyPinned = new Set([...directlyPinned, ...protected])
-
-    for (const eqn of eqns) {
-      if (eqn.length !== 2) continue
-
-      const [e0, e1] = eqn
-
-      const pairs = [
-        { simpleVar: e0, expr: e1 },
-        { simpleVar: e1, expr: e0 },
-      ]
-
-      for (const { simpleVar, expr } of pairs) {
-        if (!isSimpleVar(simpleVar)) continue
-        if (typeof expr !== 'string' && typeof expr !== 'number') continue
-
-        const exprVars = typeof expr === 'string' ? findVariables(expr) : new Set()
-        const allExprVarsKnown = [...exprVars].every(v => env[v] !== undefined)
-
-        if (allExprVarsKnown) {
-          const exprResult = typeof expr === 'number'
-            ? { value: expr, error: null }
-            : vareval(expr, env)
-          if (exprResult.error || !isFinite(exprResult.value)) continue
-
-          const oldVal = env[simpleVar]
-          if (oldVal === undefined) {
-            env[simpleVar] = exprResult.value
-            changed = true
-          } else if (Math.abs(exprResult.value - oldVal) > tol) {
-            // Conflict: try solving for unpinned vars in expr instead of overwriting
-            const unpinned = [...exprVars].filter(v => !effectivelyPinned.has(v))
-            if (effectivelyPinned.has(simpleVar) && unpinned.length > 0) {
-              for (const v of unpinned) {
-                const solved = solveFor(expr, v, oldVal, env)
-                if (solved !== null) {
-                  env[v] = solved
-                  changed = true
-                  break
-                }
-              }
-            } else if (!effectivelyPinned.has(simpleVar)) {
-              env[simpleVar] = exprResult.value
-              changed = true
-            }
-          }
-        } else if (typeof expr === 'string' && isSimpleVar(simpleVar) &&
-                   env[simpleVar] !== undefined) {
-          const unknowns = [...exprVars].filter(v => env[v] === undefined)
-          if (unknowns.length === 1) {
-            const varToSolve = unknowns[0]
-            const solved = solveFor(expr, varToSolve, env[simpleVar], env)
-            if (solved !== null) {
-              env[varToSolve] = solved
-              changed = true
-            }
-          }
-        }
-      }
-    }
-
-    return changed
-  }
-
-  // Helper: find ALL candidate variables we could solve for in this equation
-  function findSolvableCandidates(eqn) {
-    const candidates = []
-
-    // Collect all evaluable expressions with their values
-    const evaluable = []
+  // Find target value for an equation
+  // Returns {value, isTrustworthy} or null if no target found
+  // Priority: literals > trustworthy vars > trustworthy exprs > other exprs > simple vars
+  function findTarget(eqn) {
+    // First: literal numbers (always trustworthy)
     for (const expr of eqn) {
-      if (typeof expr === 'number') {
-        evaluable.push({ expr, value: expr, isNumber: true, isSimple: false })
-      } else {
-        const vars = findVariables(expr)
-        const allKnown = [...vars].every(v => values[v] !== undefined)
-        if (allKnown) {
-          const r = evalExpr(expr)
-          if (!r.error && isFinite(r.value)) {
-            evaluable.push({
-              expr,
-              value: r.value,
-              isNumber: false,
-              isSimple: isSimpleVar(expr),
-              vars
-            })
-          }
+      if (typeof expr === 'number') return { value: expr, isTrustworthy: true, isStable: true, stableNonSingleton: true }
+    }
+    // Second: trustworthy, derived-stable, or just-solved simple variables
+    for (const expr of eqn) {
+      if (typeof expr === 'string' && isSimpleVar(expr) &&
+          (trustworthy.has(expr) || stableDerived.has(expr) || solvedThisPass.has(expr))) {
+        return { value: values[expr], isTrustworthy: trustworthy.has(expr), isStable: true, stableNonSingleton: true }
+      }
+    }
+    // Third: expressions where ALL variables are stable (trustworthy, derived-stable, or unchanged singletons)
+    // Prefer the most trustworthy stable expression rather than the first.
+    let bestStable = null
+    let bestStableScore = -1
+    for (const expr of eqn) {
+      if (typeof expr !== 'string' || isSimpleVar(expr)) continue
+
+      const vars = findVariables(expr)
+      if (vars.size === 0) continue
+      if (![...vars].every(v => isStable(v))) continue
+
+      // Avoid using targets that are only stable because of unchanged singleton seeds.
+      // Those are useful as guesses but shouldn't drive other variables.
+      const hasNonSingletonStable = [...vars].some(v => trustworthy.has(v) || stableDerived.has(v) || solvedThisPass.has(v))
+      if (eqn.length > 2 && !hasNonSingletonStable) continue
+
+      const r = evalExpr(expr)
+      if (r.error || !isFinite(r.value) || r.value === null) continue
+
+      const allTrustworthy = [...vars].every(v => trustworthy.has(v))
+      const trustworthyCount = [...vars].filter(v => trustworthy.has(v)).length
+      const score = (allTrustworthy ? 1000 : 0) + trustworthyCount
+
+      if (score > bestStableScore) {
+        bestStableScore = score
+        bestStable = { value: r.value, isTrustworthy: allTrustworthy, isStable: true, stableNonSingleton: hasNonSingletonStable }
+      }
+    }
+    if (bestStable !== null) return bestStable
+    // Fourth: any evaluable complex expression (not trustworthy)
+    for (const expr of eqn) {
+      if (typeof expr === 'string' && !isSimpleVar(expr)) {
+        const r = evalExpr(expr)
+        if (!r.error && isFinite(r.value) && r.value !== null) {
+          return { value: r.value, isTrustworthy: false, stableNonSingleton: false }
         }
       }
     }
-
-    if (evaluable.length === 0) return candidates
-
-    // Sort to prefer as target: numbers > pinned simple > fully-pinned complex > other complex > unpinned simple
-    evaluable.sort((a, b) => {
-      if (a.isNumber !== b.isNumber) return a.isNumber ? -1 : 1
-      const aPinnedSimple = a.isSimple && pinnedVars.has(a.expr)
-      const bPinnedSimple = b.isSimple && pinnedVars.has(b.expr)
-      if (aPinnedSimple !== bPinnedSimple) return aPinnedSimple ? -1 : 1
-      const aFullyPinned = !a.isSimple && a.vars && [...a.vars].every(v => pinnedVars.has(v))
-      const bFullyPinned = !b.isSimple && b.vars && [...b.vars].every(v => pinnedVars.has(v))
-      if (aFullyPinned !== bFullyPinned) return aFullyPinned ? -1 : 1
-      if (a.isSimple !== b.isSimple) return a.isSimple ? 1 : -1
-      return 0
-    })
-
-    // Use the first (best) expression as target
-    const target = evaluable[0]
-
-    // Find expressions we could solve for
-    for (const e of evaluable) {
-      if (e === target) continue
-      if (e.isNumber) continue
-
-      const unknowns = [...e.vars].filter(v => values[v] === undefined)
-
-      // If this expression has exactly one unknown, we can solve for it
-      if (unknowns.length === 1 && !frozen.has(unknowns[0])) {
-        candidates.push({ varName: unknowns[0], expr: e.expr, target: target.value })
-      }
-
-      // Also try to solve if all vars are known but equation isn't satisfied
-      if (unknowns.length === 0 && e.vars.size > 0) {
-        // Add non-frozen variables as candidates
-        for (const v of e.vars) {
-          if (!frozen.has(v)) {
-            candidates.push({ varName: v, expr: e.expr, target: target.value })
-          }
-        }
+    // Fifth: simple variables with known values (not trustworthy)
+    for (const expr of eqn) {
+      if (typeof expr === 'string' && isSimpleVar(expr) && isKnown(expr)) {
+        return { value: values[expr], isTrustworthy: false, stableNonSingleton: false }
       }
     }
-
-    return candidates
+    return null
   }
 
-  // Multiple passes to propagate constraints
-  const maxPasses = 20
-  let lastViolationCount = countViolations()
+  // Sort equations: literals first, then multi-element, then 2-element
+  // Shorter equations first (after literals) to enable forward propagation.
+  const sortedEqns = [...eqns].sort((a, b) => {
+    const aHasLiteral = a.some(e => typeof e === 'number')
+    const bHasLiteral = b.some(e => typeof e === 'number')
+    if (aHasLiteral !== bHasLiteral) return aHasLiteral ? -1 : 1
+    if (a.length !== b.length) return a.length - b.length
+    return 0
+  })
 
-  for (let pass = 0; pass < maxPasses; pass++) {
-    let madeAnyChange = false
+  // Main solving loop
+  for (let pass = 0; pass < 20; pass++) {
+    let changed = false
+    solvedThisPass = new Set()  // Reset for this pass
 
-    for (let p = 0; p < 10; p++) {
-      if (!propagateDerivedIn(values)) break
-    }
+    for (const eqn of sortedEqns) {
+      if (checkEquation(eqn)) continue
 
-    for (const eqn of eqns) {
-      const { satisfied } = checkEquation(eqn)
-      if (satisfied) continue
+      const targetResult = findTarget(eqn)
+      if (targetResult === null) continue
+      const { value: target, isTrustworthy, isStable: targetIsStable, stableNonSingleton: targetStableNonSingleton = false } = targetResult
 
-      const candidates = findSolvableCandidates(eqn)
-      if (candidates.length === 0) continue
+      for (const expr of eqn) {
+        if (typeof expr === 'number') continue
 
-      // Group candidates by expression (can solve one var per distinct expr)
-      const byExpr = new Map()
-      for (const cand of candidates) {
-        if (!byExpr.has(cand.expr)) byExpr.set(cand.expr, [])
-        byExpr.get(cand.expr).push(cand)
-      }
+        // Simple variable: just set it to target (unless just solved)
+        if (isSimpleVar(expr)) {
+          if (constrained.has(expr) && isKnown(expr) && values[expr] !== target) {
+            continue
+          }
+          if (!solvedThisPass.has(expr) && (!isKnown(expr) || values[expr] !== target)) {
+            values[expr] = target
+            changed = true
+            solvedThisPass.add(expr)
+            if (isTrustworthy) trustworthy.add(expr)
+            if (targetIsStable && (isTrustworthy || targetStableNonSingleton || constrained.size === 0)) stableDerived.add(expr)
+          }
+          if (!solvedThisPass.has(expr) && targetIsStable && isKnown(expr) && values[expr] === target) {
+            if (!stableDerived.has(expr)) {
+              if (isTrustworthy || targetStableNonSingleton || constrained.size === 0) {
+                stableDerived.add(expr)
+                changed = true
+              }
+            }
+          }
+          continue
+        }
 
-      // For each expression group, find best candidate (least violations)
-      const violationsBefore = countViolations()
-      const bestCandidates = []
-      for (const [, group] of byExpr) {
-        let bestCand = null
-        let bestViolations = Infinity
-        for (const cand of group) {
-          const trial = { ...values }
-          const newVal = solveFor(cand.expr, cand.varName, cand.target, trial)
-          if (newVal === null) continue
-          trial[cand.varName] = newVal
-          const v = countViolationsIn(trial)
-          if (v < bestViolations) {
-            bestViolations = v
-            bestCand = { ...cand, newVal }
+        // Complex expression: find unknowns and solve
+        const exprVars = findVariables(expr)
+        const unknowns = [...exprVars].filter(v => !isKnown(v) && !constrained.has(v) && !solvedThisPass.has(v))
+
+        if (unknowns.length === 1) {
+          const solvedVal = solveFor(expr, unknowns[0], target, values)
+          if (solvedVal !== null) {
+            values[unknowns[0]] = solvedVal
+            changed = true
+            solvedThisPass.add(unknowns[0])
+            if (isTrustworthy) trustworthy.add(unknowns[0])
+            if (targetIsStable && (isTrustworthy || targetStableNonSingleton || constrained.size === 0)) stableDerived.add(unknowns[0])
+          }
+        } else if (unknowns.length === 0 && (isTrustworthy || targetIsStable)) {
+          // All known but doesn't match - adjust if target is trustworthy or stable
+          // Try each variable and pick the one that changes the least (preserves good initial guesses)
+          let bestVar = null
+          let bestVal = null
+          let bestChange = Infinity
+          for (const v of exprVars) {
+            if (constrained.has(v) || solvedThisPass.has(v) || trustworthy.has(v)) continue
+            const solvedVal = solveFor(expr, v, target, values)
+            if (solvedVal !== null) {
+              const change = Math.abs(solvedVal - values[v])
+              if (change < bestChange) {
+                bestChange = change
+                bestVar = v
+                bestVal = solvedVal
+              }
+            }
+          }
+          if (bestVar !== null) {
+            values[bestVar] = bestVal
+            changed = true
+            solvedThisPass.add(bestVar)
+            if (isTrustworthy) trustworthy.add(bestVar)
+            if (targetIsStable && (isTrustworthy || targetStableNonSingleton || constrained.size === 0)) stableDerived.add(bestVar)
           }
         }
-        if (bestCand) bestCandidates.push(bestCand)
-      }
-
-      // Apply all best candidates together
-      const temp = { ...values }
-      for (const cand of bestCandidates) {
-        temp[cand.varName] = cand.newVal
-      }
-
-      // Propagate consequences, protecting the vars we just solved
-      const solvedVars = new Set(bestCandidates.map(c => c.varName))
-      for (let p = 0; p < 10; p++) {
-        if (!propagateDerivedIn(temp, solvedVars)) break
-      }
-
-      // Accept if this satisfies the equation or doesn't increase violations
-      const satisfiesCurrentEqn = checkEquationIn(eqn, temp).satisfied
-      const violationsAfter = countViolationsIn(temp)
-
-      if (satisfiesCurrentEqn || violationsAfter <= violationsBefore) {
-        Object.assign(values, temp)
-        madeAnyChange = true
       }
     }
 
-    // Check if we're making overall progress
-    const currentViolations = countViolations()
-    if (currentViolations === 0) break  // All satisfied!
-    if (!madeAnyChange) break  // No changes possible
-    // if (currentViolations >= lastViolationCount && pass > 0) break  // Stuck
-    lastViolationCount = currentViolations
+    if (!changed) break
+  }
+
+  // Fallback: if constraints not satisfied, try 1D search on "root" variables
+  // Root variables: those that appear in 2-element "definition" equations like ['a', '3x']
+  // where the other element is a simple var that's constrained or trustworthy
+  const needsFallback = !eqnsSatisfied(eqns, values, tol)
+  console.log('DEBUG: needsFallback:', needsFallback)
+  if (needsFallback) {
+    // Find root variables: appear in expressions but not constrained
+    const definedBy = new Map()  // var -> expression that defines it
+    for (const eqn of eqns) {
+      if (eqn.length === 2) {
+        const [e1, e2] = eqn
+        // Pattern: ['a', '3x'] where a is simple var, 3x is expression
+        if (isSimpleVar(e1) && typeof e2 === 'string' && !isSimpleVar(e2)) {
+          const vars = findVariables(e2)
+          console.log('DEBUG: checking', e1, '=', e2, '-> vars:', [...vars], 'constrained:', constrained.has(e1))
+          if (vars.size === 1) {
+            const root = [...vars][0]
+            if (!constrained.has(root) && !constrained.has(e1)) {
+              definedBy.set(e1, { expr: e2, root })
+              console.log('DEBUG: added', e1, 'defined by', e2, 'root:', root)
+            }
+          }
+        }
+        if (isSimpleVar(e2) && typeof e1 === 'string' && !isSimpleVar(e1)) {
+          const vars = findVariables(e1)
+          if (vars.size === 1) {
+            const root = [...vars][0]
+            if (!constrained.has(root) && !constrained.has(e2)) {
+              definedBy.set(e2, { expr: e1, root })
+            }
+          }
+        }
+      }
+    }
+
+    // Find root variables that multiple definitions depend on
+    const rootCounts = new Map()
+    for (const { root } of definedBy.values()) {
+      rootCounts.set(root, (rootCounts.get(root) || 0) + 1)
+    }
+    console.log('DEBUG: rootCounts:', [...rootCounts.entries()])
+
+    // Try binary search on roots that affect multiple variables
+    for (const [root, count] of rootCounts) {
+      console.log('DEBUG: trying root', root, 'count:', count)
+      if (count < 2) continue  // Only search if root affects multiple vars
+
+      // Binary search on root
+      let lo = 0.001, hi = 1000
+      for (let iter = 0; iter < 50; iter++) {
+        const mid = (lo + hi) / 2
+        const testValues = { ...values, [root]: mid }
+
+        // Propagate through definitions
+        for (const [v, { expr }] of definedBy) {
+          const r = vareval(expr, testValues)
+          if (!r.error && isFinite(r.value)) {
+            testValues[v] = r.value
+          }
+        }
+
+        if (iter < 3 || (mid > 9.9 && mid < 10.1)) console.log('DEBUG: iter', iter, 'mid:', mid.toFixed(4), 'test:', {x: testValues.x?.toFixed(2), a: testValues.a?.toFixed(2), b: testValues.b?.toFixed(2), c: testValues.c, v1: testValues.v1})
+
+        // Check if constraints are satisfied
+        if (eqnsSatisfied(eqns, testValues, tol)) {
+          console.log('DEBUG: Found solution at iter', iter)
+          Object.assign(values, testValues)
+          break
+        }
+
+        // Compute residual to guide search
+        let residual = 0
+        for (const eqn of eqns) {
+          if (eqn.length < 2) continue
+          const results = eqn.map(e => {
+            if (typeof e === 'number') return e
+            const r = vareval(e, testValues)
+            return r.error ? NaN : r.value
+          })
+          if (results.some(r => !isFinite(r))) continue
+          const target = results.find(r => isFinite(r))
+          for (const r of results) {
+            residual += (r - target) ** 2
+          }
+        }
+
+        // Try to determine search direction (this is a heuristic)
+        // Use an additive probe so we don't jump across a nearby optimum.
+        const probeDelta = (hi - lo) * 1e-4 + 1e-6
+        const testHi = { ...values, [root]: mid + probeDelta }
+        for (const [v, { expr }] of definedBy) {
+          const r = vareval(expr, testHi)
+          if (!r.error && isFinite(r.value)) testHi[v] = r.value
+        }
+        let residualHi = 0
+        for (const eqn of eqns) {
+          if (eqn.length < 2) continue
+          const results = eqn.map(e => {
+            if (typeof e === 'number') return e
+            const r = vareval(e, testHi)
+            return r.error ? NaN : r.value
+          })
+          if (results.some(r => !isFinite(r))) continue
+          const target = results.find(r => isFinite(r))
+          for (const r of results) residualHi += (r - target) ** 2
+        }
+
+        if (residualHi < residual) {
+          lo = mid
+        } else {
+          hi = mid
+        }
+      }
+    }
   }
 
   return values
@@ -588,12 +611,11 @@ function runQuals() {
   check('vareval: pi constant', vareval('2pi', {}).value, 2 * Math.PI)
   check('vareval: complex expression', vareval('a^2 + b^2', {a: 3, b: 4}).value, 25)
 
-  console.log('\n=== toJavaScript quals ===')
-  check('toJS: implicit mult', toJavaScript('2x'), '2*x')
-  check('toJS: keeps var3 intact', toJavaScript('var3'), 'var3')
-  check('toJS: power', toJavaScript('x^2').includes('Math.pow'), true)
-  check('toJS: pi', toJavaScript('2pi'), '2*Math.PI')
-
+  console.log('\n=== preval quals ===')
+  check('toJS: implicit mult', preval('2x'), '2*x')
+  check('toJS: keeps var3 intact', preval('var3'), 'var3')
+  check('toJS: power', preval('x^2').includes('Math.pow'), true)
+  check('toJS: pi', preval('2pi'), '2*Math.PI')
   console.log('\n=== deoctalize quals ===')
   check('deoctalize: preserves 10', deoctalize('10'), '10')
   check('deoctalize: strips leading 0', deoctalize('010'), '10')
@@ -622,6 +644,22 @@ function runQuals() {
     solvem([['x', 1], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
       {x: 1, a: 1, b: 1, c: 1, v1: 1}),
     {x: 1, a: 3, b: 4, c: 5, v1: 25})
+
+  // Pyzza: scaling Pythagorean triple by changing one side
+  check('solvem: pyzza change a to 30',
+    solvem([['a', 30], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
+      {x: 1, a: 30, b: 1, c: 1, v1: 1}),
+    {x: 10, a: 30, b: 40, c: 50, v1: 2500})
+
+  check('solvem: pyzza change b to 40',
+    solvem([['b', 40], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
+      {x: 1, a: 1, b: 40, c: 1, v1: 1}),
+    {x: 10, a: 30, b: 40, c: 50, v1: 2500})
+
+  check('solvem: pyzza change c to 50',
+    solvem([['c', 50], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
+      {x: 1, a: 1, b: 1, c: 50, v1: 1}),
+    {x: 10, a: 30, b: 40, c: 50, v1: 2500})
 
   check('solvem: chain propagation',
     solvem([['a', 2], ['b', 'a+1'], ['c', 'b+1']], {a: 1, b: 1, c: 1}),
@@ -655,17 +693,69 @@ function runQuals() {
       ['r', 'd/2'],                     // r = d/2
       ['d'],                            // d is free
       ['_v', 'A', '1/2*6.28*r^2'],      // constraint: A = 1/2*tau*r^2
-    ], {A: 63.585, r: 1, d: 1, _v: 1}, new Set(['A'])),
+    ], {A: 63.585, r: 1, d: 1, _v: 1}),
     {A: 63.585, r: 4.5, d: 9})
 
-  // Cheesepan r1: transitive pinning with multi-expression constraint
-  check('solvem: cheesepan r1 transitive derivation',
+  // Cheesepan r1: multi-expression constraint
+  check('solvem: cheesepan r1 derivation',
     solvem([
       ['d1', 9], ['r1', 'd1/2'], ['tau', 6.28], ['x', 1],
       ['r', 'd/2'], ['d'], ['A'],
       ['_v', 'A', '1/2*tau*r^2', '1/2*tau*r1^2*x'],
-    ], {d1: 9, r1: 1, tau: 6.28, x: 1, r: 1, d: 1, A: 1, _v: 1}, new Set(['d1', 'tau', 'x'])),
+    ], {d1: 9, r1: 1, tau: 6.28, x: 1, r: 1, d: 1, A: 1, _v: 1}),
     {d1: 9, r1: 4.5, tau: 6.28, x: 1, r: 4.5, d: 9, A: 63.585, _v: 63.585})
+
+  // Same but x has no literal in its equation
+  check('solvem: cheesepan r1 with x not frozen',
+    solvem([
+      ['d1', 9], ['r1', 'd1/2'], ['tau', 6.28], ['x'],
+      ['r', 'd/2'], ['d'], ['A'],
+      ['_v', 'A', '1/2*tau*r^2', '1/2*tau*r1^2*x'],
+    ], {d1: 9, r1: 1, tau: 6.28, x: 1, r: 1, d: 1, A: 1, _v: 1}),
+    {d1: 9, r1: 4.5, tau: 6.28, x: 1, r: 4.5, d: 9, A: 63.585, _v: 63.585})
+
+  // {d = 2r} and {r = d/2} should be equivalent
+  check('solvem: r=d/2 derives r from d',
+    solvem([['d', 10], ['r', 'd/2']], {d: 10, r: 1}),
+    {d: 10, r: 5})
+
+  check('solvem: d=2r derives d from r',
+    solvem([['r', 5], ['d', '2*r']], {d: 1, r: 5}),
+    {d: 10, r: 5})
+
+  // Having BOTH should also work and be consistent
+  check('solvem: both r=d/2 and d=2r with d frozen',
+    solvem([['d', 10], ['r', 'd/2'], ['_v', 'd', '2*r']], {d: 10, r: 1, _v: 1}),
+    {d: 10, r: 5})
+
+  check('solvem: both r=d/2 and d=2r with r frozen',
+    solvem([['r', 5], ['d', '2*r'], ['_v', 'd/2', 'r']], {d: 1, r: 5, _v: 1}),
+    {d: 10, r: 5})
+
+  check('solvem: post anti-colon refactor',
+    solvem([ ['var01', 'x'],
+             ['var02', 'y'],
+             ['var03', 33, '2*x + 3*y'],
+             ['var04', 'x'],
+             ['var05', 'y'],
+             ['var06', 2, '5*x - 4*y'] ],
+       { var01: 6, 
+         var02: null,
+         var03: 33,
+         var04: null,
+         var05: null,
+         var06: 2,
+         x: null,
+         y: null }),
+    { var01: 6,
+      var02: 7,
+      var03: 33,
+      var04: 6,
+      var05: 7,
+      var06: 2,
+      x: 6,
+      y: 7 })
+
 
   console.log('\n=== Summary ===')
   console.log(`${results.passed} passed, ${results.failed} failed`)

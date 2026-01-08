@@ -314,33 +314,28 @@ themselves out and show the new values implied by your edit? Or, like, if more
 than one cell can change to accommodate your edit you're forced to explicitly
 freeze cells until that's no longer the case?
 
-6. Big Anti-Colon Refactor...
+6. Bug: "2 x" should parse to "2*x"
 
+7. Big Anti-Colon Refactor...
 
-* Every cell gets a nonce cval, unconditionally.
-* 
-
-
-* If a cell's urtext starts with "x = " or the urtext is just "x" then x is the cvar
-  for that cell.
-* If the first expression other than the cvar (if specified) is a constant then
-  the cell is initially frozen. So if you have a constraint like `{2x+3y = 33}`
-  then you need to write it as `{33 = 2x+3y}`.
-* If cell urtext starts with "x = " or is just "x" but there's already a cvar x
-  then use a nonce cvar and include both the nonce cvar and x in ceqn.
-* Or to remove if-statements, does it work to add nonce variables to every cell
-  unconditionally? Ooh, I kind of think it might...
+The urtext of a cell is a list of one or more expressions in curly braces and
+separated by equal signs. Like `{x}` or `{a^2 + b^2 = c^2}` or `{pi = tau/2}` or
+`{7 = y = 3z}`. Cells are initially marked frozen in the UI if and only if their
+urtext starts with a constant. So if you want to define a constant, do it like
+`{6.28 = tau}`. Arithmetic expressions that eval to a number count as constants.
+If you define constant with the variable first, like `{tau = 6.28}`, that's fine
+but the user may need to freeze the cell in the UI to keep the solver from
+finding a solution by changing the ratio of a circle's circumference to its
+radius.
 
 Consider this recipe template:
 
 ```
-2*{x ~ 6} + 3*{y} = {33 = 2x + 3y}
+2*{x = 6} + 3*{y} = {33 = 2x + 3y}
 5*{x} - 4*{y} = {2 = 5x - 4y}
-
-(Expected solution: x=6, y=7)
 ```
 
-We preprocess it like so:
+Note that the only solution is x=6, y=7. We parse the template like so:
 
 ```
 2*{cvar: var01, cval: 6,    ceqn: [var01, x]} + 
@@ -350,6 +345,36 @@ We preprocess it like so:
 4*{cvar: var05, cval: null, ceqn: [var05, y]} = 
   {cvar: var06, cval: 2,    ceqn: [var06, 2, 5x - 4y]}
 ```
+
+Every cell gets a nonce variable. We send that to solvem() like so:
+
+```javascript
+solvem([ [var01, x],
+         [var02, y],
+         [var03, 33, 2x + 3y],
+         [var04, x],
+         [var05, y],
+         [var06, 2, 5x - 4y] ],
+       { var01: 6, 
+         var02: null,
+         var03: 33,
+         var04: null,
+         var05: null,
+         var06: 2,
+         x: null,
+         y: null })
+```
+
+Mathematica can solve that like so:
+
+```wolfram
+Solve[{v1 == x, v2 == y, v3 == 33 == 2 x + 3 y, v4 == x, v5 == y, 
+       v6 == 2 == 5 x - 4 y}, {v1, v2, v3, v4, v5, v6, x, y}]
+```
+
+
+
+
 
 The solver treats var03 and var06 as constants. It also treats var01 and var04
 and x as aliases. Same for var02 and var05 and y. So the solver isn't actually
@@ -368,8 +393,11 @@ cell start frozen is if the urtext starts with a constant. So you have to do
 It's still the case that having a constant in the ceqn is what defines
 frozenness.
 
-Brainstorming: double square brackets could indicate frozen. or a symbol in all
-caps.
+Brainstorming: 
+double square brackets could indicate frozen. 
+or a symbol in all caps.
+
+
 
 SCRATCH AREA:
 
@@ -423,4 +451,37 @@ Here's the version without universal noncing for comparison:
 5*{cvar: var02, cval: null, ceqn: [var02, x]} - 
 4*{cvar: var03, cval: null, ceqn: [var03, y]} = 
 {cvar: var04, cval: 2, ceqn: [var04, 2, 5x - 4y]}
+```
+
+```
+solvem([
+  ['d1', 9],                              // d1 = 9 (fixed)
+  ['r1', 'd1/2'],                         // r1 = d1/2
+  ['tau', 6.28],                          // tau = 6.28 (constant)
+  ['x'],                                  // x is free
+  ['r', 'd/2'],                           // r = d/2
+  ['d'],                                  // d is free
+  ['A'],                                  // A is free
+  ['_v', 'A', '1/2*tau*r^2', '1/2*tau*r1^2*x'],  // THE BIG CONSTRAINT
+], {d1: 9, r1: 1, tau: 6.28, x: 1, r: 1, d: 1, A: 1, _v: 1})
+```
+
+```wolfram
+Solve[{
+  v1 == 1 x,
+  v2 == 3 x,
+  v3 == d,
+  v4 == w,
+  v5 == h,
+  v6 == z,
+  v7 == x == 1,
+  v8 == d1 == 9,
+  v9 == r1 == d1/2,
+  v10 == r == d/2,
+  v11 == d == 2 r,
+  v12 == tau == 628/100, 
+  v13 == A == 1/2*tau*r^2 == 1/2*tau*r1^2*x == w*h,
+  v14 == w^2 + h^2 == z^2}, 
+  {v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, 
+   x, d, w, h, z, A, d1, r1, r, tau}]
 ```

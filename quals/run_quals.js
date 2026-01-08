@@ -231,7 +231,7 @@ async function main() {
     // Qual: empty expressions fail loudly (no silent "0" fallback)
     const emptyExprError = await page.evaluate(() => {
       try {
-        window.toJavaScript('')
+        window.preval('')
         return null
       } catch (e) {
         return e && e.message ? e.message : String(e)
