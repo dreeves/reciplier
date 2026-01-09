@@ -26,6 +26,11 @@ number of wheels of cheese is always 3 times whatever x is. Or edit the field
 for wheels of cheese to 18 and the number of eggs will automatically change to
 12 and x to 6.
 
+Also you can edit the recipe template and Reciplier reparses it and updates the 
+fields and the rest of the UI keystroke by keystroke as you edit. The template
+defines the UI and you can use that UI and redefine it all on the same page. It
+should make sense when you try it.
+
 Now consider a recipe that has you mix 2 eggs and 3 wheels of cheese in a 9-inch
 diameter pan. Of course that 9 doesn't scale linearly with the ingredients. It's
 the area that does that, because there's a certain fixed thickness required, 
@@ -51,21 +56,21 @@ Constraints, constants, and sanity checks:
 * The squared diagonal of the rectangular pan is {w^2 + h^2 = z^2}
 ```
 
-Any cell that scales linearly is multiplied by x. The confusing bit is the 
-constraint on the area, which is constrained to be x times the _original_ area,
-which is based on the original diameter, d1, which we set to 9, implying an
-original radius, r1, of 4.5. The new radius, r, after scaling, is implied the
-next equality in A's cell. Namely, the area must also equal pi times r^2. And,
-if using a rectangular pan, the width and height need to multiply to that same
-area. The final line in the template says what the diagonal of the w-by-h pan
-must be, per Pythagoras.
+Any cell that scales linearly is multiplied by x, what we're using in this
+template as the scale variable. The confusing bit is the area, A, which is
+constrained to be x times the _original_ area, which is based on the original
+diameter, d1, which we set to 9, implying an original radius, r1, of 4.5. The
+new radius, r, after scaling, is implied by the next equality in A's cell.
+Namely, the area must also equal pi times r^2. And, if using a rectangular pan,
+the width and height need to multiply to that same area. The final line in the
+template says what the diagonal of the w-by-h pan must be, per Pythagoras.
 
 (Side note: Having both {d = 2r} and {r = d/2} is unnecessary. If a variable is
-defined/constrained elsewhere, you can just put it in braces, no equation 
+defined/constrained elsewhere, you can just put it in braces, no equation
 needed. But redundant constraints don't hurt. They're nice sanity checks.)
 
 (Technical note: We support Mathematica-style arithmetic syntax where "2x" means
-"2*x".)
+"2*x". More on math syntax in the section about the constraint solver.)
 
 (Note on prior art: Embedded Ruby (ERB) syntax has `<% code to just evaluate %>`
 and `<%= code to print the output of %>` and `<%# comments %>`.)
@@ -98,8 +103,8 @@ constant at all is initially frozen. But we want to say {x=1} to mean x defaults
 to 1 without fixing x at 1.)
 
 The next thing to notice is that the variables in this recipe template are
-actually under-constrained. Specifically, fixing one of w, h, or z to any number
-implies the other two. Reciplier will pick arbitrary values satisfying the
+actually under-constrained. In particular, fixing one of w or h to any number
+implies the other. Reciplier will pick arbitrary values satisfying the
 constraints. If those choices are silly (as in the 0.01x6361.7-inch pan above)
 the user can just change them and optionally freeze them. Maybe you have only
 9x9-inch square pans so you fix w at 9 and then if Reciplier says that that
@@ -108,9 +113,9 @@ implies h=27, you can take that to mean 3 9x9-inch pans in a row.
 Maybe you slide the slider judiciously to make sure h is a multiple of 9. Or add
 more constraints. Reciplier is your oyster!
 
-But for normal recipes, just put braces and x's on every number that scales
-linearly. For example, a "12" in the recipe becomes "{12x}" to show that what
-was originally a 12 is now a 12 multiplied by the scale factor, x. And then
+But for normal recipes, just put braces and x's on every number that should
+scale linearly. For example, a "12" in the recipe becomes "{12x}" to show that
+what was originally a 12 is now a 12 multiplied by the scale factor, x. And then
 remember to include "{x = 1}" somewhere in the template. That's what generates
 a slider for scaling the recipe.
 
@@ -122,40 +127,43 @@ As always with Reciplier, changing any field causes the rest to insta-update.
 This part is more technical spec than functional spec. The rest of Reciplier 
 treats the solver as a black box. Inside the black box is currently an 
 abomination cobbled together by Claude and Gemini and GPT. Or it's a work of
-genius, I'm not sure. I just know it works for the use cases I've contrived so
-far. In the future we could swap in something fancier, or call out to
-Mathematica's NSolve or NMinimize or something.
+genius, who knows. I just know it works for the use cases I've contrived so far.
+In the future we could swap in something fancier, or call out to Mathematica's
+NSolve or NMinimize or something.
 
-In the meantime, we just need to make sure interface to the solver in the code
-is clean and nice. For that, and for details about what kind of math notation
-Reciplier supports, read on.
+In the meantime, we just need to make sure the interface to the solver in the
+code is clean and nice. For that, and for details about what kind of math
+notation Reciplier supports, read on.
 
-The constraint solver has three components. First is `preval` which preprocesses
+The constraint solver has a few components. First is `preval` which preprocesses
 a math expression string so we can eval it as JavaScript. This includes implicit
 multiplication, like `2x` → `2*x`, exponentiation with `^`, and all the standard
-functions like sqrt, sin, cos, etc, which JavaScript needs to have "Math."
-prepended to. The idea is to support standard ascii math like "3y+cos(x)/4".
+functions like sqrt, sin, cos, etc, which JavaScript needs to have `Math.`
+prepended to. The idea is to support standard ascii math like `3y+cos(x)/4`.
 
 The variables in an expression must be strings that are valid identifiers in
-JavaScript-like languages, like "x" or "a1" or "some_var". Note that even though
-we turn "2x" into "2*x", "x2" is not "x*2", it's just its own variable.
+JavaScript-like languages, like `x` or `a1` or `some_var`. Note that even though
+we turn `2x` into `2*x`, `x2` is not `x*2`, it's just its own variable.
 
 Next is `vareval` which, after preprocessing with `preval`, evals a math
 expression using a given assignment of the variables referenced in the
 expression. For example, `vareval('2x+y', {x: 3, y: 1})` returns 7. If the eval
 fails to return a number, `vareval` returns null.
 
+One more helper function we need is `varparse` which takes an expression returns
+the list of variables used in it.
+
 Finally, the `solvem` function takes a list of equations and a hash of variables
-with initial numerical assignments (as in `vareval` except for `solvem`, initial
-values are allowed to be omitted by specifying them as null) and tries to find a
-satisfying assignment of numeric values to the variables.
+with initial numerical assignments (as in `vareval` except that for `solvem`,
+initial values are allowed to be omitted by specifying them as null) and tries
+to find a satisfying assignment of numeric values to the variables.
 
 An equation is a list of one or more expressions taken to all be equal. Every
 expression in every equation should eval via `vareval` to a number, as long as
 `vareval` is given an assignment of numbers to all the variables the expression
 references.
 
-The `solvem` function returns an object with three fields:
+The `solvem` function returns an object with three attributes:
 * `ass` is a hash of variable names with their solved numeric values (an
 assignment)
 * `zij` (pronounced "zidge") is an array of sum-of-squared-residual-errors,
@@ -167,6 +175,9 @@ If `zij` is all zeros then `ass` is a valid assignment satisfying all the
 constraints.
 * `sat` is a boolean saying whether every entry in `zij` is zero, i.e., whether
 `ass` is a satisfying assignment.
+
+If the variables are underconstrained `solvem` returns a satisfying assignment
+arbitrarily. In practice it may prefer positive values and smaller values.
 
 Examples:
 
@@ -186,90 +197,55 @@ satisfying assignments is black magic.
 
 ## Data Structures and Business Logic
 
-A cell is a data structure that includes the following three fields:
+A cell is a data structure that includes these fields:
 
-* `cvar` is the name of the variable corresponding to this cell
-* `cval` is the current value assigned to this cell's variable
-* `ceqn` (pronounced "sequin") is a list of one or more expressions that are 
-constrained to be equal to each other and to cval
+* `cval` is the current value assigned to this cell
+* `ceqn` (pronounced "sequin") is a list of one or more non-constant expressions
+that are constrained to be equal to each other and possibly to cval
+* `fix` is a boolean saying whether the cell is frozen
+* `urtext` is the exact string between the curly braces in the recipe template
+that defines the cell
 
-We also remember for each the urtext, or exact string between the curly braces
-that defined the cell in the recipe template.
+Recall that the user can edit the template and thus change the urtext any time.
+Everything is reparsed from scratch when that happens.
 
-As part of parsing the recipe template, every cell is automatically assigned a 
-cvar: `var01`, `var02`, etc. 
+Each cell in the recipe template is parsed like so:
 
-(Also I forgot to mention how you can edit the recipe template and Reciplier 
-reparses it and updates the fields and the rest of the UI keystroke by keystroke
-as you edit.)
-
-For ceqn, start by splitting the cell's urtext on "=" to get a list of
-expressions and append the cvar.
-
-The cval is set to a constant in ceqn, if any. More than one constant in ceqn is
-an error. If there aren't any, cval is null.
-
-If the first expression in ceqn is a constant, that means the field for this
-cell is initially frozen. And in general that's what it means for a cell to be
-frozen: its ceqn includes a constant. When the user toggles the frozenness of a
-cell, they're just prepending or removing cval from ceqn.
-
-So, finally, when initially constructing ceqn, remove any constant expression
-other than the first one. This is what causes {6.28 = tau} to yield a field in
-the UI that's initially frozen while {tau = 6.28} doesn't.
-
-For example, if the 4th cell in the template is defined as `{x = 3y = z}` then
-it will have cvar set to `var04`, ceqn set to [`x`, `3y`, `z`, `var04`], and
-cval set to null. The 5th cell defined as `{x = y = 1}` will have cvar set to 
-`var05`, ceqn set to [`x`, `y`, `var05`] and cval set to 1. If cell 6 is a plain
-`{v}` TODO A cell like `{v:}` will have cvar `v`, cval undefined, and ceqn [`v`].
-
-(Note that the solver needs initial values and if you pass in variables that are
-undefined it defaults them to 1, so `{v:}` is functionally the same as `{v:1}`.
-There's a key difference though: specifying a constant in the definition of a
-cell marks it as frozen. See below.)
-
-Every cell has a corresponding field in the UI and cval is always the current
-value assigned to that cell's variable and shown in that cell's field. That
-stays true keystroke by keystroke as a cell is edited.
-
-(Terminology: Since there's a one-to-one correspondence between cells and fields
-and variables, we use all three terms interchangeably but, conceptually, a cell
-is an abstraction representing an assignment of a value to a variable along with
-constraints. A variable in this context means one of the symbols we're assigning
-to as part of the constraint satisfaction problem Reciplier is solving. And of
-course fields in this context refer to the UI elements where the user can make
-explicit assignments of values to variables or see those values change.)
-
-At every moment, every cell's field is shown in red if cval differs from any of
-the expressions in ceqn, given the assignments of all variables.
-
-TODO ---------------------------------------------------------------------------
-
+1. Split the urtext on "=" to get a list of expressions. 
+2. If the first expression in the list is a constant, set `fix` to true.
+3. Filter out all constant expressions. If more than one, that's an error.
+4. Set cval to the constant if there is one, null otherwise.
+5. Set ceqn to the list of non-constant expressions.
 
 ### Freezing and unfreezing cells
 
-Any cell at any time may be marked as frozen. The effect of that is the cell's
-cval is appended to its ceqn. In other words, cvar = cval is treated as one of
-the contraints. Unfreezing removes cval from ceqn again, meaning ceqn once again
-has no constants. A cell is always treated temporarily as frozen while it's
-being edited. If it started frozen and you edit it, it stays frozen at its new
-value.
+Any cell at any time may be marked as frozen (`fix` set to true). Conceptually
+that means that it's treated as one of the constraints that the cell have a
+value of cval. So when `fix` is true or when a cell is being edited, we 
+non-destructively append cval to ceqn when calling solvem.
 
-There's no extra flag or state variable for whether a cell is frozen. If its
-ceqn includes a constant, it's frozen; if not, it isn't. Freezing appends
-cval to ceqn; unfreezing removes any constant from ceqn. (Again, more than
-one constant in ceqn is an error.)
+Again, if the first expression in a cell's urtext is a constant, that cell
+starts frozen. This is what causes {6.28 = tau} to yield a field in the UI
+that's initially frozen while {tau = 6.28} doesn't.
+
+For example, if a cell in the template is defined as `{x = 3y = z}` then
+it will ceqn set to [`x`, `3y`, `z`], and cval set to null. A cell `{x = y = 1}`
+will have ceqn set to [`x`, `y`] and cval set to 1. A plain `{v}` will have a
+cval of null and ceqn [`v`].
+
+Every cell has a corresponding field in the UI and cval is always the current
+value in that field. That stays true keystroke by keystroke as a cell is edited.
 
 ### Always Be Solving
 
-Say the user edits cell c, defined with `{x: 3y = 6}` so having a cvar of `x`,
-to have a cval of 12 instead of the initial 6. And suppose c is marked unfrozen,
-so ceqn is [`3y`]. While c is being edited, we temporarily append the current
-cval of 12 to c's ceqn and send all the ceqns and cvals to the solver.
-(Implementation note: we're not literally appending to ceqn, we're just sending
-all the current ceqns as they are except we're sending c's ceqn with c's cval 
-tacked on.)
+At every moment, every cell's field is shown in red if cval differs from any of
+the expressions in ceqn, given the assignments of all variables returned by 
+solvem.
+
+Say the user edits a cell c defined with `{x = 3y = 6}` to have a cval of 12
+instead of the initial 6. Cell c's ceqn is [`x`, `3y`]. As soon as the edit
+happens, we call `solvem([..., ['x', '3y', 12], ...], {x: null, y: null})`.
+The 12 is included because the user is editing the field for cell c.
 
 If the solver finds a solution, all the cells insta-update. If not, and if any
 cells besides c are frozen (c's frozen status doesn't matter since we're editing
@@ -283,26 +259,26 @@ is typing, i.e., they're recomputed on every keystroke.
 Consider this, which does exactly what you'd expect:
 
 ```
-{a: 3}, {b: 4}, {c: sqrt(a^2 + b^2)} is a Pythagorean triple.
+{a = 3}, {b = 4}, {c = sqrt(a^2 + b^2)} is a Pythagorean triple.
 ```
 
 Or without solving for the hypotenuse:
 
 ```
-{a: 3}, {b: 4}, {c: 5} is a Pythogorean triple.
+{a = 3}, {b = 4}, {c = 5} is a Pythogorean triple.
 
 Sanity check: {a^2 + b^2 = c^2} is the squared hypotenuse.
 ```
 
-We also want a slick UI to mark fields as fixed. Maybe you want to fix side b
-and see how changing side a affects side c. Without that ability it would be 
-arbitrary which of the other fields would change when you edited one.
+We have a slick UI (TBD) to mark fields as frozen or fixed. Maybe you want to
+fix side b and see how changing side a affects side c. Without that ability it
+would be arbitrary which of the other fields would change when you edited one.
 
 If the user ever causes the constraints to be violated, like by marking a=3 and
 b=4 as fixed and then setting field c to something other than 5, or the squared
-hypotenus field to something other than 25, then the UI always lets you but any
+hypotenuse field to something other than 25, then the UI always lets you but any
 non-fixed field whose equation is false is shown in red. (Also you can't mark a
-field fixed when in that state.)
+field frozen when in that state.)
 
 For example, if you had a=3 (fixed), b=4 (fixed), and changed the 5 in the c 
 field to 6, then the last field would turn red and show its violated equation as
@@ -316,7 +292,7 @@ itself to 25.
 What if the initial template is impossible? Like:
 
 ```
-{a: 3}, {b: 4}, {c: 6} is a Pythagorean triple.
+{a = 3}, {b = 4}, {c = 6} is a Pythagorean triple.
 
 <!-- Hidden constraint: {a^2 + b^2 = c^2} -->
 ```
@@ -334,15 +310,15 @@ Stretching the concept of "recipe" far beyond the breaking point, here's a super
 fun and potentially super useful tool when watching a bike race:
 
 ```
-The riders in the break have a {m:1}:{s:30}s gap with {d:20}km to go.
-So if the break does {vb:40}km/h ({0.621371vb}mph) then the peloton needs to do 
-{vp: pd/t}km/h ({0.621371vp}mph) to catch them at the line.
+The riders in the break have a {m=1}:{s=30}s gap with {d=20}km to go.
+So if the break does {vb=40}km/h ({0.621371vb}mph) then the peloton needs to do
+{vp = pd/t}km/h ({0.621371vp}mph) to catch them at the line.
 
 Scratchpad:
-* Gap in hours: {gt: m/60+s/3600} (ie, {m+s/60}m or {60m+s}s or, heck, {gt/24}d)
-* Gap distance: {gd: vb*gt}km ({0.621371gd}mi) (I think vb not vp for this?)
-* Breakaway's time till finish: {t: d/vb}
-* Peloton's distance to the line: {pd: d+gd}
+* Gap in hours: {gt= m/60+s/3600} (ie, {m+s/60}m or {60m+s}s or, heck, {gt/24}d)
+* Gap distance: {gd= vb*gt}km ({0.621371gd}mi) (I think vb not vp for this?)
+* Breakaway's time till finish: {t = d/vb}
+* Peloton's distance to the line: {pd = d+gd}
 ```
 
 It's like making a spreadsheet and doing what-if analysis. We've put that and 
@@ -351,17 +327,17 @@ some of the other examples from this document in the dropdown of recipes.
 Here's a related one for making sure we finish a family bike tour on time:
 
 ```
-Distance:        {d:66} miles
-Start time:      {h:6}:{m:45}am             <!-- {s: h+m/60} hours  -->
-End time:        {H:13}:{M:00} (24H format) <!-- {e: H+M/60} hours  -->
-Wall clock time: {w: e-s} hours = {floor(w)}h{(w-floor(w))*60} minutes
-Rest stop 1:     {b1:} hours = {b1*60 = 26} minutes
-Rest stop 2:     {b2:} hours = {b2*60 = 37} minutes
-Rest stop 3:     {b3:0} hours = {b3*60} minutes
-Total breaks:    {b: b1+b2+b3} hours
-Riding time:     {t: w-b} hours = {floor(t)}h{(t-floor(t))*60}m
-Avg speed:       {v: d/t} mph
-Unadjusted spd:  {u: d/w} mph
+Distance:        {d=66} miles
+Start time:      {h=6}:{m=45}am             <!-- {s = h+m/60} hours  -->
+End time:        {H=13}:{M=00} (24H format) <!-- {e = H+M/60} hours  -->
+Wall clock time: {w = e-s} hours = {floor(w)}h{(w-floor(w))*60} minutes
+Rest stop 1:     {b1} hours = {b1*60 = 26} minutes
+Rest stop 2:     {b2} hours = {b2*60 = 37} minutes
+Rest stop 3:     {b3=0} hours = {b3*60} minutes
+Total breaks:    {b = b1+b2+b3} hours
+Riding time:     {t = w-b} hours = {floor(t)}h{(t-floor(t))*60}m
+Avg speed:       {v = d/t} mph
+Unadjusted spd:  {u = d/w} mph
 ```
 
 (This was originally
@@ -374,34 +350,26 @@ values and formulas separate in a spreadsheet.)
 
 Fail loudly in the following cases:
 
-1. Duplicate variable: More than one cell with the same cvar.
-
-2. Undefined symbol: Any expression in any ceqn contains a symbol that does not
-match the cvar of any cell.
-
-3. Logical impossibility: The template itself contains contradictions. As
+1. Logical impossibility: The template itself contains contradictions. As
 discussed in the example with Pythagorean triples.
 
-4. Syntax error. E.g., nested curly braces or anything else we can't parse.
+2. Syntax error. E.g., nested curly braces or anything else we can't parse.
 
-5. Unlabeled constant: If any expression is a constant without a human-assigned
-cvar. Reasons to treat it as an error: (1) It doesn't make sense to have a field
-that when you change it it has zero effect on anything else. (2) If you really
-want that for some reason, just give the field an explicit cvar.
+3. Bare constant: A cell contains nothing but a constant. Reasons to treat it as
+an error: (1) It doesn't make sense to have a field that when you change it it
+has zero effect on anything else. (2) If you really want that for some reason,
+just assign a variable to that you don't use elsewhere.
 
-6. Unreferenced variable: A labeled cell (one with an explicit cvar) isn't
-referenced by any other cell. Like if you define {tau: 6.28} and then never use
-it. If you're doing that on purpose, like you want that constant defined for use
-in the future, the workaround is something like 
-`{tau: 6.28} <!-- {tau} not currently used -->`.
+4. Unreferenced variable: A variable in a cell isn't referenced by any other
+cell. Like if you define {6.28 = tau} and then never use tau. If you're doing
+that on purpose, like you want that constant defined for use in the future, the
+workaround is something like `{6.28 = tau} <!-- {tau} not currently used -->`.
 You're basically adding a comment that makes the linter shut up.
 
-7. Multiple values: A cell has more than one numerical value, even if it's the
-same value. Like {x: 1 = 2} or {x: 1 = y*z = 1}.
+5. Multiple values: A cell has more than one numerical value, even if it's the
+same value. Like {x = 1 = 2} or {x = 1 = y*z = 1}.
 
-8. Self-reference: A cell references its own cvar and no other variables.
-
-9. Unknown unknowns: Other errors we haven't thought of yet or ways the template
+6. Unknown unknowns: Other errors we haven't thought of yet or ways the template
 file violates any expectations. Anti-Postel FTW.
 
 ## Future Work
@@ -420,182 +388,18 @@ double-click cells by muscle memory to highlight the current contents of a field
 in order to overwrite it. Worse, if you don't happen to ever double-click a
 cell, freezing/unfreezing is totally undiscoverable.
 
-5. I'm thinking we need to go more anti-magic. Currently when you edit a field
-the system just tries changing other variables until something works. That's
-pretty magical. What if instead you could see other fields kind of cross
+5. Bug: "2 x" should parse to "2*x".
+
+6. Thinking out loud about going more anti-magic: Currently when you edit a
+field the system just tries changing other variables until something works.
+That's pretty magical. What if instead you could see other fields kind of cross
 themselves out and show the new values implied by your edit? Or, like, if more
 than one cell can change to accommodate your edit you're forced to explicitly
 freeze cells until that's no longer the case?
 
-6. Bug: "2 x" should parse to "2*x"
 
-7. Big Anti-Colon Refactor...
-
-The urtext of a cell is a list of one or more expressions in curly braces and
-separated by equal signs. Like `{x}` or `{a^2 + b^2 = c^2}` or `{pi = tau/2}` or
-`{7 = y = 3z}`. Cells are initially marked frozen in the UI if and only if their
-urtext starts with a constant. So if you want to define a constant, do it like
-`{6.28 = tau}`. Arithmetic expressions that eval to a number count as constants.
-If you define constant with the variable first, like `{tau = 6.28}`, that's fine
-but the user may need to freeze the cell in the UI to keep the solver from
-finding a solution by changing the ratio of a circle's circumference to its
-radius.
-
-Consider this recipe template:
-
-```
-2*{x = 6} + 3*{y} = {33 = 2x + 3y}
-5*{x} - 4*{y} = {2 = 5x - 4y}
-```
-
-Note that the only solution is x=6, y=7. We parse the template like so:
-
-```
-2*{cvar: var01, cval: 6,    ceqn: [var01, x]} + 
-3*{cvar: var02, cval: null, ceqn: [var02, y]} = 
-  {cvar: var03, cval: 33,   ceqn: [var03, 33, 2x + 3y]}
-5*{cvar: var04, cval: null, ceqn: [var04, x]} - 
-4*{cvar: var05, cval: null, ceqn: [var05, y]} = 
-  {cvar: var06, cval: 2,    ceqn: [var06, 2, 5x - 4y]}
-```
-
-Every cell gets a nonce variable. We send that to solvem() like so:
-
-```javascript
-solvem([ [var01, x],
-         [var02, y],
-         [var03, 33, 2x + 3y],
-         [var04, x],
-         [var05, y],
-         [var06, 2, 5x - 4y] ],
-       { var01: 6, 
-         var02: null,
-         var03: 33,
-         var04: null,
-         var05: null,
-         var06: 2,
-         x: null,
-         y: null })
-```
-
-Mathematica can solve that like so:
-
-```wolfram
-Solve[{v1 == x, v2 == y, v3 == 33 == 2 x + 3 y, v4 == x, v5 == y, 
-       v6 == 2 == 5 x - 4 y}, {v1, v2, v3, v4, v5, v6, x, y}]
-```
-
-
-
-
-
-The solver treats var03 and var06 as constants. It also treats var01 and var04
-and x as aliases. Same for var02 and var05 and y. So the solver isn't actually
-slowed down by the superfluous cvars.
-
-[If this works] We use only equations -- one or more expressions separated by 
-equal signs -- to define cells. A cell is initially marked frozen if its urtext
-starts with a constant or with a symbol and then a constant. So `{7 = x+y}` and
-`{tau = 6.28}` would be initially marked frozen whereas `{x+y = 7}` and 
-`{tau/2 = 3.14}` would be initially marked unfrozen.
-
-Wait, or go more extreme anti-magic and remove that "or": the only way to make a
-cell start frozen is if the urtext starts with a constant. So you have to do
-`{6.28 = tau}` (or you can always manually mark it frozen in the UI).
-
-It's still the case that having a constant in the ceqn is what defines
-frozenness.
+SCRATCH AREA:
 
 Brainstorming: 
 double square brackets could indicate frozen. 
 or a symbol in all caps.
-
-
-
-SCRATCH AREA:
-
-Wait, do we need a special case for a cell like {x: 0} which is just saying
-that x is initialized to 0, not that it's a constraint that x=0? How do we 
-distinguish that from something like {climbed + descended = 0} for a biking
-round trip where the net elevation is always definitionally zero? I think the
-answer is never use a special case (anti-magic!) and we just need to figure out
-the preceding future work item here, where the user just has to be explicit that
-the net-elevation cell is frozen.
-
-7. Do we want special syntax to distinguish "here's an initial default value for
-this cell but don't freeze it" vs "this is a constant we're defining that can't
-change or at least should be frozen unless the user explicitly unfreezes it"?
-First idea: `{tau: 6.28}` means `tau` is frozen and `{scale: (1)}` means `scale`
-is being set to 1 as a default but is unfrozen. Either way, the user can always
-toggle the frozenness at will.
-
-Candidates:
-1. Parens: `{x: 1}` => frozen; `{x: (1)}` => unfrozen
-2. Equal-sign: `{x = 1}` => frozen; `{x: 1}` => unfrozen
-
-Parens is a little gross and ad hoc.
-Equal-sign means an awkward special case. We have to detect the case of no
-explicit cvar and ceqn having two elements, a bare cvar and a constant.
-
-Oh man, now I'm questioning the whole colon thing. Can every cell have it's cvar
-just be explicit only if the cell definition starts with a variable and an equal
-sign? That sure makes a lot of things cleaner. Then we could even bring back the
-colon specifically to indicate "this is not a constraint, just the initial
-setting for this variable".
-
-Let's refactor this in stages:
-
-1. Replace all colons with equal signs.
-2. Except for things like `{x:}` -- that colon just goes away.
-3. Pick another symbol like "~" for "set but don't constrain".
-4. Make sure that all works.
-5. Change "~" to ":".
-
-What about constraints like `{2x+3y = 33}`?
-
-...
-
-Here's the version without universal noncing for comparison:
-
-```
-2*{cvar: x, cval: 6, ceqn: [x]} + 
-3*{cvar: y, cval: null, ceqn: [y]} = 
-{cvar: var01, cval: 33, ceqn: [var01, 33, 2x + 3y]}
-5*{cvar: var02, cval: null, ceqn: [var02, x]} - 
-4*{cvar: var03, cval: null, ceqn: [var03, y]} = 
-{cvar: var04, cval: 2, ceqn: [var04, 2, 5x - 4y]}
-```
-
-```
-solvem([
-  ['d1', 9],                              // d1 = 9 (fixed)
-  ['r1', 'd1/2'],                         // r1 = d1/2
-  ['tau', 6.28],                          // tau = 6.28 (constant)
-  ['x'],                                  // x is free
-  ['r', 'd/2'],                           // r = d/2
-  ['d'],                                  // d is free
-  ['A'],                                  // A is free
-  ['_v', 'A', '1/2*tau*r^2', '1/2*tau*r1^2*x'],  // THE BIG CONSTRAINT
-], {d1: 9, r1: 1, tau: 6.28, x: 1, r: 1, d: 1, A: 1, _v: 1})
-```
-
-```wolfram
-Solve[{
-  v1 == 1 x,
-  v2 == 3 x,
-  v3 == d,
-  v4 == w,
-  v5 == h,
-  v6 == z,
-  v7 == x == 1,
-  v8 == d1 == 9,
-  v9 == r1 == d1/2,
-  v10 == r == d/2,
-  v11 == d == 2 r,
-  v12 == tau == 628/100, 
-  v13 == A == 1/2*tau*r^2 == 1/2*tau*r1^2*x == w*h,
-  v14 == w^2 + h^2 == z^2}, 
-  {v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, 
-   x, d, w, h, z, A, d1, r1, r, tau}]
-```
-

@@ -795,6 +795,7 @@ function checkInitialContradictions(cells, values, emptyExprVars) {
       const tolerance = Math.abs(first) * 1e-6 + 1e-6
       for (let i = 1; i < results.length; i++) {
         if (Math.abs(results[i] - first) > tolerance) {
+          // TODO: only count expressions from the urtext, not the cvar
           const exprStr = cell.ceqn.slice(1).join(' = ')  // Display without cvar
           const valuesStr = results.map(r => formatNum(r)).join(' ≠ ')
           errors.push(`Contradiction: {${exprStr}} evaluates to ${valuesStr}`)

@@ -68,8 +68,9 @@ function vareval(expr, vars) {
 // Helper: Find all variable names referenced in an expression
 // =============================================================================
 
+// TODO: DRY this up vs preval
 const RESERVED_WORDS = new Set(['sqrt', 'floor', 'ceil', 'round', 'min', 'max',
-  'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'exp', 'abs', 'pi'])
+  'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'exp', 'abs'])
 
 function findVariables(expr) {
   if (typeof expr !== 'string' || expr.trim() === '') return new Set()
