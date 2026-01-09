@@ -21,6 +21,7 @@ async function setInputValue(page, selector, value) {
   await el.click({ clickCount: 3 })
   await page.keyboard.type(String(value))
   await el.evaluate(e => e.blur())
+  await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentEditCellId === null)
 }
 
 async function blurSelector(page, selector) {
@@ -145,6 +146,20 @@ async function main() {
 
     // Qual: Editing derived field should solve for underlying variable
     // Bug report: Load crepes, change eggs from 12 to 24, expect x=2 and all fields double
+    await page.select('#recipeSelect', 'blank')
+    await page.select('#recipeSelect', 'crepes')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Qual: crepes x should not revert on shift-tab
+    const xInitialCrepes = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.equal(xInitialCrepes, '1')
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="x"]', '1.5')
+    await page.keyboard.press('Tab', { modifiers: ['Shift'] })
+    await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentEditCellId === null)
+    const xAfterShiftTab = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.equal(xAfterShiftTab, '1.5')
+
+    await page.select('#recipeSelect', 'blank')
     await page.select('#recipeSelect', 'crepes')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
@@ -163,14 +178,14 @@ async function main() {
     // Eggs field should show 24 and NOT be invalid
     const eggsAfterEdit = await page.$eval('input.recipe-field', el => el.value)
     assert.equal(eggsAfterEdit, '24')
-    const eggsInvalid = await page.$eval('input.recipe-field', el => el.classList.contains('invalid'))
-    assert.equal(eggsInvalid, false)
+    const eggsInfo = await page.$eval('input.recipe-field', el => ({ invalid: el.classList.contains('invalid') }))
+    assert.equal(eggsInfo.invalid, false)
 
     // Qual 2: Simultaneous equations should not start violated
     await page.select('#recipeSelect', 'simeq')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    const simeqConstraintHandle = await findFieldByTitleSubstring(page, '5x - 4y = 2')
+    const simeqConstraintHandle = await findFieldByTitleSubstring(page, '5x - 4y')
     const simeqConstraintIsNull = await simeqConstraintHandle.evaluate(el => el === null)
     assert.equal(simeqConstraintIsNull, false)
 
@@ -180,7 +195,7 @@ async function main() {
     await simeqConstraintHandle.dispose()
 
     // Qual 3: Undefined variable shows banner and disables copy
-    const badTemplate = '{a:1} {b: a+z}\n\nSanity: {a=b}'
+    const badTemplate = '{1 = a} {b = a+z}\n\nSanity: {a=b}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
@@ -199,7 +214,7 @@ async function main() {
     assert.equal(hasAnyField, true)
 
     // Qual: violated constraint fields should stay red after blur
-    const contradictory = '{a:1} {b:2} {a=b}'
+    const contradictory = '{1 = a} {2 = b} {a=b}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
@@ -242,7 +257,7 @@ async function main() {
     // Qual: solver banner appears during typing when overconstrained
     // Use {a:1} {b:} {a=b} - a is frozen, b is free
     // When we type a different value in b (not blur), banner should show
-    const overconstrained = '{a:1} {b:} {a=b}'
+    const overconstrained = '{1 = a} {b} {a=b}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
@@ -292,15 +307,93 @@ async function main() {
     assert.equal(cAfterBlur, '5', 'c should revert to 5 on blur')
 
     // Qual: self-reference error check
-    const selfRef = '{x: x}'
+    // NOTE: Self-reference is allowed; this qual verifies it doesn't error.
+    const selfRef = '{x = x} {1 = x+0}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }, selfRef)
 
-    await page.waitForSelector('.error-display', { visible: true })
-    const selfRefError = await page.$eval('.error-display', el => el.textContent || '')
-    assert.ok(/references only itself/i.test(selfRefError), 'Self-reference should produce error')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const selfRefErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.equal(selfRefErrors && selfRefErrors.length, 0)
+    const xVal = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.equal(xVal, '1')
+
+    // Qual: self-reference allowed with other vars present
+    const selfRefWithOther = '{x = x + y - y} {10 = y}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, selfRefWithOther)
+
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const selfRefWithOtherErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.equal(selfRefWithOtherErrors && selfRefWithOtherErrors.length, 0)
+    const yValSelfRef = await getInputValue(page, 'input.recipe-field[data-label="y"]')
+    assert.equal(yValSelfRef, '10')
+    const xValSelfRef = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.ok(/^-?\d+(\.\d+)?$/.test(xValSelfRef))
+
+    // Qual: hidden constraints inside HTML comments constrain solving
+    const hiddenConstraint = '{a} {b = 2a} <!-- {10 = b+0} -->'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, hiddenConstraint)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const aValHidden = await getInputValue(page, 'input.recipe-field[data-label="a"]')
+    const bValHidden = await getInputValue(page, 'input.recipe-field[data-label="b"]')
+    assert.equal(aValHidden, '5')
+    assert.equal(bValHidden, '10')
+
+    // Qual: constant at end is default, not frozen (during typing)
+    const defaultNotFrozen = '{x = 1} {y = 2x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, defaultNotFrozen)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="y"]', '10')
+    await new Promise(r => setTimeout(r, 50))
+    const xAfterTyping = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.equal(xAfterTyping, '5')
+
+    // Qual: constant at front starts frozen
+    const startsFrozen = '{1 = x} {y = 2x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, startsFrozen)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="y"]', '10')
+    await new Promise(r => setTimeout(r, 100))
+    const xStillFrozen = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.equal(xStillFrozen, '1')
+    const frozenBannerVisible = await page.$eval('#solveBanner', el => !el.hidden)
+    const frozenBannerText = await page.$eval('#solveBanner', el => el.textContent || '')
+    assert.equal(frozenBannerVisible, true)
+    assert.ok(/Overconstrained/i.test(frozenBannerText))
+
+    // Qual: bare constant is an error
+    const bareConstant = '{5}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, bareConstant)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const bareErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.ok((bareErrors || []).some(e => /bare number/i.test(e)))
+
+    // Qual: multiple constants in one cell is an error
+    const multiConst = '{x = 1 = 2}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, multiConst)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const multiErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.ok((multiErrors || []).some(e => /more than one numerical value/i.test(e)))
 
     // Qual: nested braces syntax error
     const nestedBraces = 'Test {a{b}c}'
@@ -314,7 +407,7 @@ async function main() {
     assert.ok(/nested braces/i.test(nestedError), 'Nested braces should produce error')
 
     // Qual: unclosed brace syntax error
-    const unclosed = 'Test {x: 1'
+    const unclosed = 'Test {x = 1'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))

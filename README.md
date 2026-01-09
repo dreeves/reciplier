@@ -397,6 +397,12 @@ themselves out and show the new values implied by your edit? Or, like, if more
 than one cell can change to accommodate your edit you're forced to explicitly
 freeze cells until that's no longer the case?
 
+7. Get rid of gemini-solver.js if we've incorporated all the ideas we want from
+it.
+
+8. Add a unixtime() function that we can use in recipe templates.
+
+9. Should cells that depend only on frozen cells automatically freeze?
 
 SCRATCH AREA:
 

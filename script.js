@@ -29,15 +29,15 @@ const recipeHash = {
 
 Yield: roughly {29x} crepes
 
-Scaled by a factor of {x:} <!-- defaults to 1 -->
+Scaled by a factor of {x = 1}
 
 (Flour notes: We did ~{440x}g for years via packed cups but {360x}g (up to {365x}g) is most likely what the recipe intended. Most recently we tried {420x}g and it worked well so we're trying lower.)
 `,
 // -----------------------------------------------------------------------------
 'pyzza': `\
-Scaled by a factor of x={x:}. <!-- defaults to 1 -->
+Scaled by a factor of x={x = 1}.
 
-Roll out dough into a right triangle with legs of length a={a:3x} and b={b:4x} and hypotenuse c={c:}.
+Roll out dough into a right triangle with legs of length a={a = 3x} and b={b = 4x} and hypotenuse c={c}.
 Then eat it.
 
 Sanity check: {a}^2 + {b}^2 = {a^2} + {b^2} = {a^2 + b^2 = c^2}
@@ -62,12 +62,12 @@ Drop rounded teaspoonfuls onto greased baking sheets, about 2 inches apart. Bake
 
 Yield: {54x} cookies, 117 cal (17g carb) per cookie.
 
-Scaled by a factor of {x:} <!-- defaults to 1 -->
+Scaled by a factor of {x = 1 }
 `,
 // -----------------------------------------------------------------------------
 'simeq': `\
-2*{x:6} + 3*{y:} = {2x + 3y = 33}
-5*{x} - 4*{y} = {5x - 4y = 2}
+2*{x = 6} + 3*{y} = {33 = 2x + 3y}
+5*{x} - 4*{y} = {2 = 5x - 4y}
 
 (Expected solution: x=6, y=7)
 `,
@@ -91,7 +91,7 @@ Pour into the prepared cake pan, spread evenly.
 
 Bake 30 to 40 minutes @ 325°F
 
-Scaled by a factor of {x:} <!-- defaults to 1 -->
+Scaled by a factor of {x = 1}
 `,
 // -----------------------------------------------------------------------------
 'pancakes': `\
@@ -108,67 +108,67 @@ Cook on a greased griddle at 350°F for about 2 minutes per side until golden.
 
 Makes {8x} pancakes, 120 calories each.
 
-Scaled by a factor of {x:} <!-- prius: x:1 -->
+Scaled by a factor of {x} <!-- prius: x:1 -->
 `,
 // -----------------------------------------------------------------------------
 'breakaway': `\
-The riders in the break have a {m:1}:{s:30}s gap with {d:20}km ({k*d}mi) to go.
-So if the break averages {vb:40}km/h ({k*vb}mph) then the peloton needs to average {vp: pd/t}km/h ({k*vp}mph) to catch them at the line.
+The riders in the break have a {1 = m}:{30 = s}s gap with {20 = d}km ({k*d}mi) to go.
+So if the break averages {40 = vb}km/h ({k*vb}mph) then the peloton needs to average {vp = pd/t}km/h ({k*vp}mph) to catch them at the line.
 
 Scratchpad:
-* Gap time:     {gt: m/60+s/3600} hours = {m+s/60 = gt*60}m = {60m+s = gt*3600}s
-* Gap distance: {gd: vb*gt}km ({k*gd}mi) <!-- I think vb not vp for this?) -->
-* Breakaway's time till finish: {t: d/vb} hours
-* Peloton's distance to the line: {pd: d+gd}km ({k*pd}mi)
-* Miles in a kilometer: {k: 0.621371}mi/km
+* Gap time:     {gt = m/60+s/3600} hours = {m+s/60 = gt*60}m = {60m+s = gt*3600}s
+* Gap distance: {gd = vb*gt}km ({k*gd}mi) <!-- I think vb not vp for this?) -->
+* Breakaway's time till finish: {t = d/vb} hours
+* Peloton's distance to the line: {pd = d+gd}km ({k*pd}mi)
+* Miles in a kilometer: {0.621371 = k}mi/km
 `,
 // -----------------------------------------------------------------------------
 'biketour': `\
-Distance:        {d:66} miles
-Start time:      {h:6}:{m:45}am             <!-- {s: h+m/60} hours  -->
-End time:        {H:13}:{M:00} (24H format) <!-- {e: H+M/60} hours  -->
-Wall clock time: {w: e-s} hours = {floor(w)}h{(w-floor(w))*60} minutes
-Rest stop 1:     {b1:} hours = {b1*60 = 26} minutes
-Rest stop 2:     {b2:} hours = {b2*60 = 37} minutes
-Rest stop 3:     {b3:0} hours = {b3*60} minutes
-Total breaks:    {b: b1+b2+b3} hours
-Riding time:     {t: w-b} hours = {floor(t)}h{(t-floor(t))*60}m
-Avg speed:       {v: d/t} mph
-Unadjusted spd:  {u: d/w} mph
+Distance:        {66 = d} miles
+Start time:      {h = 6}:{m = 45}am             <!-- {s = h+m/60} hours  -->
+End time:        {13 = H}:{00 = M} (24H format) <!-- {e = H+M/60} hours  -->
+Wall clock time: {w = e-s} hours = {floor(w)}h{(w-floor(w))*60} minutes
+Rest stop 1:     {b1} hours = {b1*60 = 26} minutes
+Rest stop 2:     {b2} hours = {b2*60 = 37} minutes
+Rest stop 3:     {0 = b3} hours = {b3*60} minutes
+Total breaks:    {b = b1+b2+b3} hours
+Riding time:     {t = w-b} hours = {floor(t)}h{(t-floor(t))*60}m
+Avg speed:       {v = d/t} mph
+Unadjusted spd:  {u = d/w} mph
 `,
 // -----------------------------------------------------------------------------
 dial: `\
-* Start: {y0:2026}/{m0:12}/{d0:25} weighing {vini:73}kg
-* End: {y:2026}/{m:12}/{d:25} weighing {vfin:70} ({(tfin-tini)/SID} days later)
+* Start: {y0 = 2026}/{m0 = 12}/{d0 = 25} weighing {vini = 73}kg
+* End: {y = 2026}/{m = 12}/{d = 25} weighing {vfin = 70} ({(tfin-tini)/SID} days later)
 * Rate: {r*SID} per day = {r*SIW} per week = {r*SIM} per month
 
 <!--
 TODO: helper functions to turn dates to unixtime
-{tini: unixtime(y0, m0, d0)}
-{tfin: unixtime(y, m, d)}
-{r: (vfin-vini)/(tfin-tini)}
-{SID: 86400}
-{SIW: SID*7}
-{SIM: SID*365.25/12}
+{tini = unixtime(y0, m0, d0)}
+{tfin = unixtime(y, m, d)}
+{r = (vfin-vini)/(tfin-tini)}
+{86400 = SID}
+{SIW = SID*7}
+{SIM = SID*365.25/12}
 -->
 `,
 // -----------------------------------------------------------------------------
 'sugarcalc': `\
 Nutrition info for healthy stuff (e.g., Greek yogurt):
-* {omega:170} grams per serving
-* {gamma:120} calories per serving
-* {sigma:5} grams of sugar per serving
+* {omega = 170} grams per serving
+* {gamma = 120} calories per serving
+* {sigma = 5} grams of sugar per serving
 
 Nutrition info for junk food (e.g., Go-gurt):
-* {w:} grams per serving (don't actually need to know this) <!-- {w} -->
-* {c:150} calories per serving
-* {s:23} grams of sugar per serving
+* {w} grams per serving (don't actually need to know this) <!-- {w} -->
+* {c = 150} calories per serving
+* {s = 23} grams of sugar per serving
 
-(Fun facts: There are {k: 3.87} calories per gram of normal sugar and {kappa: 3.80} calories per gram of brown sugar.)
+(Fun facts: There are {3.87 = k} calories per gram of normal sugar and {3.80 = kappa} calories per gram of brown sugar.)
 
-"Healthiness" in this context is the fraction of calories that are from sugar. For the Greek yogurt that's {h: k*omega/gamma} and for the Go-gurt it's {eta: k*s/c}.
+"Healthiness" in this context is the fraction of calories that are from sugar. For the Greek yogurt that's {h = k*omega/gamma} and for the Go-gurt it's {eta = k*s/c}.
 
-If you weigh out {y:} grams of Greek yogurt and add {x:} grams of brown sugar to it, the healthiness of the mixture is...
+If you weigh out {y} grams of Greek yogurt and add {x} grams of brown sugar to it, the healthiness of the mixture is...
 
 {(k*sigma*y/omega + kappa*x)/(gamma*y/omega + kappa*x) = eta}
 `,
@@ -191,23 +191,22 @@ Calories_per_serving_in_junk_food
 */
 // -----------------------------------------------------------------------------
 'kpounder': `\
-{p: x/P} pounds = {x: 70} kilograms
+{p = x/P} pounds = {x = 70} kilograms
 <!-- exact definition of a pound is {0.45359237 = P} kilograms -->
 `,
 // -----------------------------------------------------------------------------
 'cheesepan': `\
-Mix {1x} egg and {3x} wheels of cheese in a {d:}-inch diameter pan.
-Or a {w:}x{h:}-inch rectangular pan (with a {z:}-inch diagonal) is fine.
-Or any pan as long as its area is {A:} square inches.
-Heat at 350 degrees.
+Mix {2x} eggs and {3x} wheels of cheese in a {d}-inch diameter pan.
+Or a {w}x{h}-inch rectangular pan (with a {z}-inch diagonal) is fine.
+Or any pan as long as its area is {A = x*1/2*tau*r1^2 = 1/2*tau*r^2 = w*h}
+square inches. Heat at 350 degrees.
 
-This recipe is scaled by a factor of {x:}. <!-- defaults to 1 -->
+This recipe is scaled by a factor of {x = 1}.
 
-Constraints and sanity checks:
-* The original pan diameter at 1x scale is {d1: 9} (radius {r1: d1/2})
-* Scaled radius = {r: d/2} (half the diameter, {d = 2r})
-* The true circle constant is {tau: 6.28}
-* The area, again, is {A = 1/2*tau*r^2 = 1/2*tau*r1^2*x = w*h}
+Constraints, constants, and sanity checks:
+* The true circle constant is {6.28 = tau}
+* The original pan diameter at 1x scale is {9 = d1} (radius {r1 = d1 / 2})
+* Scaled radius is {r = d/2} and scaled diameter is {d = 2r}
 * The squared diagonal of the rectangular pan is {w^2 + h^2 = z^2}
 `,
 // -----------------------------------------------------------------------------
@@ -334,15 +333,17 @@ function parseCell(cell) {
 
   // Check for cvar (identifier followed by colon)
   // cvar pattern: starts with letter or underscore, followed by alphanumerics
-  const cvarMatch = content.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/)
+  // const cvarMatch = content.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/)
 
+  // let cvar = null
+  // let exprPart = content
+
+  // if (cvarMatch) {
+  //   cvar = cvarMatch[1]
+  //   exprPart = cvarMatch[2]
+  // }
   let cvar = null
-  let exprPart = content
-
-  if (cvarMatch) {
-    cvar = cvarMatch[1]
-    exprPart = cvarMatch[2]
-  }
+  const exprPart = content
 
   // Split by = to get constraint expressions (but be careful with == or !=)
   // We want to split on single = that's not part of == or !=
@@ -351,11 +352,13 @@ function parseCell(cell) {
   // Separate bare numbers from expressions
   // Per spec: bare numbers go to cval field, not ceqn
   const bareNumbers = []
-  const expressions = []
+  const nonConstParts = []
+  const partIsConst = []
   for (const part of parts) {
     const asNum = toNum(part)
     if (asNum !== null) {
       bareNumbers.push(asNum)
+      partIsConst.push(true)
       continue
     }
 
@@ -364,12 +367,16 @@ function parseCell(cell) {
       const r = vareval(part, {})
       if (!r.error && typeof r.value === 'number' && isFinite(r.value)) {
         bareNumbers.push(r.value)
+        partIsConst.push(true)
         continue
       }
     }
 
-    expressions.push(part)
+    nonConstParts.push(part)
+    partIsConst.push(false)
   }
+
+  const fix = parts.length > 0 && partIsConst[0] === true
 
   // Error flag if multiple bare numbers (spec case 7)
   const multipleNumbers = bareNumbers.length > 1
@@ -377,14 +384,24 @@ function parseCell(cell) {
   // cval is the bare number (if exactly one), otherwise undefined
   const cval = bareNumbers.length === 1 ? bareNumbers[0] : undefined
 
+  // If the first non-constant part is a simple identifier, treat it as the
+  // cell's variable and remove it from the remaining expressions.
+  if (nonConstParts.length > 0 && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(nonConstParts[0])) {
+    cvar = nonConstParts[0]
+    nonConstParts.shift()
+  }
+
+  const expressions = nonConstParts
+
   // ceqn: will include cvar after preprocessLabels adds it
   // For now, just store the non-bare-number expressions
   return {
     ...cell,
     cvar,
     cval,
+    fix,
     expressions,  // will become ceqn after cvar is added
-    hasConstraint: expressions.length > 1 || (expressions.length >= 1 && bareNumbers.length >= 1),
+    hasConstraint: parts.length >= 2,
     multipleNumbers  // error flag
   }
 }
@@ -511,18 +528,20 @@ function buildSymbolTable(cells) {
 
   // Fifth pass: check for self-reference (case 8)
   // A cell that references its own cvar and no other variables is an error
-  for (const cell of cells) {
-    // Only check expressions in ceqn[1:] (ceqn[0] is the cvar itself)
-    for (let i = 1; i < cell.ceqn.length; i++) {
-      const expr = cell.ceqn[i]
-      const vars = findVariables(expr)
-      // Error if the only variable referenced is the cell's own cvar
-      if (vars.size === 1 && vars.has(cell.cvar)) {
-        errors.push(`Cell ${cell.raw} references only itself`)
-        break
-      }
-    }
-  }
+  // Self-reference is allowed: there are legitimate constraints where a symbol
+  // appears on both sides of an equation.
+  // for (const cell of cells) {
+  //   // Only check expressions in ceqn[1:] (ceqn[0] is the cvar itself)
+  //   for (let i = 1; i < cell.ceqn.length; i++) {
+  //     const expr = cell.ceqn[i]
+  //     const vars = findVariables(expr)
+  //     // Error if the only variable referenced is the cell's own cvar
+  //     if (vars.size === 1 && vars.has(cell.cvar)) {
+  //       errors.push(`Cell ${cell.raw} references only itself`)
+  //       break
+  //     }
+  //   }
+  // }
 
   return { symbols, errors }
 }
@@ -538,7 +557,7 @@ function buildEquations(cells) {
   for (const cell of cells) {
     const eqn = [...cell.ceqn]  // ceqn[0] is cvar, rest are expressions
     // If cell has a bare number cval, add it as a constraint
-    if (cell.cval !== undefined) {
+    if (cell.fix && cell.cval !== undefined) {
       eqn.push(cell.cval)
     }
     eqns.push(eqn)
@@ -570,7 +589,7 @@ function buildInitialValues(cells) {
 function getFrozenVars(cells) {
   const frozen = new Set()
   for (const cell of cells) {
-    if (cell.cval !== undefined) {
+    if (cell.fix) {
       frozen.add(cell.cvar)
     }
   }
@@ -991,6 +1010,9 @@ let state = {
 function parseRecipe() {
   const text = state.recipeText
   const previousValues = state.values
+
+  state.currentEditCellId = null
+  state.valuesBeforeEdit = null
   
   if (!text.trim()) {
     state.cells = []
@@ -1380,7 +1402,10 @@ function handleFieldBlur(e) {
     if (state.fixedVars.has(c.cvar)) {
       eqn.push(state.values[c.cvar])  // Frozen cells stay at their value
     }
-    if (c.id === blurredCellId && c.ceqn.length > 1) {
+    // if (c.id === blurredCellId && c.ceqn.length > 1) {
+    //   eqn.push(blurredValue)
+    // }
+    if (c.id === blurredCellId && (c.ceqn.length > 1 || c.cval !== undefined)) {
       eqn.push(blurredValue)
     }
     return eqn
@@ -1393,10 +1418,32 @@ function handleFieldBlur(e) {
   const seedValues = { ...baseline }
   seedValues[blurredLabel] = blurredValue
   // delete seedValues[blurredLabel]
-  if (blurredCell.ceqn.length <= 1) {
+  // if (blurredCell.ceqn.length <= 1) {
+  //   seedValues[blurredLabel] = null
+  // }
+
+  if (blurredCell.ceqn.length <= 1 && blurredCell.cval === undefined) {
     seedValues[blurredLabel] = null
   }
-  state.values = solvem(eqns, seedValues)
+
+  const frozen = new Set(state.fixedVars)
+  let solvedValues = solvem(eqns, seedValues, frozen)
+
+  if (!eqnsSatisfied(eqns, solvedValues)) {
+    const eqnsWithoutBlurredConstraint = state.cells.map(c => {
+      const eqn = [...c.ceqn]
+      if (state.fixedVars.has(c.cvar)) {
+        eqn.push(state.values[c.cvar])
+      }
+      return eqn
+    })
+
+    const seedValuesWithoutBlurredConstraint = { ...baseline }
+    seedValuesWithoutBlurredConstraint[blurredLabel] = null
+    solvedValues = solvem(eqnsWithoutBlurredConstraint, seedValuesWithoutBlurredConstraint, frozen)
+  }
+
+  state.values = solvedValues
   state.solveBanner = ''
 
   state.currentEditCellId = null
