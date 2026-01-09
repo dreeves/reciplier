@@ -193,6 +193,17 @@ async function main() {
 
     // Qual: eggs value should not drift after tabbing around
     await setInputValue(page, 'input.recipe-field', '13')
+    const eggsAfterSet = await page.$eval('input.recipe-field', el => el.value)
+    assert.equal(eggsAfterSet, '13')
+
+    // Tabbing around without edits should not change computed values
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Tab', { modifiers: ['Shift'] })
+    const eggsAfterNoEditTabbing = await page.$eval('input.recipe-field', el => el.value)
+    assert.equal(eggsAfterNoEditTabbing, '13')
+
     await page.keyboard.press('Tab')
     await page.keyboard.press('Tab')
     await page.keyboard.press('Tab', { modifiers: ['Shift'] })

@@ -234,7 +234,7 @@ function toNum(x) {
 function formatNum(num) {
   if (typeof num !== 'number' || !isFinite(num)) return '?'
   // Snap to nearest integer if within 0.0001 (handles solver precision issues)
-  if (Math.abs(num - Math.round(num)) < 0.001) {
+  if (Math.abs(num - Math.round(num)) < 0.0001) {
     num = Math.round(num)
   }
   // Show up to 4 decimal places, trim trailing zeros
@@ -1384,6 +1384,14 @@ function recomputeValues(cells, values, skipVars = new Set()) {
 function handleFieldBlur(e) {
   const blurredLabel = e.target.dataset.label
   const blurredCellId = e.target.dataset.cellId
+
+  const didEditThisField = state.currentEditCellId === blurredCellId
+  if (!didEditThisField) {
+    state.solveBanner = ''
+    const banner = $('solveBanner')
+    if (banner) banner.hidden = true
+    return
+  }
 
   const blurredValue = toNum(e.target.value)
   if (blurredValue === null || !isFinite(blurredValue)) {
