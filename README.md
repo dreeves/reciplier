@@ -191,25 +191,38 @@ A cell is a data structure that includes the following three fields:
 * `cvar` is the name of the variable corresponding to this cell
 * `cval` is the current value assigned to this cell's variable
 * `ceqn` (pronounced "sequin") is a list of one or more expressions that are 
-  constrained to be equal to each other and to cval
+constrained to be equal to each other and to cval
 
-TODO ---------------------------------------------------------------------------
+We also remember for each the urtext, or exact string between the curly braces
+that defined the cell in the recipe template.
 
+As part of parsing the recipe template, every cell is automatically assigned a 
+cvar: `var01`, `var02`, etc. 
 
-(Implementation note: As a preprocessing pass, add nonce cvars to every 
-expression that doesn't have one. E.g., {1x} and {3x} become {var01: 1x} and
-{var02: 3x}. That way the rest of the code can count on a consistent format: a
-cvar, a colon, and then one or more expressions separated by equal-signs.)
+(Also I forgot to mention how you can edit the recipe template and Reciplier 
+reparses it and updates the fields and the rest of the UI keystroke by keystroke
+as you edit.)
 
-Initially we exclude from ceqn any expressions that are constants (either a bare
-number or an arithmetic expression that evaluate to a number -- so no 
-variables). Instead, cval is set to any constant specified in the cell 
-definition. (More than one constant in the definition of a cell is an error).
+For ceqn, start by splitting the cell's urtext on "=" to get a list of
+expressions and append the cvar.
 
-For example, a cell defined as `{x: 3y = z}` will have cvar set to `x` and ceqn
-set to [`x`, `3y`, `z`] with cval initially undefined. A cell defined as 
-`{x: y = 1}` will have cvar set to `x`, ceqn set to [`x`, `y`] and cval set 
-to 1. A cell like `{v:}` will have cvar `v`, cval undefined, and ceqn [`v`].
+The cval is set to a constant in ceqn, if any. More than one constant in ceqn is
+an error. If there aren't any, cval is null.
+
+If the first expression in ceqn is a constant, that means the field for this
+cell is initially frozen. And in general that's what it means for a cell to be
+frozen: its ceqn includes a constant. When the user toggles the frozenness of a
+cell, they're just prepending or removing cval from ceqn.
+
+So, finally, when initially constructing ceqn, remove any constant expression
+other than the first one. This is what causes {6.28 = tau} to yield a field in
+the UI that's initially frozen while {tau = 6.28} doesn't.
+
+For example, if the 4th cell in the template is defined as `{x = 3y = z}` then
+it will have cvar set to `var04`, ceqn set to [`x`, `3y`, `z`, `var04`], and
+cval set to null. The 5th cell defined as `{x = y = 1}` will have cvar set to 
+`var05`, ceqn set to [`x`, `y`, `var05`] and cval set to 1. If cell 6 is a plain
+`{v}` TODO A cell like `{v:}` will have cvar `v`, cval undefined, and ceqn [`v`].
 
 (Note that the solver needs initial values and if you pass in variables that are
 undefined it defaults them to 1, so `{v:}` is functionally the same as `{v:1}`.
@@ -230,6 +243,9 @@ explicit assignments of values to variables or see those values change.)
 
 At every moment, every cell's field is shown in red if cval differs from any of
 the expressions in ceqn, given the assignments of all variables.
+
+TODO ---------------------------------------------------------------------------
+
 
 ### Freezing and unfreezing cells
 

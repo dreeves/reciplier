@@ -361,7 +361,13 @@ function solvem(eqns, vars) {
       }
     }
     if (bestStable !== null) return bestStable
-    // Fourth: any evaluable complex expression (not trustworthy)
+    // Fourth: simple variables with known values (not trustworthy)
+    for (const expr of eqn) {
+      if (typeof expr === 'string' && isSimpleVar(expr) && isKnown(expr)) {
+        return { value: values[expr], isTrustworthy: false, stableNonSingleton: false }
+      }
+    }
+    // Fifth: any evaluable complex expression (not trustworthy)
     for (const expr of eqn) {
       if (typeof expr === 'string' && !isSimpleVar(expr)) {
         const r = evalExpr(expr)
@@ -370,11 +376,11 @@ function solvem(eqns, vars) {
         }
       }
     }
-    // Fifth: simple variables with known values (not trustworthy)
-    for (const expr of eqn) {
-      if (typeof expr === 'string' && isSimpleVar(expr) && isKnown(expr)) {
-        return { value: values[expr], isTrustworthy: false, stableNonSingleton: false }
-      }
+
+    // Last resort: totally underconstrained equation with no evaluable target.
+    // Pick a conventional target of 1 to allow propagation (eg, a = 2b).
+    if (constrained.size === 0 && eqn.some(e => typeof e === 'string' && isSimpleVar(e))) {
+      return { value: 1, isTrustworthy: false, stableNonSingleton: false }
     }
     return null
   }
@@ -825,6 +831,45 @@ function runQuals() {
   check('solveFor: with other vars', solveFor('x + y', 'x', 10, {y: 3}), 7)
 
   console.log('\n=== solvem quals ===')
+
+  function zidge(eqns, ass) {
+    return eqns.map(eqn => {
+      if (eqn.length < 2) return 0
+      const vals = eqn.map(e => {
+        if (typeof e === 'number') return e
+        const r = vareval(e, ass)
+        return (r.error || !isFinite(r.value)) ? NaN : r.value
+      })
+      if (vals.some(v => !isFinite(v))) return NaN
+      const m = vals.reduce((a, b) => a + b, 0) / vals.length
+      return vals.reduce((s, v) => s + (v - m) ** 2, 0)
+    })
+  }
+
+  function solvemReport(eqns, init) {
+    const ass = solvem(eqns, init)
+    return { ass, zij: zidge(eqns, ass), sat: eqnsSatisfied(eqns, ass) }
+  }
+
+  // README example 1
+  check('solvem: README #1 (a=2b assignment)',
+    solvem([['a', '2b']], {a: null, b: null}),
+    {a: 1, b: 0.5})
+  check('solvem: README #1 (sat)',
+    solvemReport([['a', '2b']], {a: null, b: null}).sat,
+    true)
+
+  // README example 2
+  check('solvem: README #2 (assignment)',
+    solvem([['a+b', 8], ['a', 3], ['b', 4], ['c']], {a: null, b: null, c: 0}),
+    {a: 3, b: 4, c: 0})
+  ;(() => {
+    const eqns = [['a+b', 8], ['a', 3], ['b', 4], ['c']]
+    const rep = solvemReport(eqns, {a: null, b: null, c: 0})
+    check('solvem: README #2 (sat)', rep.sat, false)
+    check('solvem: README #2 (zij[0] nonzero)', rep.zij[0] > 0, true)
+    check('solvem: README #2 (zij[1..] zero)', rep.zij.slice(1).every(z => z === 0), true)
+  })()
   check('solvem: simple equation',
     solvem([['x', 5]], {x: 1}),
     {x: 5})
@@ -837,10 +882,21 @@ function runQuals() {
     solvem([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0}),
     {x: 6, y: 7})
 
+  // README example 3
+  check('solvem: README #3 (sat)',
+    solvemReport([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0}).sat,
+    true)
+
   check('solvem: Pythagorean triple propagation',
     solvem([['x', 1], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
       {x: 1, a: 1, b: 1, c: 1, v1: 1}),
     {x: 1, a: 3, b: 4, c: 5, v1: 25})
+
+  // README example 4
+  check('solvem: README #4 (sat)',
+    solvemReport([['x', 1], ['a', '3x'], ['b', '4x'], ['v1', 'a^2+b^2', 'c^2']],
+      {x: 1, a: 1, b: 1, c: 1, v1: 1}).sat,
+    true)
 
   // Pyzza: scaling Pythagorean triple by changing one side
   check('solvem: pyzza change a to 30',
@@ -857,6 +913,34 @@ function runQuals() {
     solvem([['c', 50], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
       {x: 1, a: 1, b: 1, c: 50, v1: 1}),
     {x: 10, a: 30, b: 40, c: 50, v1: 2500})
+
+  // UI-style Pyzza system: includes nonce variables for display-only cells.
+  ;(() => {
+    const eqns = [
+      ['x'],
+      ['a', '3x'],
+      ['b', '4x'],
+      ['c', 50],
+      ['_var001', 'a'],
+      ['_var002', 'b'],
+      ['_var003', 'a^2'],
+      ['_var004', 'b^2'],
+      ['_var005', 'a^2 + b^2', 'c^2'],
+    ]
+    const rep = solvemReport(eqns, {
+      x: 1,
+      a: 1,
+      b: 1,
+      c: 50,
+      _var001: null,
+      _var002: null,
+      _var003: null,
+      _var004: null,
+      _var005: null,
+    })
+    check('solvem: Pyzza UI-style c=50 (sat)', rep.sat, true)
+    check('solvem: Pyzza UI-style c=50 (assignment)', rep.ass, {x: 10, a: 30, b: 40, c: 50}, 0.05)
+  })()
 
   check('solvem: chain propagation',
     solvem([['a', 2], ['b', 'a+1'], ['c', 'b+1']], {a: 1, b: 1, c: 1}),
