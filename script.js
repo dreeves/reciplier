@@ -552,6 +552,8 @@ function buildInitialValues(cells) {
   for (const cell of cells) {
     // TODO: this if-statement, like most, seems wrong-headed
     if (cell.isNonce) {
+      // continue
+      values[cell.cvar] = null
       continue
     }
     if (cell.cval !== undefined) {
@@ -591,7 +593,13 @@ function computeInitialValues(cells, symbols) {
   const eqns = buildEquations(cells)
   const seedValues = buildInitialValues(cells)
   const frozen = getFrozenVars(cells)
-  const values = solvem(eqns, seedValues, frozen)
+  let values
+  try {
+    values = solvem(eqns, seedValues, frozen)
+  } catch (e) {
+    errors.push(String(e && e.message ? e.message : e))
+    values = { ...seedValues }
+  }
 
   // Check for any undefined values
   for (const cell of cells) {
@@ -970,7 +978,9 @@ let state = {
   userEditedVars: new Set(),  // Track variables the user has directly edited
   errors: [],
   solveBanner: '',
-  currentRecipeKey: ''
+  currentRecipeKey: '',
+  currentEditCellId: null,
+  valuesBeforeEdit: null,
 }
 
 // =============================================================================
@@ -1228,6 +1238,11 @@ function handleFieldInput(e) {
   const cell = state.cells.find(c => c.id === cellId)
   if (!cell) return
 
+  if (state.currentEditCellId !== cellId) {
+    state.currentEditCellId = cellId
+    state.valuesBeforeEdit = { ...state.values }
+  }
+
   // Build equations for solving
   // Per spec: "A cell is always treated temporarily as frozen while it's being
   // edited" - meaning we add its new value as a constraint.
@@ -1345,6 +1360,16 @@ function recomputeValues(cells, values, skipVars = new Set()) {
 
 function handleFieldBlur(e) {
   const blurredLabel = e.target.dataset.label
+  const blurredCellId = e.target.dataset.cellId
+
+  const blurredValue = toNum(e.target.value)
+  if (blurredValue === null || !isFinite(blurredValue)) {
+    e.target.classList.add('invalid')
+    return
+  }
+
+  const blurredCell = state.cells.find(c => c.id === blurredCellId)
+  if (!blurredCell) return
 
   // Per README: "as soon as you clicked away from field c, it would recompute
   // itself as the only value that makes all the equations true"
@@ -1354,14 +1379,27 @@ function handleFieldBlur(e) {
     if (state.fixedVars.has(c.cvar)) {
       eqn.push(state.values[c.cvar])  // Frozen cells stay at their value
     }
+    if (c.id === blurredCellId && c.ceqn.length > 1) {
+      eqn.push(blurredValue)
+    }
     return eqn
   })
 
-  const frozen = new Set(state.fixedVars)
-  const seedValues = { ...state.values }
-  delete seedValues[blurredLabel]
-  state.values = solvem(eqns, seedValues, frozen)
+  const baseline = (state.currentEditCellId === blurredCellId && state.valuesBeforeEdit)
+    ? state.valuesBeforeEdit
+    : state.values
+
+  const seedValues = { ...baseline }
+  seedValues[blurredLabel] = blurredValue
+  // delete seedValues[blurredLabel]
+  if (blurredCell.ceqn.length <= 1) {
+    seedValues[blurredLabel] = null
+  }
+  state.values = solvem(eqns, seedValues)
   state.solveBanner = ''
+
+  state.currentEditCellId = null
+  state.valuesBeforeEdit = null
 
   const violatedCellIds = getViolatedCellIds(state.cells, state.values)
 

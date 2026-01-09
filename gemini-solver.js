@@ -4,11 +4,11 @@
  */
 function solvem(eqns, initialVars) {
   // --- CONFIGURATION ---
-  const MAX_ITERATIONS = 60000;
-  const LEARN_RATE = 0.02;      
+  const MAX_ITERATIONS = 200000;
+  const LEARN_RATE = 0.005;      
   const DECAY = 0.95;           
   const EPSILON = 1e-10;        
-  const STEP_CLIP = 10.0; // Increased to help C=50 converge faster
+  const STEP_CLIP = 1.0; // Increased to help C=50 converge faster
 
   const varNames = Object.keys(initialVars);
 
@@ -125,10 +125,16 @@ function solvem(eqns, initialVars) {
 
         let targetVar = null;
         if (nans.length === 1) {
-            targetVar = nans[0];
+          targetVar = nans[0];
         } else if (nans.length === 0 && weaks.length === 1) {
-            targetVar = weaks[0];
+          targetVar = weaks[0];
         }
+        // else if (nans.length === 0 && weaks.length > 0) {
+        //     for (let w of weaks) {
+        //       const wi = varNames.indexOf(w);
+        //       if (!dependencies.has(wi) && !pinned.has(wi)) { targetVar = w; break; }
+        //     }
+        // }
 
         if (targetVar) {
             const tIdx = varNames.indexOf(targetVar);
@@ -194,41 +200,39 @@ function solvem(eqns, initialVars) {
   let gradCache = new Float64Array(values.length).fill(0);
   const DELTA = 1e-6;
 
-  for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-    enforceDeps(); 
-
+  const computeError = () => {
     let totalError = 0;
     const results = compiledEqns.map(funcs => funcs.map(f => f(...values)));
-    
     for (let row of results) {
       for (let i = 0; i < row.length - 1; i++) {
         let diff = row[i] - row[i+1];
         totalError += diff * diff;
       }
     }
+    return totalError;
+  };
 
+  for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+    enforceDeps(); 
+
+    const totalError = computeError();
     if (totalError < EPSILON) break;
 
     for (let i = 0; i < values.length; i++) {
       if (pinned.has(i) || dependencies.has(i)) continue;
 
+      const baseError = computeError();
+
       let original = values[i];
       values[i] = original + DELTA;
       enforceDeps(); 
 
-      let errorPlus = 0;
-      for (let r = 0; r < compiledEqns.length; r++) {
-        const row = compiledEqns[r].map(f => f(...values));
-        for (let k = 0; k < row.length - 1; k++) {
-           let diff = row[k] - row[k+1];
-           errorPlus += diff * diff;
-        }
-      }
+      const errorPlus = computeError();
 
       values[i] = original; 
       enforceDeps(); 
 
-      let grad = (errorPlus - totalError) / DELTA;
+      let grad = (errorPlus - baseError) / DELTA;
 
       gradCache[i] = DECAY * gradCache[i] + (1 - DECAY) * (grad * grad);
       let step = (LEARN_RATE * grad) / (Math.sqrt(gradCache[i]) + 1e-8);
@@ -240,6 +244,64 @@ function solvem(eqns, initialVars) {
     }
   }
   enforceDeps();
+
+  // 6. NEWTON REFINEMENT (post-optimization)
+  // (Disabled: attempt diverged on coupled linear systems.)
+  // for (let round = 0; round < 30; round++) {
+  //   let changed = false;
+  //
+  //   for (let eqIdx = 0; eqIdx < eqns.length; eqIdx++) {
+  //     const eqn = eqns[eqIdx];
+  //     const funcs = compiledEqns[eqIdx];
+  //
+  //     let anchorVal = NaN;
+  //     for (let i = 0; i < eqn.length; i++) {
+  //       if (typeof eqn[i] === 'number') { anchorVal = eqn[i]; break; }
+  //     }
+  //     if (!Number.isFinite(anchorVal)) continue;
+  //
+  //     for (let termIdx = 0; termIdx < eqn.length; termIdx++) {
+  //       const raw = eqn[termIdx];
+  //       if (typeof raw === 'number') continue;
+  //       const deps = getDeps(raw);
+  //       if (deps.length === 0) continue;
+  //
+  //       const targetVar = deps[eqIdx % deps.length];
+  //       const tIdx = varNames.indexOf(targetVar);
+  //       if (tIdx < 0) continue;
+  //       if (pinned.has(tIdx) || dependencies.has(tIdx)) continue;
+  //
+  //       let guess = values[tIdx];
+  //       if (!Number.isFinite(guess) || Math.abs(guess) < 1e-12) guess = 0.1;
+  //
+  //       for (let n = 0; n < 12; n++) {
+  //         values[tIdx] = guess;
+  //         const y1 = funcs[termIdx](...values);
+  //
+  //         const d = 1e-6;
+  //         values[tIdx] = guess + d;
+  //         const y2 = funcs[termIdx](...values);
+  //
+  //         const slope = (y2 - y1) / d;
+  //         if (!Number.isFinite(slope) || Math.abs(slope) < 1e-12) break;
+  //
+  //         const next = guess - (y1 - anchorVal) / slope;
+  //         if (!Number.isFinite(next)) break;
+  //         if (Math.abs(next - guess) < 1e-12) { guess = next; break; }
+  //         guess = next;
+  //       }
+  //
+  //       const before = values[tIdx];
+  //       values[tIdx] = guess;
+  //       if (Number.isFinite(before) && Number.isFinite(guess) && Math.abs(before - guess) > 1e-12) {
+  //         changed = true;
+  //       }
+  //     }
+  //   }
+  //
+  //   enforceDeps();
+  //   if (!changed) break;
+  // }
 
   let result = {};
   varNames.forEach((k, i) => result[k] = values[i]);
@@ -317,4 +379,9 @@ check('Pyzza: C=50',
 check("Impossible Conflict (Pinned)",
   solvem([['sum', 'x+y'], ['sum', 10], ['sum', 20]], {x:0, y:0, sum:0}),
   {sum: 10} 
+);
+
+check('Simultaneous equations',
+  solvem([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0}),
+  {x: 6, y: 7}
 );

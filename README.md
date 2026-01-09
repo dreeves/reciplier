@@ -5,90 +5,184 @@ Background at [AGI Friday](https://agifriday.substack.com/p/reciplier).
 
 See also http://doc.dreev.es/recipes which maybe I want to merge with this.
 
-This is now more general than recipes and is kind of halfway to a spreadsheet.
-But also it's better than a spreadsheet in some ways. It also subsume's my old
-"calculator calculator" app that I called Sheeq.
+Turns out this is way more general than recipes and is kind of halfway to a 
+spreadsheet. Much better than a spreadsheet in some ways. It also subsume's my
+old "calculator calculator" app that I called Sheeq.
 
 # Functional Spec for Generalized Reciplier
 
-Consider a recipe that has you mix 1 egg and 3 wheels of cheese in a 9-inch
-diameter pan. 
-
-But of course that 9 doesn't scale linearly with the ingredients. It's the area
-that does that, because there's a certain fixed thickness required, let's say.
-And the area in this case (since pi are square) comes out to 63.62 inches. If
-you doubled the recipe you'd double that area to 127.24 which implies you'd need
-a 12.73-inch diameter pan. And say we want to allow for a rectangular pan as
-well.
-
-Here's how we do all that by annotating the recipe:
+The most basic Reciplier use case starts with a recipe template like so:
 
 ```
-Mix {1x} egg and {3x} wheels of cheese in a {d:}-inch diameter pan.
-Or a {w:}x{h:}-inch rectangular pan (with a {z:}-inch diagonal) is fine.
-Or any pan as long as its area is {A:} square inches.
-Heat at 350 degrees.
+Mix {2x} eggs and {3x} wheels of cheese. Then eat it.
 
-This recipe is scaled by a factor of {x:}. <!-- defaults to 1 -->
+This recipe is scaled by {x = 1}.
+```
 
-Constraints and sanity checks:
-* The original pan diameter at 1x scale is {d1: 9} (radius {r1: d1 / 2})
-* Scaled radius = {r: d/2} (half the diameter, {d = 2r})
-* The true circle constant is {tau: 6.28}
-* The area, again, is {A = 1/2*tau*r^2 = 1/2*tau*r1^2*x = w*h}
+Each expression in curly braces is called a cell. Reciplier renders each cell as
+a numeric field in the UI and you can edit any of them at will, causing the
+others to change accordingly to keep all the constraints satisfied, like how the
+number of wheels of cheese is always 3 times whatever x is. Or edit the field
+for wheels of cheese to 18 and the number of eggs will automatically change to
+12 and x to 6.
+
+Now consider a recipe that has you mix 2 eggs and 3 wheels of cheese in a 9-inch
+diameter pan. Of course that 9 doesn't scale linearly with the ingredients. It's
+the area that does that, because there's a certain fixed thickness required, 
+let's say. And the area in this case (since pi are square) comes out to 63.62
+inches. If you doubled the recipe you'd double that area to 127.24 which implies
+you'd need a 12.73-inch diameter pan. And say we want to allow for a rectangular
+pan as well.
+
+Here's how we do all that by annotating the recipe template:
+
+```
+Mix {2x} eggs and {3x} wheels of cheese in a {d}-inch diameter pan.
+Or a {w}x{h}-inch rectangular pan (with a {z}-inch diagonal) is fine.
+Or any pan as long as its area is {A = x*1/2*tau*r1^2 = 1/2*tau*r^2 = w*h}
+square inches. Heat at 350 degrees.
+
+This recipe is scaled by a factor of {x = 1}.
+
+Constraints, constants, and sanity checks:
+* The true circle constant is {6.28 = tau}
+* The original pan diameter at 1x scale is {9 = d1} (radius {r1 = d1 / 2})
+* Scaled radius is {r = d/2} and scaled diameter is {d = 2r}
 * The squared diagonal of the rectangular pan is {w^2 + h^2 = z^2}
 ```
 
-So we're explicitly marking every number in the recipe that scales linearly. We
-do that by literally replacing, for example, a "12" in the recipe with "{12x}"
-to show that what was originally a 12 is now a 12 multiplied by the scale 
-factor, x.
+Any cell that scales linearly is multiplied by x. The confusing bit is the 
+constraint on the area, which is constrained to be x times the _original_ area,
+which is based on the original diameter, d1, which we set to 9, implying an
+original radius, r1, of 4.5. The new radius, r, after scaling, is implied the
+next equality in A's cell. Namely, the area must also equal pi times r^2. And,
+if using a rectangular pan, the width and height need to multiply to that same
+area. The final line in the template says what the diagonal of the w-by-h pan
+must be, per Pythagoras.
+
+(Side note: Having both {d = 2r} and {r = d/2} is unnecessary. If a variable is
+defined/constrained elsewhere, you can just put it in braces, no equation 
+needed. But redundant constraints don't hurt. They're nice sanity checks.)
 
 (Technical note: We support Mathematica-style arithmetic syntax where "2x" means
 "2*x".)
 
-Every expression optionally has a variable name (see next section) for
-referencing it in other expressions. It's an error if you specify the same name
-for two expressions but you can reference a variable as much as you want. Like
-how the first line of the above recipe labels the diameter as d and later in the 
-bulleted list we define r as d/2 and mention the diameter again. It's actually
-unnecessary there to say {d = 2r} rather than just {d} since we've defined r as
-d/2, which is equivalent, but it doesn't hurt to add a redundant constraint.
-
 (Note on prior art: Embedded Ruby (ERB) syntax has `<% code to just evaluate %>`
 and `<%= code to print the output of %>` and `<%# comments %>`.)
 
-Regardless, each expression in curly braces is shown as a numeric field in the 
-Reciplier UI and the system searches for values for all the variables that make
-all the equations true. In this case we see something like this initially:
+In any case, the above template gets rendered as something like this initially:
 
 ```
-Mix [1] egg(s) and [3] wheels of cheese in a [9]-inch pan.
+Mix [2] egg(s) and [3] wheels of cheese in a [9]-inch pan.
 Or a [0.01]x[6361.7]-inch rectangular pan ([6361.7]-inch diagonal) is fine.
-Or any pan with area [63.62] square inches.
-Heat at 350 degrees.
+Or any pan with area [63.62] square inches. Heat at 350 degrees.
 
 This recipe is scaled by a factor of [1].
 
 Constraints and sanity checks:
-* Radius = [4.5] (half the diameter, [9])
-* The true circle constant is [6.28]
-* The area of the pan before scaling is [63.62]
+* The true circle constant is [[6.28]]
+* The original pan diameter at 1x scale is [[9]] (radius [4.5])
+* Scaled radius is [4.5] and scaled diameter is [9]
 * The squared diagonal of the rectangular pan is [40471547]
 ```
 
-The computed width and height of the rectangular pan are silly but the system
-doesn't know that. It's just the first solution to the equations it found,
-favoring positive, finite numbers. You could change the bare {w:} in the
-template to {w:8} or {w:8x} and it would calculate h as the non-silly 7.95. Of
-course both w=8 and w=8x yield more silliness if you scale way up. By setting
-w=8 and x=100, you'd get an 8x795 pan. By setting w=8x and x=100, you'd get an 
-800x7.95 pan. Of course what you actually want to do is replace the bare {z:}
-with something like {z:11x} so the pan's diagonal scales with the recipe and the
-pan doesn't become stupidly skinny as the recipe scales.
+We use a convention that if any cell starts with a constant (arithmetic 
+expressions that evaluate to a number count as constants) then by default that
+cell is frozen in the UI. That's indicated above with double brackets and just
+means that the solver will hold that value fixed and try to find values for the
+other cells that satisfy the constraints. The user can always toggle the
+frozenness of a cell any time.
 
-As always with Reciplier, changing any of those fields causes the rest to
-insta-update.
+(Do we need that convention? Simpler would be if any cell that includes a
+constant at all is initially frozen. But we want to say {x=1} to mean x defaults
+to 1 without fixing x at 1.)
+
+The next thing to notice is that the variables in this recipe template are
+actually under-constrained. Specifically, fixing one of w, h, or z to any number
+implies the other two. Reciplier will pick arbitrary values satisfying the
+constraints. If those choices are silly (as in the 0.01x6361.7-inch pan above)
+the user can just change them and optionally freeze them. Maybe you have only
+9x9-inch square pans so you fix w at 9 and then if Reciplier says that that
+implies h=27, you can take that to mean 3 9x9-inch pans in a row.
+
+Maybe you slide the slider judiciously to make sure h is a multiple of 9. Or add
+more constraints. Reciplier is your oyster!
+
+But for normal recipes, just put braces and x's on every number that scales
+linearly. For example, a "12" in the recipe becomes "{12x}" to show that what
+was originally a 12 is now a 12 multiplied by the scale factor, x. And then
+remember to include "{x = 1}" somewhere in the template. That's what generates
+a slider for scaling the recipe.
+
+As always with Reciplier, changing any field causes the rest to insta-update.
+
+
+## The Constraint Solver
+
+This part is more technical spec than functional spec. The rest of Reciplier 
+treats the solver as a black box. Inside the black box is currently an 
+abomination cobbled together by Claude and Gemini and GPT. Or it's a work of
+genius, I'm not sure. I just know it works for the use cases I've contrived so
+far. In the future we could swap in something fancier, or call out to
+Mathematica's NSolve or NMinimize or something.
+
+In the meantime, we just need to make sure interface to the solver in the code
+is clean and nice. For that, and for details about what kind of math notation
+Reciplier supports, read on.
+
+The constraint solver has three components. First is `preval` which preprocesses
+a math expression string so we can eval it as JavaScript. This includes implicit
+multiplication, like `2x` → `2*x`, exponentiation with `^`, and all the standard
+functions like sqrt, sin, cos, etc, which JavaScript needs to have "Math."
+prepended to. The idea is to support standard ascii math like "3y+cos(x)/4".
+
+The variables in an expression must be strings that are valid identifiers in
+JavaScript-like languages, like "x" or "a1" or "some_var". Note that even though
+we turn "2x" into "2*x", "x2" is not "x*2", it's just its own variable.
+
+Next is `vareval` which, after preprocessing with `preval`, evals a math
+expression using a given assignment of the variables referenced in the
+expression. For example, `vareval('2x+y', {x: 3, y: 1})` returns 7. If the eval
+fails to return a number, `vareval` returns null.
+
+Finally, the `solvem` function takes a list of equations and a hash of variables
+with initial numerical assignments (as in `vareval` except for `solvem`, initial
+values are allowed to be omitted by specifying them as null) and tries to find a
+satisfying assignment of numeric values to the variables.
+
+An equation is a list of one or more expressions taken to all be equal. Every
+expression in every equation should eval via `vareval` to a number, as long as
+`vareval` is given an assignment of numbers to all the variables the expression
+references.
+
+The `solvem` function returns an object with three fields:
+* `ass` is a hash of variable names with their solved numeric values (an
+assignment)
+* `zij` (pronounced "zidge") is an array of sum-of-squared-residual-errors,
+corresponding to each equation. If we say that, using assignment `ass`, the
+expressions in an equation eval to values [v1, ..., vn] and that m is the mean
+of those values, then the differences between the vi's and m are the residuals.
+Square the residuals and sum them and that's the `zij` entry for that equation.
+If `zij` is all zeros then `ass` is a valid assignment satisfying all the
+constraints.
+* `sat` is a boolean saying whether every entry in `zij` is zero, i.e., whether
+`ass` is a satisfying assignment.
+
+Examples:
+
+1. `solvem([['a', '2b']], {a: null, b: null})`
+returns `{ass: {a: 1, b: 0.5}, zij: [0], sat: true}`
+2. `solvem([['a+b', 8], ['a', 3], ['b', 4], ['c']], {a: null, b: null, c: 0})`
+returns `{ass: {a: 3, b: 4, c: 0}, zij: [1, 0, 0, 0], sat: false}`
+3. `solvem([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0})` 
+returns `{ass: {x: 6, y: 7}, zij: [0, 0], sat: true}`
+4. `solvem([['x', 1], ['a', '3x'], ['b', '4x'], ['v1', 'a^2+b^2', 'c^2']], `
+  `{x: 1, a: 1, b: 1, c: 1, v1: 1})` 
+returns `{ass: {x: 1, a: 3, b: 4, c: 5, v1: 25}, zij: [0, 0], sat: true}`
+
+The constraint solver is the core of Reciplier but how it comes up with those
+satisfying assignments is black magic.
+
 
 ## Data Structures and Business Logic
 
@@ -98,6 +192,9 @@ A cell is a data structure that includes the following three fields:
 * `cval` is the current value assigned to this cell's variable
 * `ceqn` (pronounced "sequin") is a list of one or more expressions that are 
   constrained to be equal to each other and to cval
+
+TODO ---------------------------------------------------------------------------
+
 
 (Implementation note: As a preprocessing pass, add nonce cvars to every 
 expression that doesn't have one. E.g., {1x} and {3x} become {var01: 1x} and
@@ -485,3 +582,4 @@ Solve[{
   {v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, 
    x, d, w, h, z, A, d1, r1, r, tau}]
 ```
+

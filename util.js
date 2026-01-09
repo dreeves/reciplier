@@ -1,9 +1,10 @@
 // Maybe call this as part of preval?
 function deoctalize(s) { return s.replace(/(?<![\w_\.])0+(\d)/g, '$1') }
 
-// Convert Mathematica-style expression syntax to JavaScript.
-// Supports: implicit multiplication (2x -> 2*x), ^ for exponentiation, math 
-// functions, pi, etc.
+// Preprocess a math expression string so we can eval it as JavaScript.
+// This includes implicit multiplication, like "2x" -> "2*x", exponentiation 
+// with ^, and all the standard functions like sqrt, sin, cos, etc, which 
+// JavaScript needs to have "Math." prepended to.
 function preval(expr) {
   if (typeof expr !== 'string' || expr.trim() === '') {
     throw new Error(`Invalid expression: ${String(expr)}`)
@@ -18,7 +19,7 @@ function preval(expr) {
 
   // Math functions
   js = js.replace(/\b(sqrt|floor|ceil|round|min|max|sin|cos|tan|asin|acos|atan|log|exp|abs)\s*\(/g, 'Math.$1(')
-  js = js.replace(/\bpi\b/gi, 'Math.PI')
+  //js = js.replace(/\bpi\b/gi, 'Math.PI')
 
   // Exponentiation: x^2 -> Math.pow(x,2)
   // Does it not work to just do ^ -> ** ?
@@ -32,15 +33,22 @@ function preval(expr) {
   return js
 }
 
-// Evaluate an expression with given variable values. E.g., 
-// vareval('2x+y', {x: 3, y: 1}) returns {value: 7, error: null}.
+// Eval a math expression (after preprocessing with preval) using the given 
+// assignments of variables. E.g., vareval('2x+y', {x: 3, y: 1}) returns 7.
+// If the eval fails to return a number, it returns null. TODO
 function vareval(expr, vars) {
   try {
     const jsExpr = deoctalize(preval(expr))
 
     // Build variable assignments
     const assignments = Object.entries(vars)
-      .map(([name, val]) => `const ${name} = ${val};`)
+      .map(([name, val]) => {
+        // Important: null/undefined should behave like unknowns, not like 0.
+        // In JS arithmetic, null coerces to 0 (eg, 3*null === 0), which can
+        // silently collapse solutions during interactive edits.
+        const jsVal = (val === null || val === undefined) ? 'NaN' : String(val)
+        return `const ${name} = ${jsVal};`
+      })
       .join('\n')
 
     // Use Function constructor to evaluate in isolated scope
@@ -177,30 +185,58 @@ function solveFor(expr, varName, target, values) {
 // =============================================================================
 //
 // The solvem function takes a list of equations and a hash of variables with
-// initial numerical assignments and returns a satisfying assignment of numeric
-// values to the variables (or as close to one as it can get).
-// An equation is a list of expressions taken to all be equal.
-// An expression is a string that can be eval'd in JavaScript as a number, if 
-// prefaced by an assignment of numbers to the variables it references. (See the
-// vareval function, which does that. Also expressions support richer syntax
+// initial numerical assignments and tries to find a satisfying assignment of
+// numeric values to the variables.
+// * An equation is a list of one or more expressions taken to all be equal.
+// * An expression is a string that can be eval'd in JavaScript to a number, if 
+// prefaced by an assignment of numbers to the variables it references. 
+// (The vareval function does that eval. Also expressions support richer syntax
 // than JavaScript and are passed through a preprocessor, preval, that converts
 // them to valid JavaScript.)
-// The variables are valid identifiers in JavaScript-like langages, like "x" or
-// "a1" or "some_var".
-// (There's a companion function, solved(), that takes the same arguments and 
-// returns 0 if all the equations are satisfied by the given assignments. More
-// generally it returns the residual -- a measure of how far the assignments are
-// from satisfying the equations.)
-// (Or maybe solvem should return both the closest solution it could find and
-// the residual? Or maybe we don't ever need the residual and should rather
-// return a list of booleans corresponding to which equations are satisfied?)
+// * The variables are strings that are valid identifiers in JavaScript-like 
+// langages, like "x" or "a1" or "some_var".
+// This function returns an object with 3 fields:
+// * ass: A hash of variable names with their solved numeric values (an 
+// assignment)
+// * zij: (Pronounced "zidge") An array of sum-of-squared-residual-errors, 
+// corresponding to each equation. If we say that, using assignment ass, the 
+// expressions in an equation eval to values [v1, ..., vn] and that m is the
+// mean of those values, then the differences between the vi's and m are the 
+// residuals. Square the residuals and sum them and that's the zij entry for
+// that equation. If zij is all zeros then ass is a valid assignment satisfying
+// all the constraints.
+// * sat: A boolean saying whether every entry in zij is zero, i.e., whether ass
+// is a satisfying assignment.
 // Examples:
-// solvem([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0}) returns {x: 6, y: 7}. 
-// solvem([['x', 1], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
-//        {x: 1, a: 1, b: 1, c: 1, v1: 1}) returns 
-// {x: 1, a: 3, b: 4, c: 5, v1: 25}. 
+// 1. solvem([['a', '2b']], {a: null, b: null})
+// returns {ass: {a: 1, b: 0.5}, zij: [0], sat: true}
+// 2. solvem([['a+b', 8], ['a', 3], ['b', 4], ['c']], {a: null, b: null, c: 0})
+// returns {ass: {a: 3, b: 4, c: 0}, zij: [1, 0, 0, 0], sat: false}
+// 3. solvem([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0}) returns 
+// {ass: {x: 6, y: 7}, zij: [0, 0], sat: true}
+// 4. solvem([['x', 1], ['a', '3x'], ['b', '4x'], ['v1', 'a^2+b^2', 'c^2']],
+// returns {x: 1, a: 1, b: 1, c: 1, v1: 1}) returns 
+// {ass: {x: 1, a: 3, b: 4, c: 5, v1: 25}, zij: [0, 0], sat: true}
 // See also: Gaussian elimination, Mathematica's NSolve and NMinimize.
 function solvem(eqns, vars) {
+  const required = new Set()
+  for (const eqn of eqns) {
+    for (const term of eqn) {
+      if (typeof term === 'number') continue
+      if (typeof term !== 'string') continue
+      const t = term.trim()
+      if (t === '') continue
+      if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(t)) {
+        required.add(t)
+      }
+      for (const v of findVariables(t)) required.add(v)
+    }
+  }
+  const missing = [...required].filter(v => !Object.prototype.hasOwnProperty.call(vars, v))
+  if (missing.length > 0) {
+    throw new Error(`solvem: missing initial vars: ${missing.sort().join(', ')}`)
+  }
+
   const values = { ...vars }
   const tol = 1e-6
 
@@ -226,6 +262,22 @@ function solvem(eqns, vars) {
         if (isSimpleVar(e)) constrained.add(e)
       }
     }
+  }
+
+  // Literal pins: if a variable appears in an equation with a number, treat it
+  // as pinned to the first such literal encountered.
+  const literalPinned = new Map() // var -> pinned numeric value
+  for (const eqn of eqns) {
+    const n = eqn.find(e => typeof e === 'number')
+    if (typeof n !== 'number') continue
+    for (const e of eqn) {
+      if (isSimpleVar(e) && !literalPinned.has(e)) {
+        literalPinned.set(e, n)
+      }
+    }
+  }
+  for (const [v, n] of literalPinned) {
+    values[v] = n
   }
 
   // Singletons: variables with singleton equations like ['x']
@@ -345,6 +397,8 @@ function solvem(eqns, vars) {
     for (const eqn of sortedEqns) {
       if (checkEquation(eqn)) continue
 
+      const eqnHasLiteral = eqn.some(e => typeof e === 'number')
+
       const targetResult = findTarget(eqn)
       if (targetResult === null) continue
       const { value: target, isTrustworthy, isStable: targetIsStable, stableNonSingleton: targetStableNonSingleton = false } = targetResult
@@ -354,7 +408,8 @@ function solvem(eqns, vars) {
 
         // Simple variable: just set it to target (unless just solved)
         if (isSimpleVar(expr)) {
-          if (constrained.has(expr) && isKnown(expr) && values[expr] !== target) {
+          if (literalPinned.has(expr)) continue
+          if (!eqnHasLiteral && constrained.has(expr) && isKnown(expr) && values[expr] !== target) {
             continue
           }
           if (!solvedThisPass.has(expr) && (!isKnown(expr) || values[expr] !== target)) {
@@ -391,6 +446,57 @@ function solvem(eqns, vars) {
         } else if (unknowns.length === 0 && (isTrustworthy || targetIsStable)) {
           // All known but doesn't match - adjust if target is trustworthy or stable
           // Try each variable and pick the one that changes the least (preserves good initial guesses)
+          // Special-case: if the expression is a simple product of two free variables (like w*h),
+          // scale both together to preserve their ratio.
+          if (exprVars.size === 2) {
+            const vars2 = [...exprVars]
+            const a = vars2[0]
+            const b = vars2[1]
+            const compact = expr.replace(/\s+/g, '')
+            if (compact === `${a}*${b}` || compact === `${b}*${a}`) {
+              if (!constrained.has(a) && !constrained.has(b) &&
+                  !solvedThisPass.has(a) && !solvedThisPass.has(b) &&
+                  !trustworthy.has(a) && !trustworthy.has(b)) {
+                const aVal = values[a]
+                const bVal = values[b]
+                if (isFinite(aVal) && isFinite(bVal) && isFinite(target) && target > 0) {
+                  const current = aVal * bVal
+                  let newA = null
+                  let newB = null
+
+                  if (current === 0) {
+                    const root = Math.sqrt(target)
+                    newA = root
+                    newB = root
+                  } else {
+                    const scale = Math.sqrt(target / current)
+                    if (isFinite(scale) && scale > 0) {
+                      newA = aVal * scale
+                      newB = bVal * scale
+                    }
+                  }
+
+                  if (newA !== null && newB !== null) {
+                    values[a] = newA
+                    values[b] = newB
+                    changed = true
+                    solvedThisPass.add(a)
+                    solvedThisPass.add(b)
+                    if (isTrustworthy) {
+                      trustworthy.add(a)
+                      trustworthy.add(b)
+                    }
+                    if (targetIsStable && (isTrustworthy || targetStableNonSingleton || constrained.size === 0)) {
+                      stableDerived.add(a)
+                      stableDerived.add(b)
+                    }
+                    continue
+                  }
+                }
+              }
+            }
+          }
+
           let bestVar = null
           let bestVal = null
           let bestChange = Infinity
@@ -428,9 +534,15 @@ function solvem(eqns, vars) {
   if (needsFallback) {
     // Find root variables: appear in expressions but not constrained
     const definedBy = new Map()  // var -> expression that defines it
+    const copies = []            // list of [dest, src] for simple-var aliases like ['_var001','a']
     for (const eqn of eqns) {
       if (eqn.length === 2) {
         const [e1, e2] = eqn
+        // Pattern: ['_var001', 'a'] where both are simple vars.
+        // Treat as a definition in the given direction (e1 follows e2).
+        if (isSimpleVar(e1) && isSimpleVar(e2)) {
+          copies.push([e1, e2])
+        }
         // Pattern: ['a', '3x'] where a is simple var, 3x is expression
         if (isSimpleVar(e1) && typeof e2 === 'string' && !isSimpleVar(e2)) {
           const vars = findVariables(e2)
@@ -481,6 +593,50 @@ function solvem(eqns, vars) {
           }
         }
 
+        // Propagate simple-var aliases (eg, _var001 = a)
+        for (const [dest, src] of copies) {
+          const v = testValues[src]
+          if (isFinite(v)) {
+            testValues[dest] = v
+          }
+        }
+
+        // Propagate equation heads: if eqn[0] is a (non-root, non-constrained)
+        // simple var, set it to any finite RHS value we can evaluate.
+        for (const eqn of eqns) {
+          if (eqn.length < 2) continue
+          const head = eqn[0]
+          if (typeof head !== 'string' || !isSimpleVar(head)) continue
+          if (head === root) continue
+          if (constrained.has(head)) continue
+
+          let bestVal = null
+          let bestScore = -1
+          for (let i = 1; i < eqn.length; i++) {
+            const e = eqn[i]
+            if (typeof e === 'number') {
+              bestVal = e
+              bestScore = 2
+              break
+            }
+
+            const r = vareval(e, testValues)
+            if (r.error || !isFinite(r.value)) continue
+
+            const vars = findVariables(e)
+            const constrainedOnly = [...vars].every(v => constrained.has(v))
+            const score = constrainedOnly ? 1 : 0
+
+            if (score > bestScore) {
+              bestScore = score
+              bestVal = r.value
+            }
+          }
+          if (bestVal !== null) {
+            testValues[head] = bestVal
+          }
+        }
+
         if (iter < 3 || (mid > 9.9 && mid < 10.1)) console.log('DEBUG: iter', iter, 'mid:', mid.toFixed(4), 'test:', {x: testValues.x?.toFixed(2), a: testValues.a?.toFixed(2), b: testValues.b?.toFixed(2), c: testValues.c, v1: testValues.v1})
 
         // Check if constraints are satisfied
@@ -513,6 +669,47 @@ function solvem(eqns, vars) {
         for (const [v, { expr }] of definedBy) {
           const r = vareval(expr, testHi)
           if (!r.error && isFinite(r.value)) testHi[v] = r.value
+        }
+
+        // Mirror the same propagation we do for testValues
+        for (const [dest, src] of copies) {
+          const v = testHi[src]
+          if (isFinite(v)) {
+            testHi[dest] = v
+          }
+        }
+        for (const eqn of eqns) {
+          if (eqn.length < 2) continue
+          const head = eqn[0]
+          if (typeof head !== 'string' || !isSimpleVar(head)) continue
+          if (head === root) continue
+          if (constrained.has(head)) continue
+
+          let bestVal = null
+          let bestScore = -1
+          for (let i = 1; i < eqn.length; i++) {
+            const e = eqn[i]
+            if (typeof e === 'number') {
+              bestVal = e
+              bestScore = 2
+              break
+            }
+
+            const r = vareval(e, testHi)
+            if (r.error || !isFinite(r.value)) continue
+
+            const vars = findVariables(e)
+            const constrainedOnly = [...vars].every(v => constrained.has(v))
+            const score = constrainedOnly ? 1 : 0
+
+            if (score > bestScore) {
+              bestScore = score
+              bestVal = r.value
+            }
+          }
+          if (bestVal !== null) {
+            testHi[head] = bestVal
+          }
         }
         let residualHi = 0
         for (const eqn of eqns) {
@@ -608,14 +805,14 @@ function runQuals() {
   check('vareval: implicit multiplication', vareval('2x', {x: 5}).value, 10)
   check('vareval: exponentiation', vareval('x^2', {x: 3}).value, 9)
   check('vareval: sqrt function', vareval('sqrt(16)', {}).value, 4)
-  check('vareval: pi constant', vareval('2pi', {}).value, 2 * Math.PI)
+  //check('vareval: pi constant', vareval('2pi', {}).value, 2 * Math.PI)
   check('vareval: complex expression', vareval('a^2 + b^2', {a: 3, b: 4}).value, 25)
 
   console.log('\n=== preval quals ===')
   check('toJS: implicit mult', preval('2x'), '2*x')
   check('toJS: keeps var3 intact', preval('var3'), 'var3')
   check('toJS: power', preval('x^2').includes('Math.pow'), true)
-  check('toJS: pi', preval('2pi'), '2*Math.PI')
+  //check('toJS: pi', preval('2pi'), '2*Math.PI')
   console.log('\n=== deoctalize quals ===')
   check('deoctalize: preserves 10', deoctalize('10'), '10')
   check('deoctalize: strips leading 0', deoctalize('010'), '10')
@@ -723,6 +920,21 @@ function runQuals() {
     solvem([['r', 5], ['d', '2*r']], {d: 1, r: 5}),
     {d: 10, r: 5})
 
+  check('solvem: prefers explicit initial guess',
+    solvem([['a+b', 8]], {a: 4, b: null}),
+    {a: 4, b: 4})
+
+  check('solvem: missing initial vars throws',
+    (() => {
+      try {
+        solvem([['a+b+c', 8]], {a: 4, b: null})
+        return false
+      } catch (e) {
+        return true
+      }
+    })(),
+    true)
+
   // Having BOTH should also work and be consistent
   check('solvem: both r=d/2 and d=2r with d frozen',
     solvem([['d', 10], ['r', 'd/2'], ['_v', 'd', '2*r']], {d: 10, r: 1, _v: 1}),
@@ -755,6 +967,118 @@ function runQuals() {
       var06: 2,
       x: 6,
       y: 7 })
+
+  check('solvem: Mixed Nulls & Propagation',
+    solvem([ ['var01', 'x'],
+             ['var02', 'y'],
+             ['var03', 33, '2*x + 3*y'],
+             ['var04', 'x'],
+             ['var05', 'y'],
+             ['var06', 2, '5*x - 4*y'] ],
+      {var01: 6, var02: null, var03: 33, var04: null, var05: null, var06: 2, x: null, y: null}),
+    {var01: 6, var02: 7, x: 6, y: 7})
+
+  check('solvem: Pythagorean Chain',
+    solvem([['x', 1], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
+      {x: 1, a: 1, b: 1, c: 1, v1: 1}),
+    {x: 1, a: 3, b: 4, c: 5, v1: 25})
+
+  check('solvem: Pyzza: A=30',
+    solvem([['a', 30], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
+      {x: 1, a: 30, b: 1, c: 1, v1: 1}),
+    {x: 10, a: 30, b: 40, c: 50, v1: 2500})
+
+  check('solvem: Pyzza: B=40',
+    solvem([['b', 40], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
+      {x: 1, a: 1, b: 40, c: 1, v1: 1}),
+    {x: 10, a: 30, b: 40, c: 50, v1: 2500})
+
+  check('solvem: Pyzza: C=50',
+    solvem([['c', 50], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
+      {x: 1, a: 1, b: 1, c: 50, v1: 1}),
+    {x: 10, a: 30, b: 40, c: 50, v1: 2500})
+
+  check('solvem: Impossible Conflict (Pinned)',
+    solvem([['sum', 'x+y'], ['sum', 10], ['sum', 20]], {x: 0, y: 0, sum: 0}),
+    {sum: 10})
+
+  const cheesepanMathematica = solvem([
+    ['v1', '2x'],
+    ['v2', '3x'],
+    ['v3', 'd'],
+    ['v4', 'w'],
+    ['v5', 'h'],
+    ['v6', 'z', 'sqrt(2A)*x'],
+    ['v7', 'A', '1/2*tau*r^2', '1/2*tau*r1^2*x', 'w*h'],
+    ['v8', 'x', 1],
+    ['v9', 'tau', 6.28],
+    ['v10', 9, 'd1'],
+    ['v11', 'r1', 'd1/2'],
+    ['v12', 'r', 'd/2'],
+    ['v13', 'd', '2r'],
+    ['v14', 'w^2 + h^2', 'z^2'],
+  ], {
+    v1: 1,
+    v2: 1,
+    v3: 1,
+    v4: 1,
+    v5: 1,
+    v6: 1,
+    v7: 1,
+    v8: 1,
+    v9: 6.28,
+    v10: 9,
+    v11: 1,
+    v12: 1,
+    v13: 1,
+    v14: 1,
+    x: 1,
+    d: 1,
+    w: 1,
+    h: 1,
+    z: 1,
+    A: 1,
+    tau: 6.28,
+    d1: 9,
+    r1: 1,
+    r: 1,
+    sum: 0,
+  })
+
+  check('solvem: cheesepan Mathematica system',
+    cheesepanMathematica,
+    {
+      v1: 2,
+      v2: 3,
+      v3: 9,
+      v4: 7.97402,
+      v5: 7.97402,
+      v6: 11.277,
+      v7: 63.585,
+      v8: 1,
+      v9: 6.28,
+      v10: 9,
+      v11: 4.5,
+      v12: 4.5,
+      v13: 9,
+      v14: 127.17,
+      x: 1,
+      d: 9,
+      w: 7.97402,
+      h: 7.97402,
+      z: 11.277,
+      A: 63.585,
+      tau: 6.28,
+      d1: 9,
+      r1: 4.5,
+      r: 4.5,
+    },
+    0.05)
+
+  check('solvem: cheesepan Mathematica positivity',
+    cheesepanMathematica.z > 0 && cheesepanMathematica.r > 0 &&
+      cheesepanMathematica.w > 0 && cheesepanMathematica.h > 0,
+    true)
 
 
   console.log('\n=== Summary ===')
