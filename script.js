@@ -460,11 +460,12 @@ function buildSymbolTable(cells) {
       errors.push(`Cell ${cell.raw} has more than one numerical value`)
     }
 
-    if (symbols[cell.cvar]) {
-      errors.push(
-        `Cell ${cell.raw} overrides previous definition of ${cell.cvar}`)
-      //continue // keeping this means later def'ns don't override earlier ones
-    }
+    // TODO: no such thing as overriding definitions now
+    //if (symbols[cell.cvar]) {
+    //  errors.push(
+    //    `Cell ${cell.raw} overrides previous definition of ${cell.cvar}`)
+    //  //continue // keeping this means later def'ns don't override earlier ones
+    //}
     symbols[cell.cvar] = {
       definedBy: cell.id,
       cval: cell.cval,
@@ -1210,7 +1211,7 @@ function renderRecipe() {
   // Attach event handlers to inputs
   output.querySelectorAll('input.recipe-field').forEach(input => {
     input.addEventListener('input', handleFieldInput)
-    input.addEventListener('blur', handleFieldBlur)
+    // input.addEventListener('blur', handleFieldBlur)
     input.addEventListener('keypress', handleFieldKeypress)
     input.addEventListener('dblclick', handleFieldDoubleClick)
   })
@@ -1257,6 +1258,8 @@ function handleFieldInput(e) {
     updateSolveBannerInDom()
     return
   }
+
+  input.onblur = handleFieldBlur
 
   const cell = state.cells.find(c => c.id === cellId)
   if (!cell) return
@@ -1385,13 +1388,16 @@ function handleFieldBlur(e) {
   const blurredLabel = e.target.dataset.label
   const blurredCellId = e.target.dataset.cellId
 
-  const didEditThisField = state.currentEditCellId === blurredCellId
-  if (!didEditThisField) {
-    state.solveBanner = ''
-    const banner = $('solveBanner')
-    if (banner) banner.hidden = true
-    return
-  }
+  // NOTE: This guard was introduced to stop blur-triggered drift when tabbing.
+  // It's safe to delete because blur-solving is now only wired up for fields
+  // that received an actual `input` event.
+  // const didEditThisField = state.currentEditCellId === blurredCellId
+  // if (!didEditThisField) {
+  //   state.solveBanner = ''
+  //   const banner = $('solveBanner')
+  //   if (banner) banner.hidden = true
+  //   return
+  // }
 
   const blurredValue = toNum(e.target.value)
   if (blurredValue === null || !isFinite(blurredValue)) {
