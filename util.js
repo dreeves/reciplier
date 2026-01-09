@@ -64,6 +64,20 @@ function vareval(expr, vars) {
   }
 }
 
+function unixtime(y, m, d) {
+  const yy = Number(y)
+  const mm = Number(m)
+  const dd = Number(d)
+
+  if (!Number.isInteger(yy)) throw new Error(`unixtime: invalid year: ${String(y)}`)
+  if (!Number.isInteger(mm) || mm < 1 || mm > 12) throw new Error(`unixtime: invalid month: ${String(m)}`)
+  if (!Number.isInteger(dd) || dd < 1 || dd > 31) throw new Error(`unixtime: invalid day: ${String(d)}`)
+
+  const ms = Date.UTC(yy, mm - 1, dd)
+  if (!Number.isFinite(ms)) throw new Error(`unixtime: invalid date: ${yy}-${mm}-${dd}`)
+  return ms / 1000
+}
+
 function varparse(expr) {
   return [...findVariables(expr)].sort()
 }
@@ -79,7 +93,8 @@ function constant(expr) {
 
 // TODO: DRY this up vs preval
 const RESERVED_WORDS = new Set(['sqrt', 'floor', 'ceil', 'round', 'min', 'max',
-  'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'exp', 'abs'])
+  'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'exp', 'abs',
+  'unixtime'])
 
 function findVariables(expr) {
   if (typeof expr !== 'string' || expr.trim() === '') return new Set()
@@ -880,8 +895,12 @@ function runQuals() {
   check('vareval: implicit multiplication', vareval('2x', {x: 5}).value, 10)
   check('vareval: exponentiation', vareval('x^2', {x: 3}).value, 9)
   check('vareval: sqrt function', vareval('sqrt(16)', {}).value, 4)
+  check('vareval: unixtime epoch', vareval('unixtime(1970,1,1)', {}).value, 0)
+  check('vareval: unixtime next day', vareval('unixtime(1970,1,2)', {}).value, 86400)
   //check('vareval: pi constant', vareval('2pi', {}).value, 2 * Math.PI)
   check('vareval: complex expression', vareval('a^2 + b^2', {a: 3, b: 4}).value, 25)
+
+  check('varparse: unixtime not a variable', varparse('unixtime(y,m,d)').includes('unixtime'), false)
 
   console.log('\n=== preval quals ===')
   check('toJS: implicit mult', preval('2x'), '2*x')

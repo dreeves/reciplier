@@ -57,11 +57,11 @@ content="Paste in a recipe and scale it up or down. Also a SAT solver, why not."
       <p>
 This is kind of a free-form spreadsheet.
 Check out the example "recipes" and it will gradually make sense.
-The idea is you create cells with curly braces that contain optional names and then expressions or equations, like
+The idea is you create cells with curly braces that contain expressions or equations, like
 <span class="font-mono">{2x}</span> or 
-<span class="font-mono">{x:1}</span> or
-<span class="font-mono">{squaredHypotenuse: a^2 + b^2 = c^2}</span>. 
-(Nerds: "2x" is short for "2*x" &mdash; it supports Mathematica-style math.)
+<span class="font-mono">{x = 1}</span> or
+<span class="font-mono">{a^2 + b^2 = c^2}</span>. 
+(Nerds: "2x" is short for "2*x" but "x2" is just a variable, not "x*2".)
       </p>
       <p>
 This was originally vibe-coded by Cantor Soule-Reeves and Daniel Reeves with
@@ -133,7 +133,7 @@ for an example of some prior art.
   
   <div class="text-center text-gray-400 text-sm mt-4">
     <div class="text-gray-300 text-xs mt-1">
-      v2026.01.08-j
+      v2026.01.09-a
     </div>
   </div>
 </div>

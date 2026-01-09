@@ -379,7 +379,8 @@ file violates any expectations. Anti-Postel FTW.
 1. Markdown rendering
 
 2. Instead of making a slider for whatever variable is called "x", make a slider
-for all labeled cells, and make it easy to dismiss ones you don't need.
+for every cell for which the first expression in the urtext is a variable. And
+make it easy to dismiss ones you don't need.
 
 3. Direct links to recipes. Option 1: encode the entire template verbatim in the
 query string. Option 2: encode which template file and encode every variable
@@ -402,12 +403,21 @@ freeze cells until that's no longer the case?
 7. Get rid of gemini-solver.js if we've incorporated all the ideas we want from
 it.
 
-8. Add a unixtime() function that we can use in recipe templates.
+8. Make it easy to add any utility functions we want available to in the vareval
+environment. Maybe even have that code available in the UI, unobtrusively so as
+not to clutter the UI for the simple recipe use case.
 
 9. Should cells that depend only on frozen cells automatically freeze?
+
+10. Is it too weird to define constants via constraints where the constant part
+comes first? Syntax like {tau := 6.28} could define a constant and it's just
+uneditable, rendering as normal text, no field.
+
+11. Then could we support something like {goal_units := "kg"} and then ... I
+guess that's turning this thing into a whole templating engine like ERB.
 
 SCRATCH AREA:
 
 Brainstorming: 
-double square brackets could indicate frozen. 
-or a symbol in all caps.
+* double square brackets could indicate frozen, or a symbol in all caps
+* 

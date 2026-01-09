@@ -138,19 +138,15 @@ Unadjusted spd:  {u = d/w} mph
 `,
 // -----------------------------------------------------------------------------
 dial: `\
-* Start: {y0 = 2026}/{m0 = 12}/{d0 = 25} weighing {vini = 73}kg
+* Start: {y0 = 2025}/{m0 = 12}/{d0 = 25} weighing {vini = 73}kg
 * End: {y = 2026}/{m = 12}/{d = 25} weighing {vfin = 70} ({(tfin-tini)/SID} days later)
 * Rate: {r*SID} per day = {r*SIW} per week = {r*SIM} per month
 
-<!--
-TODO: helper functions to turn dates to unixtime
-{tini = unixtime(y0, m0, d0)}
-{tfin = unixtime(y, m, d)}
-{r = (vfin-vini)/(tfin-tini)}
-{86400 = SID}
-{SIW = SID*7}
-{SIM = SID*365.25/12}
--->
+* Start time (unixtime in seconds): {tini = unixtime(y0, m0, d0)}
+* End time (unixtime in seconds): {tfin = unixtime(y, m, d)}
+* Goal duration: {tfin - tini}s = {(tfin - tini)/SID}d = {(tfin - tini)/SIW}w = {(tfin - tini)/SIM}mo
+* Rate in goal units per second: {r = (vfin-vini)/(tfin-tini)}
+* Seconds in a day / week / month: {86400 = SID}, {SIW = SID*7}, {SIM = SID*365.25/12}
 `,
 // -----------------------------------------------------------------------------
 'sugarcalc': `\
@@ -433,7 +429,8 @@ function findVariables(expr) {
   if (!expr || expr.trim() === '') return new Set()
   
   const reserved = new Set(['sqrt', 'floor', 'ceil', 'round', 'min', 'max', 
-    'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'exp', 'abs', 'pi'])
+    'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'exp', 'abs',
+    'unixtime'])
   
   const matches = expr.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || []
   return new Set(matches.filter(v => !reserved.has(v)))

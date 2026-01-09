@@ -88,6 +88,56 @@ async function main() {
     const utilQualsResult = await page.evaluate(() => runQuals())
     assert.equal(utilQualsResult, 'All quals passed!')
 
+    // Quals: every recipe in dropdown loads sanely
+    await page.waitForSelector('#recipeSelect', { visible: true })
+    const recipeKeys = await page.$$eval('#recipeSelect option', opts => opts.map(o => o.value).filter(v => v !== ''))
+    for (const key of recipeKeys) {
+      await page.select('#recipeSelect', key)
+      await page.waitForFunction(k => (typeof state !== 'undefined') && state.currentRecipeKey === k, {}, key)
+      if (key !== 'blank') {
+        await page.waitForSelector('#recipeOutput', { visible: true })
+      }
+
+      const stateSummary = await page.evaluate(() => {
+        const invalidCount = document.querySelectorAll('input.recipe-field.invalid').length
+        const cellCount = Array.isArray(state?.cells) ? state.cells.length : 0
+        const errors = Array.isArray(state?.errors) ? state.errors.map(String) : []
+        const errorCount = errors.length
+        const solveBanner = String(state?.solveBanner || '')
+
+        const eqns = (state?.cells || []).map(c => {
+          const eqn = [...(c.ceqn || [])]
+          if (state?.fixedCellIds?.has?.(c.id)) eqn.push(c.cval)
+          return eqn
+        })
+        const sat = eqnsSatisfied(eqns, state?.values || {})
+
+        return { invalidCount, cellCount, errors, errorCount, solveBanner, sat }
+      })
+
+      // For the blank recipe, just require it not to error.
+      if (key === 'blank') {
+        assert.equal(stateSummary.errorCount, 0, `recipe ${key}: errorCount`)
+        continue
+      }
+
+      // dial is allowed to load with contradictions (eg, start=end date makes r undefined)
+      // but should not have other classes of errors like undefined variables.
+      if (key === 'dial') {
+        const nonContradictions = stateSummary.errors.filter(e => !/^Contradiction:/.test(e))
+        assert.equal(nonContradictions.length, 0, `recipe ${key}: non-contradiction errors: ${nonContradictions.join(' | ')}`)
+        assert.equal(stateSummary.solveBanner, '', `recipe ${key}: solveBanner`)
+        assert.ok(stateSummary.cellCount > 0, `recipe ${key}: cellCount`)
+        continue
+      }
+
+      assert.equal(stateSummary.errorCount, 0, `recipe ${key}: errorCount`)
+      assert.equal(stateSummary.solveBanner, '', `recipe ${key}: solveBanner`)
+      assert.equal(stateSummary.invalidCount, 0, `recipe ${key}: invalidCount`)
+      assert.equal(stateSummary.sat, true, `recipe ${key}: sat`)
+      assert.ok(stateSummary.cellCount > 0, `recipe ${key}: cellCount`)
+    }
+
     // Qual: Cheese Wheels tau constant should not drift to 0
     await page.waitForSelector('#recipeSelect', { visible: true })
     await page.select('#recipeSelect', 'cheesepan')
