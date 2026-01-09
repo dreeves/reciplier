@@ -72,6 +72,11 @@ async function main() {
   const browser = await puppeteer.launch({ headless: 'new' })
   const page = await browser.newPage()
 
+  const pageConsoleLogs = []
+  page.on('console', msg => {
+    pageConsoleLogs.push(msg.text())
+  })
+
   try {
     await page.goto(fileUrl(path.join(__dirname, '..', 'index.html')))
 
@@ -89,6 +94,46 @@ async function main() {
     await page.waitForSelector('#recipeOutput', { visible: true })
     const tauVal = await getInputValue(page, 'input.recipe-field[data-label="tau"]')
     assert.equal(tauVal, '6.28')
+
+    // Qual: cheesepan editing x should scale area (no overconstrained)
+    await setInputValue(page, 'input.recipe-field[data-label="x"]', '10')
+    const xBanner = await page.evaluate(() => state.solveBanner)
+    assert.equal(xBanner, '')
+    const aAfter = await getInputValue(page, 'input.recipe-field[data-label="A"]')
+    assert.equal(aAfter, '635.85')
+    const areaInvalid = await page.$eval('input.recipe-field[data-label="A"]', el => el.classList.contains('invalid'))
+    assert.equal(areaInvalid, false)
+
+    // Qual: simeq edit unfrozen x to 60 then tab should not redden everything
+    await page.waitForSelector('#recipeSelect', { visible: true })
+    await page.select('#recipeSelect', 'simeq')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    const initialInvalidCount = await page.$$eval('input.recipe-field.invalid', els => els.length)
+    assert.equal(initialInvalidCount, 0)
+
+    const xUnfrozen = await page.evaluateHandle(() => {
+      const inputs = Array.from(document.querySelectorAll('input.recipe-field'))
+      return inputs.find(i => (i.getAttribute('title') || '').trim() === 'x') || null
+    })
+    const xUnfrozenIsNull = await xUnfrozen.evaluate(el => el === null)
+    assert.equal(xUnfrozenIsNull, false)
+
+    await xUnfrozen.click({ clickCount: 3 })
+    await page.keyboard.type('60')
+    await page.keyboard.press('Tab')
+    await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentEditCellId === null)
+
+    const xUnfrozenVal = await xUnfrozen.evaluate(el => el.value)
+    assert.equal(xUnfrozenVal, '6')
+
+    const bannerAfter = await page.evaluate(() => state.solveBanner)
+    assert.equal(bannerAfter, '')
+
+    const invalidAfterCount = await page.$$eval('input.recipe-field.invalid', els => els.length)
+    assert.equal(invalidAfterCount, 0)
+
+    await xUnfrozen.dispose()
 
     // Qual 1: Pythagorean Pizza regression
     await page.waitForSelector('#recipeSelect', { visible: true })
@@ -498,6 +543,11 @@ async function main() {
     assert.ok(/unclosed brace/i.test(unclosedError), 'Unclosed brace should produce error')
 
     console.log('All quals passed.')
+  } catch (e) {
+    if (pageConsoleLogs.length > 0) {
+      console.log(pageConsoleLogs.join('\n'))
+    }
+    throw e
   } finally {
     await page.close()
     await browser.close()

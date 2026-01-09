@@ -64,6 +64,15 @@ function vareval(expr, vars) {
   }
 }
 
+function varparse(expr) {
+  return [...findVariables(expr)].sort()
+}
+
+function constant(expr) {
+  const r = vareval(expr, {})
+  return !r.error && typeof r.value === 'number' && isFinite(r.value)
+}
+
 // =============================================================================
 // Helper: Find all variable names referenced in an expression
 // =============================================================================
@@ -219,7 +228,7 @@ function solveFor(expr, varName, target, values) {
 // returns {x: 1, a: 1, b: 1, c: 1, v1: 1}) returns 
 // {ass: {x: 1, a: 3, b: 4, c: 5, v1: 25}, zij: [0, 0], sat: true}
 // See also: Gaussian elimination, Mathematica's NSolve and NMinimize.
-function solvem(eqns, vars) {
+function solvemAss(eqns, vars) {
   const required = new Set()
   for (const eqn of eqns) {
     for (const term of eqn) {
@@ -318,6 +327,35 @@ function solvem(eqns, vars) {
   const trustworthy = new Set(constrained)
   let solvedThisPass = new Set()
 
+  function propagateSatisfiedDefinitions() {
+    let changed = false
+    for (const eqn of sortedEqns) {
+      if (eqn.length !== 2) continue
+      const [lhs, rhs] = eqn
+
+      // Only learn stability for simple variables that are defined by a stable expression.
+      if (!isSimpleVar(lhs)) continue
+      if (typeof rhs !== 'string' || isSimpleVar(rhs)) continue
+      if (!isKnown(lhs)) continue
+
+      const rhsVars = findVariables(rhs)
+      if (rhsVars.size === 0) continue
+      if (![...rhsVars].every(v => (trustworthy.has(v) || stableDerived.has(v)))) continue
+
+      const r = evalExpr(rhs)
+      if (r.error || !isFinite(r.value)) continue
+
+      const tolerance = Math.abs(r.value) * tol + tol
+      if (Math.abs(values[lhs] - r.value) >= tolerance) continue
+
+      if (!stableDerived.has(lhs)) {
+        stableDerived.add(lhs)
+        changed = true
+      }
+    }
+    return changed
+  }
+
   // Find target value for an equation
   // Returns {value, isTrustworthy} or null if no target found
   // Priority: literals > trustworthy vars > trustworthy exprs > other exprs > simple vars
@@ -400,6 +438,13 @@ function solvem(eqns, vars) {
   for (let pass = 0; pass < 20; pass++) {
     let changed = false
     solvedThisPass = new Set()  // Reset for this pass
+
+    // Even if a definition equation is already satisfied, we want to treat the
+    // defined variable as stable when it is determined by stable inputs.
+    // This enables propagation like d1 -> r1 -> A when x changes.
+    for (let i = 0; i < 10; i++) {
+      if (!propagateSatisfiedDefinitions()) break
+    }
 
     for (const eqn of sortedEqns) {
       if (checkEquation(eqn)) continue
@@ -743,6 +788,29 @@ function solvem(eqns, vars) {
   return values
 }
 
+function zidge(eqns, ass) {
+  return eqns.map(eqn => {
+    if (eqn.length < 2) return 0
+    const vals = eqn.map(e => {
+      if (typeof e === 'number') return e
+      const r = vareval(e, ass)
+      return (r.error || !isFinite(r.value)) ? NaN : r.value
+    })
+    if (vals.some(v => !isFinite(v))) return NaN
+    const m = vals.reduce((a, b) => a + b, 0) / vals.length
+    return vals.reduce((s, v) => s + (v - m) ** 2, 0)
+  })
+}
+
+function solvemReport(eqns, init) {
+  const ass = solvemAss(eqns, init)
+  return { ass, zij: zidge(eqns, ass), sat: eqnsSatisfied(eqns, ass) }
+}
+
+function solvem(eqns, init) {
+  return solvemReport(eqns, init)
+}
+
 function eqnsSatisfied(eqns, values, tol = 1e-6) {
   for (const eqn of eqns) {
     if (eqn.length < 2) continue
@@ -833,6 +901,7 @@ function runQuals() {
 
   console.log('\n=== solvem quals ===')
 
+  /*
   function zidge(eqns, ass) {
     return eqns.map(eqn => {
       if (eqn.length < 2) return 0
@@ -851,68 +920,69 @@ function runQuals() {
     const ass = solvem(eqns, init)
     return { ass, zij: zidge(eqns, ass), sat: eqnsSatisfied(eqns, ass) }
   }
+  */
 
   // README example 1
   check('solvem: README #1 (a=2b assignment)',
-    solvem([['a', '2b']], {a: null, b: null}),
+    solvem([['a', '2b']], {a: null, b: null}).ass,
     {a: 1, b: 0.5})
   check('solvem: README #1 (sat)',
-    solvemReport([['a', '2b']], {a: null, b: null}).sat,
+    solvem([['a', '2b']], {a: null, b: null}).sat,
     true)
 
   // README example 2
   check('solvem: README #2 (assignment)',
-    solvem([['a+b', 8], ['a', 3], ['b', 4], ['c']], {a: null, b: null, c: 0}),
+    solvem([['a+b', 8], ['a', 3], ['b', 4], ['c']], {a: null, b: null, c: 0}).ass,
     {a: 3, b: 4, c: 0})
   ;(() => {
     const eqns = [['a+b', 8], ['a', 3], ['b', 4], ['c']]
-    const rep = solvemReport(eqns, {a: null, b: null, c: 0})
+    const rep = solvem(eqns, {a: null, b: null, c: 0})
     check('solvem: README #2 (sat)', rep.sat, false)
     check('solvem: README #2 (zij[0] nonzero)', rep.zij[0] > 0, true)
     check('solvem: README #2 (zij[1..] zero)', rep.zij.slice(1).every(z => z === 0), true)
   })()
   check('solvem: simple equation',
-    solvem([['x', 5]], {x: 1}),
+    solvem([['x', 5]], {x: 1}).ass,
     {x: 5})
 
   check('solvem: derived value',
-    solvem([['x', 2], ['y', '3x']], {x: 1, y: 1}),
+    solvem([['x', 2], ['y', '3x']], {x: 1, y: 1}).ass,
     {x: 2, y: 6})
 
   check('solvem: simultaneous equations',
-    solvem([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0}),
+    solvem([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0}).ass,
     {x: 6, y: 7})
 
   // README example 3
   check('solvem: README #3 (sat)',
-    solvemReport([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0}).sat,
+    solvem([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0}).sat,
     true)
 
   check('solvem: Pythagorean triple propagation',
     solvem([['x', 1], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
-      {x: 1, a: 1, b: 1, c: 1, v1: 1}),
+      {x: 1, a: 1, b: 1, c: 1, v1: 1}).ass,
     {x: 1, a: 3, b: 4, c: 5, v1: 25})
 
   // README example 4
   check('solvem: README #4 (sat)',
-    solvemReport([['x', 1], ['a', '3x'], ['b', '4x'], ['v1', 'a^2+b^2', 'c^2']],
+    solvem([['x', 1], ['a', '3x'], ['b', '4x'], ['v1', 'a^2+b^2', 'c^2']],
       {x: 1, a: 1, b: 1, c: 1, v1: 1}).sat,
     true)
 
   // Pyzza: scaling Pythagorean triple by changing one side
   check('solvem: pyzza change a to 30',
     solvem([['a', 30], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
-      {x: 1, a: 30, b: 1, c: 1, v1: 1}),
+      {x: 1, a: 30, b: 1, c: 1, v1: 1}).ass,
     {x: 10, a: 30, b: 40, c: 50, v1: 2500})
 
   check('solvem: pyzza change b to 40',
     solvem([['b', 40], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
-      {x: 1, a: 1, b: 40, c: 1, v1: 1}),
+      {x: 1, a: 1, b: 40, c: 1, v1: 1}).ass,
     {x: 10, a: 30, b: 40, c: 50, v1: 2500})
 
   check('solvem: pyzza change c to 50',
     solvem([['c', 50], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
-      {x: 1, a: 1, b: 1, c: 50, v1: 1}),
+      {x: 1, a: 1, b: 1, c: 50, v1: 1}).ass,
     {x: 10, a: 30, b: 40, c: 50, v1: 2500})
 
   // UI-style Pyzza system: includes nonce variables for display-only cells.
@@ -944,11 +1014,11 @@ function runQuals() {
   })()
 
   check('solvem: chain propagation',
-    solvem([['a', 2], ['b', 'a+1'], ['c', 'b+1']], {a: 1, b: 1, c: 1}),
+    solvem([['a', 2], ['b', 'a+1'], ['c', 'b+1']], {a: 1, b: 1, c: 1}).ass,
     {a: 2, b: 3, c: 4})
 
   check('solvem: scaling factor',
-    solvem([['x', 2], ['scaled', '10x']], {x: 1, scaled: 1}),
+    solvem([['x', 2], ['scaled', '10x']], {x: 1, scaled: 1}).ass,
     {x: 2, scaled: 20})
 
   check('solvem: crepes eggs implies x',
@@ -956,13 +1026,13 @@ function runQuals() {
       ['eggs', 24, '12x'],
       ['milk', '5.333x'],
       ['flour', '3x'],
-    ], {x: 1, eggs: 12, milk: 5.333, flour: 3}),
+    ], {x: 1, eggs: 12, milk: 5.333, flour: 3}).ass,
     {x: 2, eggs: 24, milk: 10.666, flour: 6})
 
   check('solvem: frozen x makes eggs unsatisfiable',
     eqnsSatisfied(
       [['x', 1], ['eggs', '12x', 24]],
-      solvem([['x', 1], ['eggs', '12x', 24]], {x: 1, eggs: 12})
+      solvem([['x', 1], ['eggs', '12x', 24]], {x: 1, eggs: 12}).ass
     ),
     false)
 
@@ -975,7 +1045,7 @@ function runQuals() {
       ['r', 'd/2'],                     // r = d/2
       ['d'],                            // d is free
       ['_v', 'A', '1/2*6.28*r^2'],      // constraint: A = 1/2*tau*r^2
-    ], {A: 63.585, r: 1, d: 1, _v: 1}),
+    ], {A: 63.585, r: 1, d: 1, _v: 1}).ass,
     {A: 63.585, r: 4.5, d: 9})
 
   // Cheesepan r1: multi-expression constraint
@@ -984,7 +1054,7 @@ function runQuals() {
       ['d1', 9], ['r1', 'd1/2'], ['tau', 6.28], ['x', 1],
       ['r', 'd/2'], ['d'], ['A'],
       ['_v', 'A', '1/2*tau*r^2', '1/2*tau*r1^2*x'],
-    ], {d1: 9, r1: 1, tau: 6.28, x: 1, r: 1, d: 1, A: 1, _v: 1}),
+    ], {d1: 9, r1: 1, tau: 6.28, x: 1, r: 1, d: 1, A: 1, _v: 1}).ass,
     {d1: 9, r1: 4.5, tau: 6.28, x: 1, r: 4.5, d: 9, A: 63.585, _v: 63.585})
 
   // Same but x has no literal in its equation
@@ -993,20 +1063,20 @@ function runQuals() {
       ['d1', 9], ['r1', 'd1/2'], ['tau', 6.28], ['x'],
       ['r', 'd/2'], ['d'], ['A'],
       ['_v', 'A', '1/2*tau*r^2', '1/2*tau*r1^2*x'],
-    ], {d1: 9, r1: 1, tau: 6.28, x: 1, r: 1, d: 1, A: 1, _v: 1}),
+    ], {d1: 9, r1: 1, tau: 6.28, x: 1, r: 1, d: 1, A: 1, _v: 1}).ass,
     {d1: 9, r1: 4.5, tau: 6.28, x: 1, r: 4.5, d: 9, A: 63.585, _v: 63.585})
 
   // {d = 2r} and {r = d/2} should be equivalent
   check('solvem: r=d/2 derives r from d',
-    solvem([['d', 10], ['r', 'd/2']], {d: 10, r: 1}),
+    solvem([['d', 10], ['r', 'd/2']], {d: 10, r: 1}).ass,
     {d: 10, r: 5})
 
   check('solvem: d=2r derives d from r',
-    solvem([['r', 5], ['d', '2*r']], {d: 1, r: 5}),
+    solvem([['r', 5], ['d', '2*r']], {d: 1, r: 5}).ass,
     {d: 10, r: 5})
 
   check('solvem: prefers explicit initial guess',
-    solvem([['a+b', 8]], {a: 4, b: null}),
+    solvem([['a+b', 8]], {a: 4, b: null}).ass,
     {a: 4, b: 4})
 
   check('solvem: missing initial vars throws',
@@ -1022,11 +1092,11 @@ function runQuals() {
 
   // Having BOTH should also work and be consistent
   check('solvem: both r=d/2 and d=2r with d frozen',
-    solvem([['d', 10], ['r', 'd/2'], ['_v', 'd', '2*r']], {d: 10, r: 1, _v: 1}),
+    solvem([['d', 10], ['r', 'd/2'], ['_v', 'd', '2*r']], {d: 10, r: 1, _v: 1}).ass,
     {d: 10, r: 5})
 
   check('solvem: both r=d/2 and d=2r with r frozen',
-    solvem([['r', 5], ['d', '2*r'], ['_v', 'd/2', 'r']], {d: 1, r: 5, _v: 1}),
+    solvem([['r', 5], ['d', '2*r'], ['_v', 'd/2', 'r']], {d: 1, r: 5, _v: 1}).ass,
     {d: 10, r: 5})
 
   check('solvem: post anti-colon refactor',
@@ -1043,7 +1113,7 @@ function runQuals() {
          var05: null,
          var06: 2,
          x: null,
-         y: null }),
+         y: null }).ass,
     { var01: 6,
       var02: 7,
       var03: 33,
@@ -1060,31 +1130,31 @@ function runQuals() {
              ['var04', 'x'],
              ['var05', 'y'],
              ['var06', 2, '5*x - 4*y'] ],
-      {var01: 6, var02: null, var03: 33, var04: null, var05: null, var06: 2, x: null, y: null}),
+      {var01: 6, var02: null, var03: 33, var04: null, var05: null, var06: 2, x: null, y: null}).ass,
     {var01: 6, var02: 7, x: 6, y: 7})
 
   check('solvem: Pythagorean Chain',
     solvem([['x', 1], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
-      {x: 1, a: 1, b: 1, c: 1, v1: 1}),
+      {x: 1, a: 1, b: 1, c: 1, v1: 1}).ass,
     {x: 1, a: 3, b: 4, c: 5, v1: 25})
 
   check('solvem: Pyzza: A=30',
     solvem([['a', 30], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
-      {x: 1, a: 30, b: 1, c: 1, v1: 1}),
+      {x: 1, a: 30, b: 1, c: 1, v1: 1}).ass,
     {x: 10, a: 30, b: 40, c: 50, v1: 2500})
 
   check('solvem: Pyzza: B=40',
     solvem([['b', 40], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
-      {x: 1, a: 1, b: 40, c: 1, v1: 1}),
+      {x: 1, a: 1, b: 40, c: 1, v1: 1}).ass,
     {x: 10, a: 30, b: 40, c: 50, v1: 2500})
 
   check('solvem: Pyzza: C=50',
     solvem([['c', 50], ['a', '3x'], ['b', '4x'], ['c'], ['v1', 'a^2+b^2', 'c^2']],
-      {x: 1, a: 1, b: 1, c: 50, v1: 1}),
+      {x: 1, a: 1, b: 1, c: 50, v1: 1}).ass,
     {x: 10, a: 30, b: 40, c: 50, v1: 2500})
 
   check('solvem: Impossible Conflict (Pinned)',
-    solvem([['sum', 'x+y'], ['sum', 10], ['sum', 20]], {x: 0, y: 0, sum: 0}),
+    solvem([['sum', 'x+y'], ['sum', 10], ['sum', 20]], {x: 0, y: 0, sum: 0}).ass,
     {sum: 10})
 
   const cheesepanMathematica = solvem([
@@ -1128,7 +1198,7 @@ function runQuals() {
     r1: 1,
     r: 1,
     sum: 0,
-  })
+  }).ass
 
   check('solvem: cheesepan Mathematica system',
     cheesepanMathematica,
@@ -1164,6 +1234,36 @@ function runQuals() {
     cheesepanMathematica.z > 0 && cheesepanMathematica.r > 0 &&
       cheesepanMathematica.w > 0 && cheesepanMathematica.h > 0,
     true)
+
+  ;(() => {
+    const eqns = [
+      ['x', 10],
+      ['tau', 6.28],
+      ['d1', 9],
+      ['r1', 'd1 / 2'],
+      ['r', 'd/2'],
+      ['d', '2r'],
+      ['A', 'x*1/2*tau*r1^2', '1/2*tau*r^2', 'w*h'],
+      ['w^2 + h^2', 'z^2'],
+    ]
+
+    // Seed all vars to mimic interactive re-solving (everything already has values).
+    const rep = solvemReport(eqns, {
+      x: 1,
+      tau: 6.28,
+      d1: 9,
+      r1: 4.5,
+      r: 4.5,
+      d: 9,
+      A: 63.585,
+      w: 1,
+      h: 63.585,
+      z: 63.5928,
+    })
+
+    check('solvem: cheesepan x=10 (sat)', rep.sat, true)
+    check('solvem: cheesepan x=10 scales A', rep.ass, {x: 10, A: 635.85}, 0.05)
+  })()
 
 
   console.log('\n=== Summary ===')

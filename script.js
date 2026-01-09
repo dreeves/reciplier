@@ -575,7 +575,7 @@ function computeInitialValues(cells, symbols) {
   const seedValues = buildInitialValues(cells)
   let values
   try {
-    values = solvem(eqns, seedValues)
+    values = solvemAss(eqns, seedValues)
   } catch (e) {
     errors.push(String(e && e.message ? e.message : e))
     values = { ...seedValues }
@@ -1256,7 +1256,7 @@ function handleFieldInput(e) {
   // constraint above but the solver may need to derive other values from it)
   // Solve
   const seedValues = { ...state.values }
-  const newValues = solvem(eqns, seedValues)
+  const newValues = solvemAss(eqns, seedValues)
 
   const constraintsSatisfied = eqnsSatisfied(eqns, newValues)
   if (!constraintsSatisfied) {
@@ -1425,7 +1425,7 @@ function handleFieldBlur(e) {
     return eqn
   })
 
-  let solved = solvem(eqns, { ...baseline })
+  let solved = solvemAss(eqns, { ...baseline })
 
   const acceptBlurredValue = eqnsSatisfied(eqns, solved)
   if (!acceptBlurredValue) {
@@ -1437,7 +1437,7 @@ function handleFieldBlur(e) {
       return eqn
     })
 
-    solved = solvem(eqnsWithoutBlurredConstraint, { ...baseline })
+    solved = solvemAss(eqnsWithoutBlurredConstraint, { ...baseline })
   }
 
   state.values = solved
@@ -1446,12 +1446,9 @@ function handleFieldBlur(e) {
   state.currentEditCellId = null
   state.valuesBeforeEdit = null
 
-  state.currentEditCellId = null
-  state.valuesBeforeEdit = null
+  recomputeCellCvals(state.cells, state.values, state.fixedCellIds)
 
   const violatedCellIds = getViolatedCellIds(state.cells, state.values)
-
-  recomputeCellCvals(state.cells, state.values, state.fixedCellIds)
 
   $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
     const c = state.cells.find(x => x.id === field.dataset.cellId)
@@ -1637,7 +1634,7 @@ function handleSliderChange(e) {
   })
 
   const seedValues = { ...state.values, x: newX }
-  state.values = solvem(eqns, seedValues)
+  state.values = solvemAss(eqns, seedValues)
 
   xCell.cval = newX
   recomputeCellCvals(state.cells, state.values, state.fixedCellIds, xCell.id)
