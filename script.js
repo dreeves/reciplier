@@ -234,7 +234,7 @@ function toNum(x) {
 function formatNum(num) {
   if (typeof num !== 'number' || !isFinite(num)) return '?'
   // Snap to nearest integer if within 0.0001 (handles solver precision issues)
-  if (Math.abs(num - Math.round(num)) < 0.0001) {
+  if (Math.abs(num - Math.round(num)) < 0.001) {
     num = Math.round(num)
   }
   // Show up to 4 decimal places, trim trailing zeros
@@ -1429,7 +1429,8 @@ function handleFieldBlur(e) {
   const frozen = new Set(state.fixedVars)
   let solvedValues = solvem(eqns, seedValues, frozen)
 
-  if (!eqnsSatisfied(eqns, solvedValues)) {
+  const acceptBlurredValue = eqnsSatisfied(eqns, solvedValues)
+  if (!acceptBlurredValue) {
     const eqnsWithoutBlurredConstraint = state.cells.map(c => {
       const eqn = [...c.ceqn]
       if (state.fixedVars.has(c.cvar)) {
@@ -1442,6 +1443,17 @@ function handleFieldBlur(e) {
     seedValuesWithoutBlurredConstraint[blurredLabel] = null
     solvedValues = solvem(eqnsWithoutBlurredConstraint, seedValuesWithoutBlurredConstraint, frozen)
   }
+
+  // NOTE: We intentionally do NOT persist blur-committed edits as ongoing
+  // solver constraints. Only user-frozen cells (double-click) should behave
+  // that way. Keeping userEditedVars around for now but not using it.
+  // if (state.currentEditCellId === blurredCellId) {
+  //   if (acceptBlurredValue) {
+  //     state.userEditedVars.add(blurredLabel)
+  //   } else {
+  //     state.userEditedVars.delete(blurredLabel)
+  //   }
+  // }
 
   state.values = solvedValues
   state.solveBanner = ''

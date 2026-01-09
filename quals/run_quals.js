@@ -168,6 +168,37 @@ async function main() {
     const initialEggs = await eggsField.evaluate(el => el.value)
     assert.equal(initialEggs, '12')  // Initially 12 (since x=1)
 
+    // Qual: crepes x=1.5 then 630->631 should not show "No solution"
+    await setInputValue(page, 'input.recipe-field[data-label="x"]', '1.5')
+    const flourNoteHandle = await findFieldByTitleSubstring(page, '420x')
+    const flourNoteIsNull = await flourNoteHandle.evaluate(el => el === null)
+    assert.equal(flourNoteIsNull, false)
+
+    const flourNoteBefore = await getHandleValue(flourNoteHandle)
+    assert.equal(flourNoteBefore, '630')
+
+    await flourNoteHandle.click({ clickCount: 3 })
+    await page.keyboard.type('631')
+    await flourNoteHandle.evaluate(e => e.blur())
+    await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentEditCellId === null)
+
+    const bannerVisibleAfter = await page.$eval('#solveBanner', el => !el.hidden)
+    const bannerTextAfter = await page.$eval('#solveBanner', el => el.textContent || '')
+    assert.equal(/No solution/i.test(bannerTextAfter), false)
+    if (bannerVisibleAfter) {
+      assert.ok(!/No solution/i.test(bannerTextAfter))
+    }
+
+    await flourNoteHandle.dispose()
+
+    // Qual: eggs value should not drift after tabbing around
+    await setInputValue(page, 'input.recipe-field', '13')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Tab', { modifiers: ['Shift'] })
+    const eggsAfterTabbing = await page.$eval('input.recipe-field', el => el.value)
+    assert.equal(eggsAfterTabbing, '13')
+
     // Change eggs to 24 - should solve for x=2
     await setInputValue(page, 'input.recipe-field', '24')
 
