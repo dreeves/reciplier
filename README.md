@@ -150,8 +150,10 @@ expression using a given assignment of the variables referenced in the
 expression. For example, `vareval('2x+y', {x: 3, y: 1})` returns 7. If the eval
 fails to return a number, `vareval` returns null.
 
-One more helper function we need is `varparse` which takes an expression returns
-the list of variables used in it.
+Another helper function we need is `varparse` which takes an expression returns
+the list of variables used in it. Also `constant` which just checks if an
+expression evals to a number using `vareval` with an empty hash for the variable
+assignments.
 
 Finally, the `solvem` function takes a list of equations and a hash of variables
 with initial numerical assignments (as in `vareval` except that for `solvem`,

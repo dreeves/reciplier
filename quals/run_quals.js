@@ -43,6 +43,11 @@ async function typeIntoFieldNoBlur(page, selector, value) {
   await page.keyboard.type(String(value))
 }
 
+async function dblClickSelector(page, selector) {
+  const el = await page.waitForSelector(selector, { visible: true })
+  await el.click({ clickCount: 2 })
+}
+
 async function getInputValue(page, selector) {
   return page.$eval(selector, el => el.value)
 }
@@ -332,9 +337,42 @@ async function main() {
 
     await cSquaredHandle.dispose()
 
-    // Qual: blur behavior - invalid value should revert to constraint-satisfying value
+    // Qual: pyzza editing c should persist when nothing is frozen
     await page.select('#recipeSelect', 'pyzza')
     await page.waitForSelector('#recipeOutput', { visible: true })
+
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="c"]', '50')
+    await page.waitForFunction(() => {
+      if (typeof state === 'undefined') return false
+      const a = document.querySelector('input.recipe-field[data-label="a"]')
+      const b = document.querySelector('input.recipe-field[data-label="b"]')
+      const c = document.querySelector('input.recipe-field[data-label="c"]')
+      return a && b && c && a.value === '30' && b.value === '40' && c.value === '50'
+    })
+
+    await page.click('input.recipe-field[data-label="a"]')
+    await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentEditCellId === null)
+
+    const aAfterClick = await getInputValue(page, 'input.recipe-field[data-label="a"]')
+    const bAfterClick = await getInputValue(page, 'input.recipe-field[data-label="b"]')
+    const cAfterClick = await getInputValue(page, 'input.recipe-field[data-label="c"]')
+    assert.equal(aAfterClick, '30')
+    assert.equal(bAfterClick, '40')
+    assert.equal(cAfterClick, '50')
+
+    const aInvalid = await page.$eval('input.recipe-field[data-label="a"]', el => el.classList.contains('invalid'))
+    const bInvalid = await page.$eval('input.recipe-field[data-label="b"]', el => el.classList.contains('invalid'))
+    const cInvalid = await page.$eval('input.recipe-field[data-label="c"]', el => el.classList.contains('invalid'))
+    assert.equal(aInvalid, false)
+    assert.equal(bInvalid, false)
+    assert.equal(cInvalid, false)
+
+    // Qual: blur behavior - when other cells are frozen, invalid value should snap back
+    await page.select('#recipeSelect', 'pyzza')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    await dblClickSelector(page, 'input.recipe-field[data-label="a"]')
+    await dblClickSelector(page, 'input.recipe-field[data-label="b"]')
 
     // Get initial c value (should be 5 for x=1)
     const initialC = await getInputValue(page, 'input.recipe-field[data-label="c"]')
