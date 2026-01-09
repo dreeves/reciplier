@@ -182,7 +182,8 @@ function solveFor(expr, varName, target, values) {
     const r = vareval(expr, test)
     if (r.error) return null
 
-    if (Math.abs(r.value - target) < tol) return mid
+    // NOTE: Don't early-exit on tolerance; run full iterations for precision.
+    // if (Math.abs(r.value - target) < tol) return mid
 
     test[varName] = lo
     const loRes = vareval(expr, test)
@@ -323,7 +324,7 @@ function solvemAss(eqns, vars) {
   function isStable(v) {
     if (trustworthy.has(v)) return true
     if (stableDerived.has(v)) return true
-    if (constrained.size === 0 && solvedThisPass.has(v)) return true
+    if (solvedFromStableThisPass.has(v)) return true
     if (singletons.has(v) && values[v] === singletons.get(v)) return true
     return false
   }
@@ -341,6 +342,7 @@ function solvemAss(eqns, vars) {
   // solvedThisPass: variables solved during the current pass (for within-pass protection)
   const trustworthy = new Set(constrained)
   let solvedThisPass = new Set()
+  let solvedFromStableThisPass = new Set()
 
   function propagateSatisfiedDefinitions() {
     let changed = false
@@ -382,7 +384,7 @@ function solvemAss(eqns, vars) {
     // Second: trustworthy, derived-stable, or just-solved simple variables
     for (const expr of eqn) {
       if (typeof expr === 'string' && isSimpleVar(expr) &&
-          (trustworthy.has(expr) || stableDerived.has(expr) || solvedThisPass.has(expr))) {
+          (trustworthy.has(expr) || stableDerived.has(expr) || solvedFromStableThisPass.has(expr))) {
         return { value: values[expr], isTrustworthy: trustworthy.has(expr), isStable: true, stableNonSingleton: true }
       }
     }
@@ -399,7 +401,7 @@ function solvemAss(eqns, vars) {
 
       // Avoid using targets that are only stable because of unchanged singleton seeds.
       // Those are useful as guesses but shouldn't drive other variables.
-      const hasNonSingletonStable = [...vars].some(v => trustworthy.has(v) || stableDerived.has(v) || solvedThisPass.has(v))
+      const hasNonSingletonStable = [...vars].some(v => trustworthy.has(v) || stableDerived.has(v) || solvedFromStableThisPass.has(v))
       if (eqn.length > 2 && !hasNonSingletonStable) continue
 
       const r = evalExpr(expr)
@@ -453,6 +455,7 @@ function solvemAss(eqns, vars) {
   for (let pass = 0; pass < 20; pass++) {
     let changed = false
     solvedThisPass = new Set()  // Reset for this pass
+    solvedFromStableThisPass = new Set()  // Reset for this pass
 
     // Even if a definition equation is already satisfied, we want to treat the
     // defined variable as stable when it is determined by stable inputs.
@@ -483,6 +486,7 @@ function solvemAss(eqns, vars) {
             values[expr] = target
             changed = true
             solvedThisPass.add(expr)
+            if (isTrustworthy || targetIsStable) solvedFromStableThisPass.add(expr)
             if (isTrustworthy) trustworthy.add(expr)
             if (targetIsStable && (isTrustworthy || targetStableNonSingleton || constrained.size === 0)) stableDerived.add(expr)
           }
@@ -507,6 +511,7 @@ function solvemAss(eqns, vars) {
             values[unknowns[0]] = solvedVal
             changed = true
             solvedThisPass.add(unknowns[0])
+            if (isTrustworthy || targetIsStable) solvedFromStableThisPass.add(unknowns[0])
             if (isTrustworthy) trustworthy.add(unknowns[0])
             if (targetIsStable && (isTrustworthy || targetStableNonSingleton || constrained.size === 0)) stableDerived.add(unknowns[0])
           }
@@ -549,6 +554,10 @@ function solvemAss(eqns, vars) {
                     changed = true
                     solvedThisPass.add(a)
                     solvedThisPass.add(b)
+                    if (isTrustworthy || targetIsStable) {
+                      solvedFromStableThisPass.add(a)
+                      solvedFromStableThisPass.add(b)
+                    }
                     if (isTrustworthy) {
                       trustworthy.add(a)
                       trustworthy.add(b)
@@ -583,6 +592,7 @@ function solvemAss(eqns, vars) {
             values[bestVar] = bestVal
             changed = true
             solvedThisPass.add(bestVar)
+            if (isTrustworthy || targetIsStable) solvedFromStableThisPass.add(bestVar)
             if (isTrustworthy) trustworthy.add(bestVar)
             if (targetIsStable && (isTrustworthy || targetStableNonSingleton || constrained.size === 0)) stableDerived.add(bestVar)
           }
@@ -1032,6 +1042,35 @@ function runQuals() {
     check('solvem: Pyzza UI-style c=50 (assignment)', rep.ass, {x: 10, a: 30, b: 40, c: 50}, 0.05)
   })()
 
+  // Pyzza: non-integer scaling should work
+  ;(() => {
+    const eqns = [
+      ['x', 2.5],
+      ['a', '3x'],
+      ['b', '4x'],
+      ['c'],
+      ['_v', 'a^2+b^2', 'c^2'],
+    ]
+    const rep = solvemReport(eqns, {x: 2.5, a: 1, b: 1, c: 1, _v: 1})
+    check('solvem: pyzza x=2.5 (sat)', rep.sat, true)
+    check('solvem: pyzza x=2.5 (assignment)', rep.ass, {x: 2.5, a: 7.5, b: 10, c: 12.5, _v: 156.25}, 0.001)
+  })()
+
+  // Pyzza: solve from v1, then get c from c^2
+  ;(() => {
+    const eqns = [
+      ['v1', 625],
+      ['a', '3x'],
+      ['b', '4x'],
+      ['_v', 'a^2+b^2', 'v1'],
+      ['_w', 'c^2', 'v1'],
+      ['c'],
+    ]
+    const rep = solvemReport(eqns, {x: 1, a: 1, b: 1, c: 1, v1: 1, _v: 1, _w: 1})
+    check('solvem: pyzza v1=625 (sat)', rep.sat, true)
+    check('solvem: pyzza v1=625 (assignment)', rep.ass, {x: 5, a: 15, b: 20, c: 25, v1: 625}, 0.01)
+  })()
+
   check('solvem: chain propagation',
     solvem([['a', 2], ['b', 'a+1'], ['c', 'b+1']], {a: 1, b: 1, c: 1}).ass,
     {a: 2, b: 3, c: 4})
@@ -1282,6 +1321,172 @@ function runQuals() {
 
     check('solvem: cheesepan x=10 (sat)', rep.sat, true)
     check('solvem: cheesepan x=10 scales A', rep.ass, {x: 10, A: 635.85}, 0.05)
+  })()
+
+  ;(() => {
+    const eqns = [
+      ['SID', 86400],
+      ['y0'],
+      ['m0'],
+      ['d0'],
+      ['y'],
+      ['m'],
+      ['d'],
+      ['vini'],
+      ['vfin'],
+      ['tini', 'unixtime(y0, m0, d0)'],
+      ['tfin', 'unixtime(y, m, d)'],
+      ['r', '(vfin-vini)/(tfin-tini)'],
+    ]
+
+    const rep = solvemReport(eqns, {
+      SID: 86400,
+      y0: 2025,
+      m0: 12,
+      d0: 25,
+      y: 2025,
+      m: 12,
+      d: 26,
+      vini: 0,
+      vfin: 100100,
+      tini: 1,
+      tfin: 1,
+      r: 1,
+    })
+
+    check('solvem: dial-style unixtime-derived r (sat)', rep.sat, true)
+    check('solvem: dial-style unixtime-derived r', rep.ass.r, 100100 / 86400, 1e-6)
+  check('solvem: dial-style unixtime-derived r ~= 1.15856', rep.ass.r, 1.15856, 1e-5)
+
+    const repTiny = solvemReport(eqns, {
+      SID: 86400,
+      y0: 2025,
+      m0: 12,
+      d0: 25,
+      y: 2026,
+      m: 12,
+      d: 25,
+      vini: 73,
+      vfin: 70,
+      tini: 1,
+      tfin: 1,
+      r: 1,
+    })
+
+    const expectedTiny = (70 - 73) / (unixtime(2026, 12, 25) - unixtime(2025, 12, 25))
+    check('solvem: dial-style tiny r (sat)', repTiny.sat, true)
+    check('solvem: dial-style tiny r', repTiny.ass.r, expectedTiny, 1e-9)
+  })()
+
+  ;(() => {
+    const eqns = [
+      ['milk', 5, '5.333x'],
+      ['eggs', '12x'],
+      ['x'],
+    ]
+
+    const rep = solvemReport(eqns, {
+      milk: 5.333,
+      eggs: null,
+      x: 1,
+    })
+
+    check('solvem: crepes milk=5 implies eggs (sat)', rep.sat, true)
+    check('solvem: crepes milk=5 implies eggs', rep.ass.eggs, 11.250703168948059, 1e-12)
+  })()
+
+
+  // Cookies: scaling by x should solve from any scaled quantity
+  ;(() => {
+    const eqns = [
+      ['376x', 752],
+      ['200x', 400],
+      ['2x', 4],
+      ['x'],
+    ]
+
+    const rep = solvemReport(eqns, { x: 1 })
+    check('solvem: cookies x=2 via grams (sat)', rep.sat, true)
+    check('solvem: cookies x=2 via grams', rep.ass.x, 2, 1e-9)
+  })()
+
+  // Shortcake: scaling by x should solve from flour (2x cups)
+  ;(() => {
+    const eqns = [
+      ['2x', 4],
+      ['1x', 2],
+      ['1/2*x', 1],
+      ['3/4*x', 1.5],
+      ['x'],
+    ]
+
+    const rep = solvemReport(eqns, { x: 1 })
+    check('solvem: shortcake x=2 via flour (sat)', rep.sat, true)
+    check('solvem: shortcake x=2 via flour', rep.ass.x, 2, 1e-9)
+  })()
+
+  // Simeq recipe: x fixed to 6 implies y=7
+  ;(() => {
+    const eqns = [
+      ['x', 6],
+      ['2x+3y', 33],
+      ['5x-4y', 2],
+      ['y'],
+    ]
+
+    const rep = solvemReport(eqns, { x: 6, y: 1 })
+    check('solvem: simeq x=6 implies y=7 (sat)', rep.sat, true)
+    check('solvem: simeq x=6 implies y=7', rep.ass.y, 7, 1e-9)
+  })()
+
+  // Pancakes: scaling by x should solve from flour (1x cups)
+  ;(() => {
+    const eqns = [
+      ['1x', 2],
+      ['2x', 4],
+      ['0.5x', 1],
+      ['8x', 16],
+      ['x'],
+    ]
+
+    const rep = solvemReport(eqns, { x: 1 })
+    check('solvem: pancakes x=2 via flour (sat)', rep.sat, true)
+    check('solvem: pancakes x=2 via flour', rep.ass.x, 2, 1e-9)
+  })()
+
+  // Breakaway: from pinned m,s,d,vb compute vp
+  ;(() => {
+    const eqns = [
+      ['m', 1],
+      ['s', 30],
+      ['d', 20],
+      ['vb', 40],
+      ['k', 0.621371],
+      ['gt', 'm/60+s/3600'],
+      ['gd', 'vb*gt'],
+      ['t', 'd/vb'],
+      ['pd', 'd+gd'],
+      ['vp', 'pd/t'],
+      ['k*vp'],
+    ]
+
+    const rep = solvemReport(eqns, {
+      m: 1,
+      s: 30,
+      d: 20,
+      vb: 40,
+      k: 0.621371,
+      gt: 1,
+      gd: 1,
+      t: 1,
+      pd: 1,
+      vp: 1,
+    })
+
+    check('solvem: breakaway pinned inputs (sat)', rep.sat, true)
+    check('solvem: breakaway vp=42', rep.ass.vp, 42, 1e-9)
+    check('solvem: breakaway gt=0.025', rep.ass.gt, 0.025, 1e-12)
+    check('solvem: breakaway gd=1', rep.ass.gd, 1, 1e-12)
   })()
 
 

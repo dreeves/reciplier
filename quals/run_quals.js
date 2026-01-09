@@ -185,6 +185,44 @@ async function main() {
 
     await xUnfrozen.dispose()
 
+    // Qual: simeq edit x=6 cell then y=7 should keep 6&7 on blur
+    await page.waitForSelector('#recipeSelect', { visible: true })
+    await page.select('#recipeSelect', 'simeq')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    const xDefHandle = await findFieldByTitleSubstring(page, 'x = 6')
+    const xDefIsNull = await xDefHandle.evaluate(el => el === null)
+    assert.equal(xDefIsNull, false)
+
+    await xDefHandle.click({ clickCount: 3 })
+    await page.keyboard.type('1')
+    await page.keyboard.press('Tab')
+    await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentEditCellId === null)
+
+    const yHandle = await page.evaluateHandle(() => {
+      const inputs = Array.from(document.querySelectorAll('input.recipe-field'))
+      return inputs.find(i => (i.getAttribute('title') || '').trim() === 'y') || null
+    })
+    const yIsNull = await yHandle.evaluate(el => el === null)
+    assert.equal(yIsNull, false)
+
+    await yHandle.click({ clickCount: 3 })
+    await page.keyboard.type('7')
+    await page.keyboard.press('Tab')
+    await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentEditCellId === null)
+
+    const xDefValAfter = await xDefHandle.evaluate(el => el.value)
+    const yValAfter = await yHandle.evaluate(el => el.value)
+    assert.equal(xDefValAfter, '6')
+    assert.equal(yValAfter, '7')
+
+    const simeqSolved = await page.evaluate(() => ({ x: state?.values?.x, y: state?.values?.y }))
+    assert.ok(Math.abs(simeqSolved.x - 6) < 1e-9)
+    assert.ok(Math.abs(simeqSolved.y - 7) < 1e-9)
+
+    await xDefHandle.dispose()
+    await yHandle.dispose()
+
     // Qual 1: Pythagorean Pizza regression
     await page.waitForSelector('#recipeSelect', { visible: true })
     await page.select('#recipeSelect', 'pyzza')
@@ -354,6 +392,18 @@ async function main() {
     // Still renders fields (we only add banners; rest of UI remains)
     const hasAnyField = await page.$eval('#recipeOutput', el => !!el.querySelector('input.recipe-field'))
     assert.equal(hasAnyField, true)
+
+    // Qual: variables referenced in expressions count as defined (no false undefined-variable)
+    const implicitVarTemplate = 'Recipe for eggs: eat {1x} eggs\nScaled by a factor of {x/2 = 2}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, implicitVarTemplate)
+
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    const implicitErrText = await page.$eval('.error-display', el => el.textContent || '')
+    assert.ok(!/undefined variable\s+x/i.test(implicitErrText))
 
     // Qual: violated constraint fields should stay red after blur
     const contradictory = '{1 = a} {2 = b} {a=b}'

@@ -15,6 +15,7 @@ const recipesShown = {
   'sugarcalc': "Sugar Calculator",
   'kpounder':  "Pounds ↔ Kilograms Converter",
   'cheesepan': "Cheese Wheels in a Pan",
+  'test':      "Just Testing",
   'blank':     "Blank -- go crazy",
 }
 
@@ -206,6 +207,11 @@ Constraints, constants, and sanity checks:
 * The squared diagonal of the rectangular pan is {w^2 + h^2 = z^2}
 `,
 // -----------------------------------------------------------------------------
+'test': `\
+Recipe for eggs: eat {1x} egg(s).
+Scaled by a factor of {x/2 = 8}.
+`,
+// -----------------------------------------------------------------------------
 'blank': ``,
 };
 
@@ -370,7 +376,11 @@ function parseCell(cell) {
     partIsConst.push(false)
   }
 
-  const fix = parts.length > 0 && partIsConst[0] === true
+    const isBareIdentifier = s => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test((s || '').trim())
+
+    const fix =
+      (parts.length > 0 && partIsConst[0] === true) ||
+      (parts.length === 2 && partIsConst[1] === true && partIsConst[0] === false && !isBareIdentifier(parts[0]))
 
   // Error flag if multiple bare numbers (spec case 7)
   const multipleNumbers = bareNumbers.length > 1
@@ -441,6 +451,11 @@ function buildSymbolTable(cells) {
   const symbols = {}
   const errors = []
 
+  function isBareIdentifierExpr(expr) {
+    const t = (expr || '').trim()
+    return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(t)
+  }
+
   // First pass: collect defined variables (simple identifier expressions) and check for errors
   for (const cell of cells) {
     // Error case 7: multiple bare numbers in a cell
@@ -454,9 +469,21 @@ function buildSymbolTable(cells) {
     }
 
     for (const expr of cell.ceqn) {
-      const t = expr.trim()
-      if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(t)) {
-        symbols[t] = true
+      if (isBareIdentifierExpr(expr)) {
+        symbols[expr.trim()] = true
+      }
+    }
+
+    // Treat variables referenced in constraint-only equations as defined.
+    // Specifically: constraint equations (either 2+ expressions, or a fixed numeric constraint) with no bare identifier term
+    // (so not an assignment like {b = a+z}).
+    // This allows templates like {x/2 = 2} to introduce x without requiring a separate {x} cell.
+    const isConstraintEqn = cell.ceqn.length >= 2 || (cell.fix && cell.cval !== null)
+    if (isConstraintEqn && !cell.ceqn.some(isBareIdentifierExpr)) {
+      for (const expr of cell.ceqn) {
+        for (const v of findVariables(expr)) {
+          symbols[v] = true
+        }
       }
     }
   }
@@ -542,6 +569,24 @@ function recomputeCellCvals(cells, values, fixedCellIds, pinnedCellId = null) {
 // Build initial values for solvem() from cells
 function buildInitialValues(cells) {
   const values = {}
+
+  function isBareIdentifierExpr(expr) {
+    const t = (expr || '').trim()
+    return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(t)
+  }
+
+  // Seed variables that are introduced via constraint-only equations.
+  // (Either 2+ expressions, or fixed numeric constraint; in both cases: no bare identifier term.)
+  for (const cell of cells) {
+    const isConstraintEqn = cell.ceqn.length >= 2 || (cell.fix && cell.cval !== null)
+    if (isConstraintEqn && !cell.ceqn.some(isBareIdentifierExpr)) {
+      for (const expr of cell.ceqn) {
+        for (const v of findVariables(expr)) {
+          if (values[v] === undefined) values[v] = 1
+        }
+      }
+    }
+  }
 
   for (const cell of cells) {
     for (const expr of cell.ceqn) {
@@ -1405,11 +1450,12 @@ function handleFieldBlur(e) {
 
   const useBaseline = (
     state.currentEditCellId === blurredCellId &&
-    state.valuesBeforeEdit &&
-    shouldSnapBack
+    state.valuesBeforeEdit
   )
 
   const baseline = useBaseline ? state.valuesBeforeEdit : state.values
+
+  // const baseline = state.values
 
   const eqns = state.cells.map(c => {
     const eqn = [...c.ceqn]

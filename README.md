@@ -416,6 +416,8 @@ uneditable, rendering as normal text, no field.
 11. Then could we support something like {goal_units := "kg"} and then ... I
 guess that's turning this thing into a whole templating engine like ERB.
 
+12. Support arithmetic in the fields, not just the template.
+
 SCRATCH AREA:
 
 Brainstorming: 
