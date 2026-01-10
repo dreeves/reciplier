@@ -209,7 +209,7 @@ Constraints, constants, and sanity checks:
 // -----------------------------------------------------------------------------
 'test': `\
 Recipe for eggs: eat {1x} egg(s).
-Scaled by a factor of {x/2 = 8}.
+Scaled by a factor of x where x/2 is {x/2 = 8} for some reason.
 `,
 // -----------------------------------------------------------------------------
 'blank': ``,
@@ -376,11 +376,9 @@ function parseCell(cell) {
     partIsConst.push(false)
   }
 
-    const isBareIdentifier = s => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test((s || '').trim())
+  const startsFrozen = parts.length > 0 && partIsConst[0] === true
 
-    const fix =
-      (parts.length > 0 && partIsConst[0] === true) ||
-      (parts.length === 2 && partIsConst[1] === true && partIsConst[0] === false && !isBareIdentifier(parts[0]))
+  const fix = startsFrozen
 
   // Error flag if multiple bare numbers (spec case 7)
   const multipleNumbers = bareNumbers.length > 1
@@ -394,7 +392,10 @@ function parseCell(cell) {
     ...cell,
     cval,
     fix,
+    startsFrozen,
     ceqn,
+    urceqn: parts,
+    urparts: parts,
     hasConstraint: parts.length >= 2,
     multipleNumbers,  // error flag
     hasNumber: bareNumbers.length === 1
@@ -451,12 +452,7 @@ function buildSymbolTable(cells) {
   const symbols = {}
   const errors = []
 
-  function isBareIdentifierExpr(expr) {
-    const t = (expr || '').trim()
-    return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(t)
-  }
-
-  // First pass: collect defined variables (simple identifier expressions) and check for errors
+  // First pass: collect variables and check for errors
   for (const cell of cells) {
     // Error case 7: multiple bare numbers in a cell
     if (cell.multipleNumbers) {
@@ -469,43 +465,9 @@ function buildSymbolTable(cells) {
     }
 
     for (const expr of cell.ceqn) {
-      if (isBareIdentifierExpr(expr)) {
-        symbols[expr.trim()] = true
+      for (const v of findVariables(expr)) {
+        symbols[v] = true
       }
-    }
-
-    // Treat variables referenced in constraint-only equations as defined.
-    // Specifically: constraint equations (either 2+ expressions, or a fixed numeric constraint) with no bare identifier term
-    // (so not an assignment like {b = a+z}).
-    // This allows templates like {x/2 = 2} to introduce x without requiring a separate {x} cell.
-    const isConstraintEqn = cell.ceqn.length >= 2 || (cell.fix && cell.cval !== null)
-    if (isConstraintEqn && !cell.ceqn.some(isBareIdentifierExpr)) {
-      for (const expr of cell.ceqn) {
-        for (const v of findVariables(expr)) {
-          symbols[v] = true
-        }
-      }
-    }
-  }
-
-  // Second pass: find all referenced variables and check they're defined
-  const allReferenced = new Set()
-  for (const cell of cells) {
-    for (const expr of cell.ceqn) {
-      const vars = findVariables(expr)
-      vars.forEach(v => {
-        allReferenced.add(v)
-        if (!symbols[v]) {
-          errors.push(`Cell ${cell.raw} has undefined variable ${v}`)
-        }
-      })
-    }
-  }
-
-  // Third pass: check for disconnected variables (defined but never referenced)
-  for (const name of Object.keys(symbols)) {
-    if (!allReferenced.has(name)) {
-      errors.push(`${name} is defined but never used`)
     }
   }
 
@@ -539,13 +501,65 @@ function buildEquations(cells) {
   const eqns = []
   for (const cell of cells) {
     const eqn = [...cell.ceqn]
-    // If cell has a bare number cval, add it as a constraint
-    if (cell.fix && cell.cval !== null) {
-      eqn.push(cell.cval)
-    }
     eqns.push(eqn)
   }
   return eqns
+}
+
+function buildInitialEquations(cells) {
+  return cells.map(c => {
+    const parts = (c.urparts || c.urceqn || [])
+    return parts.map(p => {
+      if (typeof p !== 'string') return p
+      const vars = findVariables(p)
+      if (vars.size !== 0) return p
+      const r = vareval(p, {})
+      if (r.error || typeof r.value !== 'number' || !isFinite(r.value)) return p
+      return r.value
+    })
+  })
+}
+
+function buildInitialSeedValues(cells) {
+  const values = {}
+  for (const cell of cells) {
+    for (const expr of (cell.urparts || cell.urceqn || [])) {
+      if (typeof expr !== 'string') continue
+      for (const v of findVariables(expr)) {
+        if (values[v] === undefined) values[v] = 1
+      }
+    }
+  }
+  return values
+}
+
+function contradictionsForEqns(eqns, values) {
+  const errors = []
+
+  for (const eqn of eqns) {
+    const results = eqn.map(expr => {
+      if (expr === null || expr === undefined) return null
+      const s = String(expr)
+      if (!s.trim()) return null
+      const r = vareval(s, values)
+      return r.error ? null : r.value
+    })
+
+    if (results.some(r => r === null)) continue
+
+    const first = results[0]
+    const tolerance = Math.abs(first) * 1e-6 + 1e-6
+    for (let i = 1; i < results.length; i++) {
+      if (Math.abs(results[i] - first) > tolerance) {
+        const exprStr = eqn.join(' = ')
+        const valuesStr = results.map(r => formatNum(r)).join(' ≠ ')
+        errors.push(`Contradiction: {${exprStr}} evaluates to ${valuesStr}`)
+        break
+      }
+    }
+  }
+
+  return errors
 }
 
 function recomputeCellCvals(cells, values, fixedCellIds, pinnedCellId = null) {
@@ -570,29 +584,10 @@ function recomputeCellCvals(cells, values, fixedCellIds, pinnedCellId = null) {
 function buildInitialValues(cells) {
   const values = {}
 
-  function isBareIdentifierExpr(expr) {
-    const t = (expr || '').trim()
-    return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(t)
-  }
-
-  // Seed variables that are introduced via constraint-only equations.
-  // (Either 2+ expressions, or fixed numeric constraint; in both cases: no bare identifier term.)
-  for (const cell of cells) {
-    const isConstraintEqn = cell.ceqn.length >= 2 || (cell.fix && cell.cval !== null)
-    if (isConstraintEqn && !cell.ceqn.some(isBareIdentifierExpr)) {
-      for (const expr of cell.ceqn) {
-        for (const v of findVariables(expr)) {
-          if (values[v] === undefined) values[v] = 1
-        }
-      }
-    }
-  }
-
   for (const cell of cells) {
     for (const expr of cell.ceqn) {
-      const t = expr.trim()
-      if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(t) && values[t] === undefined) {
-        values[t] = 1
+      for (const v of findVariables(expr)) {
+        if (values[v] === undefined) values[v] = 1
       }
     }
   }
@@ -612,15 +607,20 @@ function buildInitialValues(cells) {
 function computeInitialValues(cells, symbols) {
   const errors = []
 
-  // Build equations, initial values, and frozen set, then solve
-  const eqns = buildEquations(cells)
-  const seedValues = buildInitialValues(cells)
+  // Step 1: Solve the template as written (including constants).
+  const eqns = buildInitialEquations(cells)
+  const seedValues = buildInitialSeedValues(cells)
   let values
   try {
     values = solvemAss(eqns, seedValues)
   } catch (e) {
     errors.push(String(e && e.message ? e.message : e))
     values = { ...seedValues }
+  }
+
+  const sat = eqnsSatisfied(eqns, values)
+  if (!sat) {
+    errors.push(...contradictionsForEqns(eqns, values))
   }
 
   return { values, errors, emptyExprVars: new Set() }
@@ -783,12 +783,30 @@ function solveFromConstraints(varName, cells, values) {
 function checkInitialContradictions(cells, values, emptyExprVars) {
   const errors = []
 
+  function isBareIdentifierExpr(expr) {
+    const t = (expr || '').trim()
+    return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(t)
+  }
+
   for (const cell of cells) {
     // Only check cells that actually have constraints
     if (cell.hasConstraint) {
       // Check if this constraint involves any variable that needs to be computed
       const varsInConstraint = new Set()
-      cell.ceqn.forEach(expr => {
+      const eqnParts = [...cell.ceqn]
+
+      const isAssignmentSeed =
+        cell.hasConstraint &&
+        cell.hasNumber &&
+        !cell.startsFrozen &&
+        cell.ceqn.length === 1 &&
+        isBareIdentifierExpr(cell.ceqn[0])
+
+      if (!isAssignmentSeed && cell.hasConstraint && cell.hasNumber) {
+        eqnParts.push(String(cell.cval))
+      }
+
+      eqnParts.forEach(expr => {
         if (expr && expr.trim() !== '') {
           findVariables(expr).forEach(v => varsInConstraint.add(v))
         }
@@ -799,7 +817,7 @@ function checkInitialContradictions(cells, values, emptyExprVars) {
       if (involvesEmptyVar) continue
 
       // This is a constraint - all expressions in ceqn should evaluate equal
-      const results = cell.ceqn.map(expr => {
+      const results = eqnParts.map(expr => {
         if (!expr || expr.trim() === '') return null
         const r = vareval(expr, values)
         return r.error ? null : r.value
@@ -814,7 +832,7 @@ function checkInitialContradictions(cells, values, emptyExprVars) {
       for (let i = 1; i < results.length; i++) {
         if (Math.abs(results[i] - first) > tolerance) {
           // TODO: only count expressions from the urtext, not the cvar
-          const exprStr = cell.ceqn.join(' = ')
+          const exprStr = eqnParts.join(' = ')
           const valuesStr = results.map(r => formatNum(r)).join(' ≠ ')
           errors.push(`Contradiction: {${exprStr}} evaluates to ${valuesStr}`)
           break
@@ -1040,13 +1058,10 @@ function parseRecipe() {
   // Build symbol table
   const { symbols, errors: symbolErrors } = buildSymbolTable(cells)
   
-  // Compute initial values
-  const { values, errors: valueErrors, emptyExprVars } = computeInitialValues(cells, symbols)
-  
-  // Check for contradictions in initial values (skip constraints involving empty-expr vars)
-  const contradictions = checkInitialContradictions(cells, values, emptyExprVars)
+  // Compute initial values (includes template satisfiability check)
+  const { values, errors: valueErrors } = computeInitialValues(cells, symbols)
 
-  const allErrors = [...syntaxErrors, ...symbolErrors, ...valueErrors, ...contradictions]
+  const allErrors = [...syntaxErrors, ...symbolErrors, ...valueErrors]
 
   // NOTE: Previously we tried to backfill missing variable values from the
   // previous parse to keep the UI populated on error. Per Anti-Postel, we fail
@@ -1067,7 +1082,8 @@ function parseRecipe() {
   state.values = values
   state.errors = allErrors
   // Per README future-work item 8: cells defined with bare numbers start frozen.
-  state.fixedCellIds = new Set(cells.filter(c => c.fix).map(c => c.id))
+  // state.fixedCellIds = new Set(cells.filter(c => c.fix).map(c => c.id))
+  state.fixedCellIds = new Set(cells.filter(c => c.startsFrozen).map(c => c.id))
   recomputeCellCvals(cells, values, state.fixedCellIds)
   state.solveBanner = ''
   
@@ -1095,6 +1111,11 @@ function renderRecipe() {
   const criticalErrors = state.errors
 
   const violatedCellIds = getViolatedCellIds(state.cells, state.values)
+  const invalidCellIds = new Set(violatedCellIds)
+  if (state.solveBanner) {
+    const eqns = buildInteractiveEqns(null, null)
+    for (const id of getUnsatisfiedCellIds(eqns, state.values)) invalidCellIds.add(id)
+  }
 
   function renderRecipeBody({ disableInputs, invalidCellIds }) {
     // Find all HTML comment ranges to strip them from output
@@ -1206,7 +1227,7 @@ function renderRecipe() {
     return
   }
   
-  output.innerHTML = `${errorBanner}${solveBanner}${renderRecipeBody({ disableInputs: false, invalidCellIds: violatedCellIds })}`
+  output.innerHTML = `${errorBanner}${solveBanner}${renderRecipeBody({ disableInputs: false, invalidCellIds })}`
   output.style.display = 'block'
   copySection.style.display = 'block'
 
@@ -1231,6 +1252,75 @@ function escapeHtml(text) {
 // Event Handlers
 // =============================================================================
 
+function updateSolveBannerInDom() {
+  const banner = $('solveBanner')
+  if (!banner) return
+
+  if (!state.solveBanner) {
+    banner.hidden = true
+    const msg = banner.querySelector('.error-message')
+    if (msg) msg.textContent = ''
+    return
+  }
+
+  banner.hidden = false
+  const msg = banner.querySelector('.error-message')
+  if (msg) msg.textContent = `⚠️ ${state.solveBanner}`
+}
+
+function setSolveBannerFromSatisfaction(sat) {
+  if (sat) {
+    state.solveBanner = ''
+    return
+  }
+
+  const anyFrozen = state.fixedCellIds.size > 0
+  state.solveBanner = anyFrozen
+    ? 'No solution found (try unfreezing cells)'
+    : 'No solution found'
+}
+
+function buildInteractiveEqns(editedCellId = null, editedValue = null) {
+  return state.cells.map(c => {
+    const eqn = [...c.ceqn]
+
+    if (editedCellId !== null && c.id === editedCellId) {
+      eqn.push(editedValue)
+    } else if (state.fixedCellIds.has(c.id)) {
+      eqn.push(c.cval)
+    }
+
+    return eqn
+  })
+}
+
+function getUnsatisfiedCellIds(eqns, values) {
+  const unsatisfied = new Set()
+  const tol = 1e-6
+
+  for (let i = 0; i < eqns.length; i++) {
+    const eqn = eqns[i]
+    if (!eqn || eqn.length < 2) continue
+
+    const results = eqn.map(term => {
+      if (typeof term === 'number') return { value: term, error: null }
+      return vareval(String(term), values)
+    })
+
+    if (results.some(r => r.error || typeof r.value !== 'number' || !isFinite(r.value))) continue
+
+    const first = results[0].value
+    const tolerance = Math.abs(first) * tol + tol
+    const ok = results.every(r => Math.abs(r.value - first) < tolerance)
+    if (!ok) {
+      const cell = state.cells[i]
+      if (cell && cell.id) unsatisfied.add(cell.id)
+    }
+  }
+
+  return unsatisfied
+}
+
 // TODO: ugh, hundreds of occurrences of "value", many but not all of which
 // should be "cval"
 
@@ -1239,26 +1329,29 @@ function handleFieldInput(e) {
   const cellId = input.dataset.cellId
   const newValue = toNum(input.value)
 
-  function updateSolveBannerInDom() {
-    const banner = $('solveBanner')
-    if (!banner) return
-
-    if (!state.solveBanner) {
-      banner.hidden = true
-      const msg = banner.querySelector('.error-message')
-      if (msg) msg.textContent = ''
-      return
-    }
-
-    banner.hidden = false
-    const msg = banner.querySelector('.error-message')
-    if (msg) msg.textContent = `⚠️ ${state.solveBanner}`
-  }
+  // NOTE: local updateSolveBannerInDom moved to a top-level helper.
+  // Keeping old implementation commented out rather than deleting.
+  // function updateSolveBannerInDom() {
+  //   const banner = $('solveBanner')
+  //   if (!banner) return
+  //
+  //   if (!state.solveBanner) {
+  //     banner.hidden = true
+  //     const msg = banner.querySelector('.error-message')
+  //     if (msg) msg.textContent = ''
+  //     return
+  //   }
+  //
+  //   banner.hidden = false
+  //   const msg = banner.querySelector('.error-message')
+  //   if (msg) msg.textContent = `⚠️ ${state.solveBanner}`
+  // }
 
   // Invalid number format - just mark invalid, don't change state
   if (newValue === null || !isFinite(newValue)) {
     input.classList.add('invalid')
-    state.solveBanner = ''
+    // Invariant: show an error banner whenever we don't have a satisfying assignment.
+    setSolveBannerFromSatisfaction(false)
     updateSolveBannerInDom()
     return
   }
@@ -1279,20 +1372,7 @@ function handleFieldInput(e) {
   // Per spec: "If its ceqn includes a bare number, it's frozen" - but initially
   // bare numbers go to cval not ceqn, so cells with values are NOT frozen by
   // default. Only user-frozen cells (state.fixedVars) are frozen.
-  const eqns = state.cells.map(c => {
-    const eqn = [...c.ceqn]  // Keep expressions (e.g., '12x')
-    if (c.id === cellId) {
-      // Edited cell: temporarily frozen at new value
-      eqn.push(newValue)
-    } else if (state.fixedCellIds.has(c.id)) {
-      // User-frozen cell: frozen at current value
-      eqn.push(c.cval)
-    }
-    // Note: cells with bare values in definition (cell.value) are NOT frozen
-    // by default - they just have initial values. The solver is free to change
-    // them to satisfy constraints.
-    return eqn
-  })
+  const eqns = buildInteractiveEqns(cellId, newValue)
 
   // Frozen = only user-frozen cells (not the edited cell - we added its
   // constraint above but the solver may need to derive other values from it)
@@ -1301,15 +1381,7 @@ function handleFieldInput(e) {
   const newValues = solvemAss(eqns, seedValues)
 
   const constraintsSatisfied = eqnsSatisfied(eqns, newValues)
-  if (!constraintsSatisfied) {
-    const anyOtherFrozen = state.fixedCellIds.size > 0
-    state.solveBanner = anyOtherFrozen
-      ? 'Overconstrained! Try unfreezing cells.'
-      : 'No solution found.'
-  } else {
-    state.solveBanner = ''
-  }
-
+  setSolveBannerFromSatisfaction(constraintsSatisfied)
   updateSolveBannerInDom()
 
   // Commit the new values
@@ -1319,12 +1391,16 @@ function handleFieldInput(e) {
 
   // Get ALL violated cells for UI highlighting
   const violatedCellIds = getViolatedCellIds(state.cells, state.values)
+  const invalidCellIds = new Set(violatedCellIds)
+  if (state.solveBanner) {
+    for (const id of getUnsatisfiedCellIds(eqns, state.values)) invalidCellIds.add(id)
+  }
 
   // Update all fields with new values and highlight violations
   $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
     if (field === input) {
       // Don't overwrite what user is typing, but do update invalid status
-      if (violatedCellIds.has(field.dataset.cellId)) {
+      if (invalidCellIds.has(field.dataset.cellId)) {
         field.classList.add('invalid')
       } else {
         field.classList.remove('invalid')
@@ -1333,7 +1409,7 @@ function handleFieldInput(e) {
     }
     const otherCell = state.cells.find(c => c.id === field.dataset.cellId)
     if (otherCell) field.value = formatNum(otherCell.cval)
-    if (violatedCellIds.has(field.dataset.cellId)) {
+    if (invalidCellIds.has(field.dataset.cellId)) {
       field.classList.add('invalid')
     } else {
       field.classList.remove('invalid')
@@ -1398,19 +1474,34 @@ function handleFieldBlur(e) {
 
   const didEditThisField = state.currentEditCellId === blurredCellId
   if (!didEditThisField) {
-    state.solveBanner = ''
-    const banner = $('solveBanner')
-    if (banner) banner.hidden = true
     return
   }
 
+  // When nothing else is frozen, don't do a blur-time re-solve that can snap
+  // values back (eg, pyzza editing c should persist). But do enforce the
+  // invariant: show an error banner if constraints are not satisfied.
   const anyOtherFrozen = [...state.fixedCellIds].some(id => id !== blurredCellId)
   if (!anyOtherFrozen) {
     state.currentEditCellId = null
     state.valuesBeforeEdit = null
-    state.solveBanner = ''
-    const banner = $('solveBanner')
-    if (banner) banner.hidden = true
+    const blurEqns = buildInteractiveEqns(null, null)
+    setSolveBannerFromSatisfaction(eqnsSatisfied(blurEqns, state.values))
+    updateSolveBannerInDom()
+
+    const violatedCellIds = getViolatedCellIds(state.cells, state.values)
+    const invalidCellIds = new Set(violatedCellIds)
+    if (state.solveBanner) {
+      for (const id of getUnsatisfiedCellIds(blurEqns, state.values)) invalidCellIds.add(id)
+    }
+
+    $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
+      if (invalidCellIds.has(field.dataset.cellId)) {
+        field.classList.add('invalid')
+      } else {
+        field.classList.remove('invalid')
+      }
+    })
+
     updateSliderDisplay()
     return
   }
@@ -1459,6 +1550,23 @@ function handleFieldBlur(e) {
 
   const eqns = state.cells.map(c => {
     const eqn = [...c.ceqn]
+
+    // NOTE: Per the core algorithm, constants from the template are not
+    // treated as constraints after initialization unless the cell is frozen.
+    // Old blur-path behavior added non-frozen template constants as constraints;
+    // keep it commented out rather than deleting:
+    //
+    // const isAssignmentSeed =
+    //   c.hasConstraint &&
+    //   c.hasNumber &&
+    //   !c.startsFrozen &&
+    //   c.ceqn.length === 1 &&
+    //   /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(c.ceqn[0].trim())
+    //
+    // if (!isAssignmentSeed && c.hasConstraint && c.hasNumber) {
+    //   eqn.push(c.cval)
+    // }
+
     if (state.fixedCellIds.has(c.id)) {
       eqn.push(c.cval)
     }
@@ -1474,6 +1582,12 @@ function handleFieldBlur(e) {
   if (!acceptBlurredValue) {
     const eqnsWithoutBlurredConstraint = state.cells.map(c => {
       const eqn = [...c.ceqn]
+
+      // Old blur-path constant-injection preserved as comment (see above).
+      // if (!isAssignmentSeed && c.hasConstraint && c.hasNumber) {
+      //   eqn.push(c.cval)
+      // }
+
       if (state.fixedCellIds.has(c.id)) {
         eqn.push(c.cval)
       }
@@ -1484,7 +1598,13 @@ function handleFieldBlur(e) {
   }
 
   state.values = solved
-  state.solveBanner = ''
+  // Banner is driven by satisfiable constraints, not by blur events.
+  const finalEqns = acceptBlurredValue ? eqns : state.cells.map(c => {
+    const eqn = [...c.ceqn]
+    if (state.fixedCellIds.has(c.id)) eqn.push(c.cval)
+    return eqn
+  })
+  setSolveBannerFromSatisfaction(eqnsSatisfied(finalEqns, solved))
 
   state.currentEditCellId = null
   state.valuesBeforeEdit = null
@@ -1492,20 +1612,25 @@ function handleFieldBlur(e) {
   recomputeCellCvals(state.cells, state.values, state.fixedCellIds)
 
   const violatedCellIds = getViolatedCellIds(state.cells, state.values)
+  const invalidCellIds = new Set(violatedCellIds)
+  if (state.solveBanner) {
+    for (const id of getUnsatisfiedCellIds(finalEqns, state.values)) invalidCellIds.add(id)
+  }
 
   $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
     const c = state.cells.find(x => x.id === field.dataset.cellId)
     if (c) field.value = formatNum(c.cval)
-    if (violatedCellIds.has(field.dataset.cellId)) {
+    if (invalidCellIds.has(field.dataset.cellId)) {
       field.classList.add('invalid')
     } else {
       field.classList.remove('invalid')
     }
   })
 
-  // Clear the solve banner on blur
-  const banner = $('solveBanner')
-  if (banner) banner.hidden = true
+  // NOTE: Don't hide the solve banner on blur; only clear it when solved.
+  // const banner = $('solveBanner')
+  // if (banner) banner.hidden = true
+  updateSolveBannerInDom()
 
   updateSliderDisplay()
 }
@@ -1533,6 +1658,14 @@ function handleFieldDoubleClick(e) {
     state.fixedCellIds.add(cellId)
     input.classList.add('fixed')
   }
+
+  // Re-solve under the new frozen constraints and update the banner invariant.
+  const eqns = buildInteractiveEqns(null, null)
+  const solved = solvemAss(eqns, { ...state.values })
+  state.values = solved
+  recomputeCellCvals(state.cells, state.values, state.fixedCellIds)
+  setSolveBannerFromSatisfaction(eqnsSatisfied(eqns, solved))
+  renderRecipe()
 }
 
 function handleRecipeChange() {
@@ -1668,6 +1801,20 @@ function handleSliderChange(e) {
   // Build equations with x temporarily frozen at new value
   const eqns = state.cells.map(c => {
     const eqn = [...c.ceqn]
+
+    // NOTE: Old slider-path behavior injected template constants as constraints.
+    // Keep it commented out rather than deleting.
+    // const isAssignmentSeed =
+    //   c.hasConstraint &&
+    //   c.hasNumber &&
+    //   !c.startsFrozen &&
+    //   c.ceqn.length === 1 &&
+    //   /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(c.ceqn[0].trim())
+    //
+    // if (!isAssignmentSeed && c.hasConstraint && c.hasNumber) {
+    //   eqn.push(c.cval)
+    // }
+
     if (c.id === xCell.id) {
       eqn.push(newX)
     } else if (state.fixedCellIds.has(c.id)) {
@@ -1677,7 +1824,9 @@ function handleSliderChange(e) {
   })
 
   const seedValues = { ...state.values, x: newX }
-  state.values = solvemAss(eqns, seedValues)
+  const solved = solvemAss(eqns, seedValues)
+  state.values = solved
+  setSolveBannerFromSatisfaction(eqnsSatisfied(eqns, solved))
 
   xCell.cval = newX
   recomputeCellCvals(state.cells, state.values, state.fixedCellIds, xCell.id)

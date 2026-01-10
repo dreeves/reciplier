@@ -1,10 +1,7 @@
 // Maybe call this as part of preval?
 function deoctalize(s) { return s.replace(/(?<![\w_\.])0+(\d)/g, '$1') }
 
-// Preprocess a math expression string so we can eval it as JavaScript.
-// This includes implicit multiplication, like "2x" -> "2*x", exponentiation 
-// with ^, and all the standard functions like sqrt, sin, cos, etc, which 
-// JavaScript needs to have "Math." prepended to.
+// See spec in the README
 function preval(expr) {
   if (typeof expr !== 'string' || expr.trim() === '') {
     throw new Error(`Invalid expression: ${String(expr)}`)
@@ -33,9 +30,7 @@ function preval(expr) {
   return js
 }
 
-// Eval a math expression (after preprocessing with preval) using the given 
-// assignments of variables. E.g., vareval('2x+y', {x: 3, y: 1}) returns 7.
-// If the eval fails to return a number, it returns null. TODO
+// See spec in the README
 function vareval(expr, vars) {
   try {
     const jsExpr = deoctalize(preval(expr))
@@ -112,6 +107,13 @@ function solveFor(expr, varName, target, values) {
   const test = { ...values }
   const tol = Math.abs(target) * 1e-9 + 1e-9
 
+  function evalAt(x) {
+    test[varName] = x
+    const r = vareval(expr, test)
+    if (r.error || !isFinite(r.value)) return null
+    return r.value
+  }
+
   function tryGuess(guess) {
     if (!isFinite(guess)) return null
     test[varName] = guess
@@ -147,49 +149,65 @@ function solveFor(expr, varName, target, values) {
   }
 
   // Binary search as fallback
-  let lo = 0, hi = 1000
+  let lo = null
+  let hi = null
 
-  // Find valid bounds
-  for (let scale = 1; scale < 1e10; scale *= 10) {
-    test[varName] = scale
-    const hiRes = vareval(expr, test)
-    test[varName] = -scale
-    const loRes = vareval(expr, test)
-
-    if (!hiRes.error && !loRes.error) {
-      if ((hiRes.value - target) * (loRes.value - target) <= 0) {
-        lo = -scale
-        hi = scale
-        break
-      }
+  function tryBracket(loCandidate, hiCandidate) {
+    // Avoid brackets that cross a discontinuity at 0 (eg, d/t) by rejecting
+    // cross-zero intervals when the expression is non-finite at 0.
+    if (loCandidate < 0 && hiCandidate > 0) {
+      const z = evalAt(0)
+      if (z === null) return false
     }
-
-    test[varName] = 0
-    const zeroRes = vareval(expr, test)
-    if (!hiRes.error && !zeroRes.error) {
-      if ((hiRes.value - target) * (zeroRes.value - target) <= 0) {
-        lo = 0
-        hi = scale
-        break
-      }
+    const loVal = evalAt(loCandidate)
+    const hiVal = evalAt(hiCandidate)
+    if (loVal === null || hiVal === null) return false
+    const a = loVal - target
+    const b = hiVal - target
+    if (!isFinite(a) || !isFinite(b)) return false
+    if (a === 0) {
+      lo = loCandidate
+      hi = loCandidate
+      return true
     }
+    if (b === 0) {
+      lo = hiCandidate
+      hi = hiCandidate
+      return true
+    }
+    if (a * b <= 0) {
+      lo = loCandidate
+      hi = hiCandidate
+      return true
+    }
+    return false
   }
+
+  // Find valid bounds, preferring brackets that don't cross discontinuities like 1/x at 0.
+  for (let scale = 1; scale < 1e10; scale *= 10) {
+    // Positive side
+    if (tryBracket(1e-9, scale)) break
+    // Negative side
+    if (tryBracket(-scale, -1e-9)) break
+    // Symmetric fallback
+    if (tryBracket(-scale, scale)) break
+  }
+
+  if (lo === null || hi === null) return null
 
   // Binary search
   for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2
-    test[varName] = mid
-    const r = vareval(expr, test)
-    if (r.error) return null
+    const midVal = evalAt(mid)
+    if (midVal === null) return null
 
     // NOTE: Don't early-exit on tolerance; run full iterations for precision.
     // if (Math.abs(r.value - target) < tol) return mid
 
-    test[varName] = lo
-    const loRes = vareval(expr, test)
-    if (loRes.error) return null
+    const loVal = evalAt(lo)
+    if (loVal === null) return null
 
-    if ((loRes.value - target) * (r.value - target) > 0) {
+    if ((loVal - target) * (midVal - target) > 0) {
       lo = mid
     } else {
       hi = mid
@@ -198,9 +216,8 @@ function solveFor(expr, varName, target, values) {
 
   // Verify the result is actually close to target before returning
   const finalVal = (lo + hi) / 2
-  test[varName] = finalVal
-  const finalRes = vareval(expr, test)
-  if (finalRes.error || Math.abs(finalRes.value - target) > Math.abs(target) * 0.01 + 0.01) {
+  const finalValRes = evalAt(finalVal)
+  if (finalValRes === null || Math.abs(finalValRes - target) > Math.abs(target) * 0.01 + 0.01) {
     return null
   }
   return finalVal
@@ -209,41 +226,7 @@ function solveFor(expr, varName, target, values) {
 // =============================================================================
 // solvem: Main constraint solver
 // =============================================================================
-//
-// The solvem function takes a list of equations and a hash of variables with
-// initial numerical assignments and tries to find a satisfying assignment of
-// numeric values to the variables.
-// * An equation is a list of one or more expressions taken to all be equal.
-// * An expression is a string that can be eval'd in JavaScript to a number, if 
-// prefaced by an assignment of numbers to the variables it references. 
-// (The vareval function does that eval. Also expressions support richer syntax
-// than JavaScript and are passed through a preprocessor, preval, that converts
-// them to valid JavaScript.)
-// * The variables are strings that are valid identifiers in JavaScript-like 
-// langages, like "x" or "a1" or "some_var".
-// This function returns an object with 3 fields:
-// * ass: A hash of variable names with their solved numeric values (an 
-// assignment)
-// * zij: (Pronounced "zidge") An array of sum-of-squared-residual-errors, 
-// corresponding to each equation. If we say that, using assignment ass, the 
-// expressions in an equation eval to values [v1, ..., vn] and that m is the
-// mean of those values, then the differences between the vi's and m are the 
-// residuals. Square the residuals and sum them and that's the zij entry for
-// that equation. If zij is all zeros then ass is a valid assignment satisfying
-// all the constraints.
-// * sat: A boolean saying whether every entry in zij is zero, i.e., whether ass
-// is a satisfying assignment.
-// Examples:
-// 1. solvem([['a', '2b']], {a: null, b: null})
-// returns {ass: {a: 1, b: 0.5}, zij: [0], sat: true}
-// 2. solvem([['a+b', 8], ['a', 3], ['b', 4], ['c']], {a: null, b: null, c: 0})
-// returns {ass: {a: 3, b: 4, c: 0}, zij: [1, 0, 0, 0], sat: false}
-// 3. solvem([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0}) returns 
-// {ass: {x: 6, y: 7}, zij: [0, 0], sat: true}
-// 4. solvem([['x', 1], ['a', '3x'], ['b', '4x'], ['v1', 'a^2+b^2', 'c^2']],
-// returns {x: 1, a: 1, b: 1, c: 1, v1: 1}) returns 
-// {ass: {x: 1, a: 3, b: 4, c: 5, v1: 25}, zij: [0, 0], sat: true}
-// See also: Gaussian elimination, Mathematica's NSolve and NMinimize.
+// See spec in the README
 function solvemAss(eqns, vars) {
   const required = new Set()
   for (const eqn of eqns) {
@@ -286,6 +269,23 @@ function solvemAss(eqns, vars) {
     if (eqn.some(e => typeof e === 'number')) {
       for (const e of eqn) {
         if (isSimpleVar(e)) constrained.add(e)
+      }
+    }
+  }
+
+  // Track whether a simple variable is used as an input (appears in an expression)
+  // anywhere other than as a head. Leaf vars are good candidates for directional
+  // propagation from definitions (eg, u = d/w).
+  const usesAsInput = new Map() // var -> count
+  for (const eqn of eqns) {
+    for (let i = 0; i < eqn.length; i++) {
+      const term = eqn[i]
+      if (typeof term !== 'string') continue
+      const t = term.trim()
+      if (t === '') continue
+      if (i === 0 && isSimpleVar(t)) continue
+      for (const v of findVariables(t)) {
+        usesAsInput.set(v, (usesAsInput.get(v) || 0) + 1)
       }
     }
   }
@@ -336,6 +336,12 @@ function solvemAss(eqns, vars) {
     const first = results[0].value
     const tolerance = Math.abs(first) * tol + tol
     return results.every(r => Math.abs(r.value - first) < tolerance)
+  }
+
+  function isDefinitionPair(eqn) {
+    return eqn.length === 2 &&
+      typeof eqn[0] === 'string' && isSimpleVar(eqn[0]) &&
+      typeof eqn[1] === 'string' && !isSimpleVar(eqn[1])
   }
 
   // trustworthy: variables with reliable values (derived from constraints)
@@ -469,7 +475,20 @@ function solvemAss(eqns, vars) {
 
       const eqnHasLiteral = eqn.some(e => typeof e === 'number')
 
-      const targetResult = findTarget(eqn)
+      // Prefer directional propagation for definition-like equations [a, expr].
+      // This avoids getting stuck when the current value of `a` is used as the target.
+      let targetResult = null
+      if (isDefinitionPair(eqn) && !literalPinned.has(eqn[0]) && (usesAsInput.get(eqn[0]) || 0) === 0) {
+        const rhs = eqn[1]
+        const r = evalExpr(rhs)
+        if (!r.error && isFinite(r.value)) {
+          targetResult = { value: r.value, isTrustworthy: false, isStable: false, stableNonSingleton: false }
+        }
+      }
+
+      if (targetResult === null) {
+        targetResult = findTarget(eqn)
+      }
       if (targetResult === null) continue
       const { value: target, isTrustworthy, isStable: targetIsStable, stableNonSingleton: targetStableNonSingleton = false } = targetResult
 
@@ -927,6 +946,7 @@ function runQuals() {
   check('solveFor: linear', solveFor('2x', 'x', 10, {}), 5)
   check('solveFor: squared', solveFor('x^2', 'x', 25, {}), 5)
   check('solveFor: with other vars', solveFor('x + y', 'x', 10, {y: 3}), 7)
+  check('solveFor: division d/t=15 finds t=4.4', solveFor('d/t', 't', 15, {d: 66}), 4.4, 1e-9)
 
   console.log('\n=== solvem quals ===')
 
@@ -1452,6 +1472,32 @@ function runQuals() {
     const rep = solvemReport(eqns, { x: 1 })
     check('solvem: pancakes x=2 via flour (sat)', rep.sat, true)
     check('solvem: pancakes x=2 via flour', rep.ass.x, 2, 1e-9)
+  })()
+
+  // Regression: interactive-style re-solve should update x from a derived constraint
+  ;(() => {
+    const eqns = [
+      ['x/2', 0.5],
+    ]
+    const ass = solvemAss(eqns, { x: 16 })
+
+    // NOTE: solvemAss returns an assignment; sat can be checked via eqnsSatisfied.
+    // check('solvemAss: x/2=0.5 from x=16 (sat)', rep.sat, true)
+    // check('solvemAss: x/2=0.5 implies x=1', rep.ass.x, 1, 1e-9)
+    check('solvemAss: x/2=0.5 from x=16 (sat)', eqnsSatisfied(eqns, ass), true)
+    check('solvemAss: x/2=0.5 implies x=1', ass.x, 1, 1e-9)
+  })()
+
+  // Regression: definition pairs should propagate directionally (u = d/w)
+  ;(() => {
+    const eqns = [
+      ['d', 66],
+      ['w', 5.45],
+      ['u', 'd/w'],
+    ]
+    const ass = solvemAss(eqns, { d: 66, w: 5.45, u: 10.56 })
+    check('solvemAss: u=d/w (sat)', eqnsSatisfied(eqns, ass), true)
+    check('solvemAss: u tracks d/w', ass.u, 66 / 5.45, 1e-9)
   })()
 
   // Breakaway: from pinned m,s,d,vb compute vp

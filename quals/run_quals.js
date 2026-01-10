@@ -105,9 +105,16 @@ async function main() {
         const errorCount = errors.length
         const solveBanner = String(state?.solveBanner || '')
 
+        const isBareIdentifier = s => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(String(s || '').trim())
         const eqns = (state?.cells || []).map(c => {
           const eqn = [...(c.ceqn || [])]
-          if (state?.fixedCellIds?.has?.(c.id)) eqn.push(c.cval)
+          const isAssignmentSeed =
+            !!c?.hasConstraint &&
+            c?.hasNumber &&
+            !c?.startsFrozen &&
+            (c?.ceqn || []).length === 1 &&
+            isBareIdentifier(c.ceqn[0])
+          if (!isAssignmentSeed && c?.hasConstraint && c?.hasNumber) eqn.push(c.cval)
           return eqn
         })
         const sat = eqnsSatisfied(eqns, state?.values || {})
@@ -132,9 +139,9 @@ async function main() {
       }
 
       assert.equal(stateSummary.errorCount, 0, `recipe ${key}: errorCount`)
-      assert.equal(stateSummary.solveBanner, '', `recipe ${key}: solveBanner`)
       assert.equal(stateSummary.invalidCount, 0, `recipe ${key}: invalidCount`)
       assert.equal(stateSummary.sat, true, `recipe ${key}: sat`)
+      assert.equal(stateSummary.solveBanner, '', `recipe ${key}: solveBanner`)
       assert.ok(stateSummary.cellCount > 0, `recipe ${key}: cellCount`)
     }
 
@@ -374,36 +381,191 @@ async function main() {
 
     await simeqConstraintHandle.dispose()
 
-    // Qual 3: Undefined variable shows banner and disables copy
-    const badTemplate = '{1 = a} {b = a+z}\n\nSanity: {a=b}'
+    // Qual 3: Bad templates should show error banner
+    // Unsatisfiable constraints at load time
+    const unsatTemplate = '{1 = a} {2 = a}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
-    }, badTemplate)
+    }, unsatTemplate)
 
     await page.waitForSelector('.error-display', { visible: true })
+    const unsatErrText = await page.$eval('.error-display', el => el.textContent || '')
+    assert.ok(/Contradiction:/i.test(unsatErrText))
+    const unsatCopyDisabled = await page.$eval('#copyButton', el => el.disabled)
+    assert.equal(unsatCopyDisabled, true)
 
-    const errorText = await page.$eval('.error-display', el => el.textContent || '')
-    assert.ok(/undefined variable/i.test(errorText))
-
-    const copyDisabled = await page.$eval('#copyButton', el => el.disabled)
-    assert.equal(copyDisabled, true)
-
-    // Still renders fields (we only add banners; rest of UI remains)
-    const hasAnyField = await page.$eval('#recipeOutput', el => !!el.querySelector('input.recipe-field'))
-    assert.equal(hasAnyField, true)
-
-    // Qual: variables referenced in expressions count as defined (no false undefined-variable)
-    const implicitVarTemplate = 'Recipe for eggs: eat {1x} eggs\nScaled by a factor of {x/2 = 2}'
+    // Bare constant cell should error
+    const bareConstantTemplate = '{1}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
-    }, implicitVarTemplate)
+    }, bareConstantTemplate)
 
+    await page.waitForSelector('.error-display', { visible: true })
+    const bareErrText = await page.$eval('.error-display', el => el.textContent || '')
+    assert.ok(/bare number/i.test(bareErrText))
+    const bareCopyDisabled = await page.$eval('#copyButton', el => el.disabled)
+    assert.equal(bareCopyDisabled, true)
+
+    // Multiple constants in a cell should error
+    const multipleConstantsTemplate = '{x = 1 = 2}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, multipleConstantsTemplate)
+
+    await page.waitForSelector('.error-display', { visible: true })
+    const multipleErrText = await page.$eval('.error-display', el => el.textContent || '')
+    assert.ok(/more than one numerical value/i.test(multipleErrText))
+    const multipleCopyDisabled = await page.$eval('#copyButton', el => el.disabled)
+    assert.equal(multipleCopyDisabled, true)
+
+    // Nested braces should error
+    const nestedBracesTemplate = '{{1 = a}}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, nestedBracesTemplate)
+
+    await page.waitForSelector('.error-display', { visible: true })
+    const nestedErrText = await page.$eval('.error-display', el => el.textContent || '')
+    assert.ok(/Nested braces|Unclosed brace|Unmatched closing brace/i.test(nestedErrText))
+    const nestedCopyDisabled = await page.$eval('#copyButton', el => el.disabled)
+    assert.equal(nestedCopyDisabled, true)
+
+    // Qual: test recipe editing x/2 cell infers x
+    await page.select('#recipeSelect', 'test')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    const implicitErrText = await page.$eval('.error-display', el => el.textContent || '')
-    assert.ok(!/undefined variable\s+x/i.test(implicitErrText))
+    const testFieldsBefore = await page.$$eval('input.recipe-field', els => els.map(e => e.value))
+    assert.equal(testFieldsBefore.length >= 2, true)
+
+    await setInputValue(page, 'input.recipe-field:nth-of-type(2)', '0.5')
+
+    await page.waitForFunction(() => {
+      if (typeof state === 'undefined') return false
+      return typeof state.values?.x === 'number' && isFinite(state.values.x)
+    })
+
+    const testXAfter = await page.evaluate(() => state.values.x)
+    assert.ok(Math.abs(testXAfter - 1) < 1e-6)
+
+    const testFieldsAfter = await page.$$eval('input.recipe-field', els => els.map(e => e.value))
+    // Eggs cell is first field and should now be 1
+    assert.equal(testFieldsAfter[0], '1')
+
+    const testBanner = await page.evaluate(() => state.solveBanner)
+    assert.equal(testBanner, '')
+
+    // Qual: solveBanner only clears when solved (and does not clear on invalid intermediate input)
+    const noSolTemplate = '{x} {x = 2y} {x = 3y}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, noSolTemplate)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="x"]', '1')
+    await new Promise(r => setTimeout(r, 100))
+    const banner1 = await page.evaluate(() => state.solveBanner)
+    assert.ok(/No solution/i.test(banner1))
+
+    const invalidCount1 = await page.$$eval('input.recipe-field.invalid', els => els.length)
+    assert.ok(invalidCount1 >= 1)
+
+    const sat1 = await page.evaluate(() => {
+      const eqns = buildInteractiveEqns(null, null)
+      return eqnsSatisfied(eqns, state.values)
+    })
+    assert.equal(sat1, false)
+    const bannerHidden1 = await page.$eval('#solveBanner', el => !!el.hidden)
+    assert.equal(bannerHidden1, false)
+
+    await blurSelector(page, 'input.recipe-field[data-label="x"]')
+    await new Promise(r => setTimeout(r, 100))
+    const bannerAfterBlur1 = await page.evaluate(() => state.solveBanner)
+    assert.ok(/No solution/i.test(bannerAfterBlur1))
+
+    const invalidCountAfterBlur1 = await page.$$eval('input.recipe-field.invalid', els => els.length)
+    assert.ok(invalidCountAfterBlur1 >= 1)
+    const bannerHiddenAfterBlur1 = await page.$eval('#solveBanner', el => !!el.hidden)
+    assert.equal(bannerHiddenAfterBlur1, false)
+
+    // Now type an invalid intermediate value and ensure banner doesn't clear
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="x"]', '1e')
+    await new Promise(r => setTimeout(r, 100))
+    const bannerInvalid = await page.evaluate(() => state.solveBanner)
+    assert.ok(/No solution/i.test(bannerInvalid))
+
+    const invalidCountInvalid = await page.$$eval('input.recipe-field.invalid', els => els.length)
+    assert.ok(invalidCountInvalid >= 1)
+
+    const bannerHiddenInvalid = await page.$eval('#solveBanner', el => !!el.hidden)
+    assert.equal(bannerHiddenInvalid, false)
+
+    await blurSelector(page, 'input.recipe-field[data-label="x"]')
+    await new Promise(r => setTimeout(r, 100))
+    const bannerAfterBlurInvalid = await page.evaluate(() => state.solveBanner)
+    assert.ok(/No solution/i.test(bannerAfterBlurInvalid))
+
+    const invalidCountAfterBlurInvalid = await page.$$eval('input.recipe-field.invalid', els => els.length)
+    assert.ok(invalidCountAfterBlurInvalid >= 1)
+    const bannerHiddenAfterBlurInvalid = await page.$eval('#solveBanner', el => !!el.hidden)
+    assert.equal(bannerHiddenAfterBlurInvalid, false)
+
+    // Now enter a value that restores satisfiability (x=0)
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="x"]', '0')
+    await new Promise(r => setTimeout(r, 100))
+    const bannerCleared = await page.evaluate(() => state.solveBanner)
+    assert.equal(bannerCleared, '')
+
+    const bannerHiddenCleared = await page.$eval('#solveBanner', el => !!el.hidden)
+    assert.equal(bannerHiddenCleared, true)
+
+    // Qual: biketour avg speed edit should solve (division constraints)
+    await page.select('#recipeSelect', 'biketour')
+    await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentRecipeKey === 'biketour')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    const biketourAvgSpeedHandle = await findFieldByTitleSubstring(page, 'v = d/t')
+    const biketourRidingTimeHandle = await findFieldByTitleSubstring(page, 't = w-b')
+    assert.ok(biketourAvgSpeedHandle)
+    assert.ok(biketourRidingTimeHandle)
+
+    const avgSpeedSelector = await page.evaluate((h) => {
+      if (!h) return null
+      const el = h
+      const id = el.getAttribute('data-cell-id')
+      if (!id) return null
+      return `input.recipe-field[data-cell-id="${id}"]`
+    }, biketourAvgSpeedHandle)
+
+    assert.ok(avgSpeedSelector)
+    await setInputValue(page, avgSpeedSelector, '15')
+
+    const biketourBanner = await page.evaluate(() => String(state.solveBanner || ''))
+    assert.equal(biketourBanner, '')
+
+    const ridingTimeValue = await getHandleValue(biketourRidingTimeHandle)
+    const ridingTimeNum = Number(String(ridingTimeValue).trim())
+    // Expect t ~= d/v = 66/15 = 4.4 hours
+    assert.ok(Math.abs(ridingTimeNum - 4.4) < 0.02)
+
+    // Qual: Undefined variable shows banner and disables copy
+    // NOTE: This behavior was removed when we aligned implementation with the
+    // core algorithm: all identifiers are treated as variables and template
+    // validity is determined by initial satisfiability.
+    // const badTemplate = '{1 = a} {b = a+z}\n\nSanity: {a=b}'
+    // await page.$eval('#recipeTextarea', (el, v) => {
+    //   el.value = v
+    //   el.dispatchEvent(new Event('input', { bubbles: true }))
+    // }, badTemplate)
+    // await page.waitForSelector('.error-display', { visible: true })
+    // const errorText = await page.$eval('.error-display', el => el.textContent || '')
+    // assert.ok(/undefined variable/i.test(errorText))
+    // const copyDisabled = await page.$eval('#copyButton', el => el.disabled)
+    // assert.equal(copyDisabled, true)
 
     // Qual: violated constraint fields should stay red after blur
     const contradictory = '{1 = a} {2 = b} {a=b}'

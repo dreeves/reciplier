@@ -121,6 +121,7 @@ a slider for scaling the recipe.
 
 As always with Reciplier, changing any field causes the rest to insta-update.
 
+[TODO: put the supported math syntax in its own section]
 
 ## The Constraint Solver
 
@@ -218,6 +219,24 @@ Each cell in the recipe template is parsed like so:
 3. Filter out all constant expressions. If more than one, that's an error.
 4. Set cval to the constant if there is one, null otherwise.
 5. Set ceqn to the list of non-constant expressions.
+
+## Core Algorithm
+
+1. Initially we just send everything to solvem as written. Each urtext is parsed
+as an list of expressions, including constants, and we use varparse to get the 
+union of all symbols used in all the expressions. There has to be a satisfying
+assignment at this point or it's just a bad template and we show an error 
+banner. 
+
+2. Set the initial frozen status of each cell according to whether the first 
+expression in the urtext is a constant.
+
+3. Use the satisfying assignment from solvem to compute the cval for each cell.
+
+4. Set the ceqn of each cell to be the non-constant expressions in the urtext.
+
+That's it. Now when the user edits a cell, all other nonfrozen cells are free to
+change.
 
 ### Freezing and unfreezing cells
 
@@ -422,4 +441,3 @@ SCRATCH AREA:
 
 Brainstorming: 
 * double square brackets could indicate frozen, or a symbol in all caps
-* 
