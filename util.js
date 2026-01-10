@@ -193,6 +193,32 @@ function solveFor(expr, varName, target, values) {
     if (tryBracket(-scale, scale)) break
   }
 
+  // If generic bracketing failed, try expanding a bracket around the current
+  // value (helps with discontinuities not at 0, eg, 1/(tfin-tini)).
+  if (lo === null || hi === null) {
+    const x0 = values[varName]
+    const y0 = (typeof x0 === 'number' && isFinite(x0)) ? evalAt(x0) : null
+    if (y0 !== null) {
+      const f0 = y0 - target
+      const directions = [-1, 1]
+      for (const dir of directions) {
+        for (let scale = 1; scale < 1e12; scale *= 10) {
+          const x1 = x0 + dir * scale
+          const y1 = evalAt(x1)
+          if (y1 === null) continue
+          const f1 = y1 - target
+          if (!isFinite(f1)) continue
+          if (f0 * f1 <= 0) {
+            lo = Math.min(x0, x1)
+            hi = Math.max(x0, x1)
+            break
+          }
+        }
+        if (lo !== null && hi !== null) break
+      }
+    }
+  }
+
   if (lo === null || hi === null) return null
 
   // Binary search
@@ -219,6 +245,10 @@ function solveFor(expr, varName, target, values) {
   const finalValRes = evalAt(finalVal)
   if (finalValRes === null || Math.abs(finalValRes - target) > Math.abs(target) * 0.01 + 0.01) {
     return null
+  }
+  const rounded = Math.round(finalVal)
+  if (Math.abs(finalVal) >= 1 && Math.abs(finalVal - rounded) < 1e-4) {
+    return rounded
   }
   return finalVal
 }
@@ -248,6 +278,7 @@ function solvemAss(eqns, vars) {
 
   const values = { ...vars }
   const tol = 1e-6
+  const absTol = 1e-12
 
   function isSimpleVar(expr) {
     if (typeof expr !== 'string') return false
@@ -334,8 +365,27 @@ function solvemAss(eqns, vars) {
     const results = eqn.map(evalExpr)
     if (results.some(r => r.error || !isFinite(r.value))) return false
     const first = results[0].value
-    const tolerance = Math.abs(first) * tol + tol
+    const tolerance = Math.abs(first) * tol + absTol
     return results.every(r => Math.abs(r.value - first) < tolerance)
+  }
+
+  function unixtimeArgs(expr) {
+    if (typeof expr !== 'string') return null
+    const m = expr.match(/\bunixtime\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\)\s*$/)
+    if (!m) return null
+    return { y: m[1], mo: m[2], d: m[3] }
+  }
+
+  function invertUnixtimeSeconds(seconds) {
+    if (typeof seconds !== 'number' || !isFinite(seconds)) return null
+    const ms = seconds * 1000
+    if (!Number.isFinite(ms)) return null
+    const dt = new Date(ms)
+    const y = dt.getUTCFullYear()
+    const mo = dt.getUTCMonth() + 1
+    const d = dt.getUTCDate()
+    if (!Number.isInteger(y) || !Number.isInteger(mo) || !Number.isInteger(d)) return null
+    return { y, mo, d }
   }
 
   function isDefinitionPair(eqn) {
@@ -539,6 +589,51 @@ function solvemAss(eqns, vars) {
           // Try each variable and pick the one that changes the least (preserves good initial guesses)
           // Special-case: if the expression is a simple product of two free variables (like w*h),
           // scale both together to preserve their ratio.
+
+          const uargs = unixtimeArgs(expr)
+          if (uargs) {
+            const inv = invertUnixtimeSeconds(target)
+            if (inv) {
+              const yv = uargs.y
+              const mov = uargs.mo
+              const dv = uargs.d
+              if (!constrained.has(yv) && !constrained.has(mov) && !constrained.has(dv) &&
+                  !trustworthy.has(yv) && !trustworthy.has(mov) && !trustworthy.has(dv) &&
+                  !solvedThisPass.has(yv) && !solvedThisPass.has(mov) && !solvedThisPass.has(dv)) {
+                try {
+                  const check = unixtime(inv.y, inv.mo, inv.d)
+                  if (check === target) {
+                    values[yv] = inv.y
+                    values[mov] = inv.mo
+                    values[dv] = inv.d
+                    changed = true
+                    solvedThisPass.add(yv)
+                    solvedThisPass.add(mov)
+                    solvedThisPass.add(dv)
+                    if (isTrustworthy || targetIsStable) {
+                      solvedFromStableThisPass.add(yv)
+                      solvedFromStableThisPass.add(mov)
+                      solvedFromStableThisPass.add(dv)
+                    }
+                    if (isTrustworthy) {
+                      trustworthy.add(yv)
+                      trustworthy.add(mov)
+                      trustworthy.add(dv)
+                    }
+                    if (targetIsStable && (isTrustworthy || targetStableNonSingleton || constrained.size === 0)) {
+                      stableDerived.add(yv)
+                      stableDerived.add(mov)
+                      stableDerived.add(dv)
+                    }
+                    continue
+                  }
+                } catch (e) {
+                  // If unixtime() rejects the candidate date, fall back.
+                }
+              }
+            }
+          }
+
           if (exprVars.size === 2) {
             const vars2 = [...exprVars]
             const a = vars2[0]
@@ -856,6 +951,7 @@ function solvem(eqns, init) {
 }
 
 function eqnsSatisfied(eqns, values, tol = 1e-6) {
+  const absTol = 1e-12
   for (const eqn of eqns) {
     if (eqn.length < 2) continue
 
@@ -867,7 +963,7 @@ function eqnsSatisfied(eqns, values, tol = 1e-6) {
     if (results.some(r => r.error || !isFinite(r.value))) return false
 
     const first = results[0].value
-    const tolerance = Math.abs(first) * tol + tol
+    const tolerance = Math.abs(first) * tol + absTol
     if (!results.every(r => Math.abs(r.value - first) < tolerance)) return false
   }
 

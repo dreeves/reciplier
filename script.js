@@ -1276,7 +1276,7 @@ function setSolveBannerFromSatisfaction(sat) {
 
   const anyFrozen = state.fixedCellIds.size > 0
   state.solveBanner = anyFrozen
-    ? 'Overconstrained (try unfreezing cells)'
+    ? 'No solution found (try unfreezing cells)'
     : 'No solution found'
 }
 

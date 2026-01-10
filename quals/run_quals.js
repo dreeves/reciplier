@@ -385,6 +385,47 @@ async function main() {
 
     await flourNoteHandle.dispose()
 
+    // Qual: dial freeze vini/vfin/start date then changing rate updates end date
+    await page.waitForSelector('#recipeSelect', { visible: true })
+    await page.select('#recipeSelect', 'dial')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    const dialFreezeTitles = ['vini = 73', 'vfin = 70', 'y0 = 2025', 'm0 = 12', 'd0 = 25']
+    for (const t of dialFreezeTitles) {
+      const h = await findFieldByTitleSubstring(page, t)
+      const isNull = await h.evaluate(el => el === null)
+      assert.equal(isNull, false)
+      await h.click({ clickCount: 2 })
+      await h.dispose()
+    }
+
+    const dialDayHandle = await findFieldByTitleSubstring(page, 'd = 25')
+    const dialDayIsNull = await dialDayHandle.evaluate(el => el === null)
+    assert.equal(dialDayIsNull, false)
+    const dialDayBefore = await getHandleValue(dialDayHandle)
+
+    const dialRateHandle = await findFieldByTitleSubstring(page, 'r*SID')
+    const dialRateIsNull = await dialRateHandle.evaluate(el => el === null)
+    assert.equal(dialRateIsNull, false)
+    await dialRateHandle.click({ clickCount: 3 })
+    await page.keyboard.type('-0.01')
+    await page.keyboard.press('Tab')
+    await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentEditCellId === null)
+
+    const dialDayAfter = await getHandleValue(dialDayHandle)
+    assert.equal(dialDayBefore, '25')
+    assert.equal(dialDayAfter === '25', false)
+
+    const dialBanner = await page.evaluate(() => String(state?.solveBanner || ''))
+    assert.equal(dialBanner, '')
+
+    await dialDayHandle.dispose()
+    await dialRateHandle.dispose()
+
+    await page.select('#recipeSelect', 'blank')
+    await page.select('#recipeSelect', 'crepes')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
     // Qual: eggs value should not drift after tabbing around
     await setInputValue(page, 'input.recipe-field', '13')
     const eggsAfterSet = await page.$eval('input.recipe-field', el => el.value)
@@ -676,7 +717,7 @@ async function main() {
     const bannerVisible = await page.$eval('#solveBanner', el => !el.hidden)
     const bannerText = await page.$eval('#solveBanner', el => el.textContent || '')
     assert.equal(bannerVisible, true, 'Banner should be visible during edit')
-    assert.ok(/Overconstrained/i.test(bannerText), 'Banner should say Overconstrained')
+    assert.ok(/try unfreezing cells/i.test(bannerText), 'Banner should mention unfreezing')
 
     // Qual: pyzza slider bug - c^2 cell should NOT turn red when using slider
     await page.select('#recipeSelect', 'pyzza')
@@ -809,7 +850,7 @@ async function main() {
     const frozenBannerVisible = await page.$eval('#solveBanner', el => !el.hidden)
     const frozenBannerText = await page.$eval('#solveBanner', el => el.textContent || '')
     assert.equal(frozenBannerVisible, true)
-    assert.ok(/Overconstrained/i.test(frozenBannerText))
+    assert.ok(/No solution found \(try unfreezing cells\)/i.test(frozenBannerText))
 
     // Qual: bare constant is an error
     const bareConstant = '{5}'
