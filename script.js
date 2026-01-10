@@ -2,24 +2,28 @@
 // Recipe Data
 // =============================================================================
 
-const recipesShown = {
-  'crepes':    "Soule-Reeves Crepes",
-  'pyzza':     "Pythagorean Triple Pizza",
-  'cookies':   "Camelot Chocolate Chip Cookies",
-  'shortcake': "Shortcake",
-  'simeq':     "Simultaneous Equation Cake",
-  'pancakes':  "Pancakes according to Claude",
-  'breakaway': "Breakaway Biscuits",
-  'biketour':  "Bike Tour Burritos",
-  'dial':      "Beeminder Commitment Dial",
-  'sugarcalc': "Sugar Calculator",
-  'converter': "Unit Converter",
-  'cheesepan': "Cheese Wheels in a Pan",
-  'test':      "Just Testing",
-  'blank':     "Blank -- go crazy",
+// Recipe names as they appear in the main dropdown menu. Note that the keys in
+// this hash are (will be) used in the URL query string.
+const recipeDropdown = {
+'crepes':    "Soule-Reeves Crepes",
+'pyzza':     "Pythagorean Triple Pizza",
+'cookies':   "Camelot Chocolate Chip Cookies",
+'shortcake': "Shortcake",
+'simeq':     "Simultaneous Equation Cake",
+'pancakes':  "Pancakes according to Claude",
+'breakaway': "Breakaway Biscuits",
+'biketour':  "Bike Tour Burritos",
+'dial':      "Beeminder Commitment Dial",
+'sugarcalc': "Sugar Calculator aka Junkfoodifier",
+'converter': "Unit Converter",
+'cheesepan': "Cheese Wheels in a Pan aka Geometry Puzzles",
+'test':      "Just Testing",
+'blank':     "Blank — go crazy",
+'custom':    "Custom Template",
 }
 
-const recipeHash = {
+// Recipe templates.
+const reciplates = {
 // -----------------------------------------------------------------------------
 'crepes': `\
 * Eggs: {12x} large
@@ -1099,9 +1103,9 @@ function parseRecipe() {
 
 function updateRecipeDropdown() {
   // Check if current text matches any recipe
-  let matchingKey = ""
-  for (const key in recipeHash) {
-    if (recipeHash[key] === state.recipeText) {
+  let matchingKey = 'custom'
+  for (const key in reciplates) {
+    if (reciplates[key] === state.recipeText) {
       matchingKey = key
       break
     }
@@ -1601,8 +1605,8 @@ function handleFieldDoubleClick(e) {
 function handleRecipeChange() {
   const selectedKey = $('recipeSelect').value
   state.currentRecipeKey = selectedKey
-  if (recipeHash.hasOwnProperty(selectedKey)) {
-    state.recipeText = recipeHash[selectedKey]
+  if (reciplates.hasOwnProperty(selectedKey)) {
+    state.recipeText = reciplates[selectedKey]
     $('recipeTextarea').value = state.recipeText
     parseRecipe()
   }
@@ -1739,7 +1743,7 @@ function handleSliderChange(e) {
 function init() {
   // Populate dropdown
   const select = $('recipeSelect')
-  Object.entries(recipesShown).forEach(([key, name]) => {
+  Object.entries(recipeDropdown).forEach(([key, name]) => {
     const option = document.createElement('option')
     option.value = key
     option.textContent = name
@@ -1747,10 +1751,10 @@ function init() {
   })
   
   // Event listeners
-  $('recipeTextarea').addEventListener('input', handleTextareaInput)
-  $('recipeSelect').addEventListener('change', handleRecipeChange)
-  $('copyButton').addEventListener('click', handleCopyToClipboard)
-  $('scalingSlider').addEventListener('input', handleSliderChange)
+  $('recipeTextarea').addEventListener('input',  handleTextareaInput)
+  $('recipeSelect')  .addEventListener('change', handleRecipeChange)
+  $('copyButton')    .addEventListener('click',  handleCopyToClipboard)
+  $('scalingSlider') .addEventListener('input',  handleSliderChange)
 
   const helpButton = $('helpButton')
   const helpPopover = $('helpPopover')
@@ -1780,9 +1784,9 @@ function init() {
   })
   
   // Load first recipe
-  const firstKey = Object.keys(recipesShown)[0]
-  if (recipeHash[firstKey]) {
-    state.recipeText = recipeHash[firstKey]
+  const firstKey = Object.keys(recipeDropdown)[0]
+  if (reciplates[firstKey]) {
+    state.recipeText = reciplates[firstKey]
     $('recipeTextarea').value = state.recipeText
     parseRecipe()
   }

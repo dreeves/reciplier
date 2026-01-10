@@ -1647,26 +1647,58 @@ function runQuals() {
 
   // Bug 1: Dial recipe - changing rate should update end date
   // When vini, vfin, and start date are frozen, changing rate should solve for end date
+  // This qual matches the actual dial recipe structure exactly:
+  // * Start: {y0 = 2025}/{m0 = 12}/{d0 = 25} weighing {vini = 73}kg
+  // * End: {y = 2026}/{m = 12}/{d = 25} weighing {vfin = 70} ({(tfin-tini)/SID} days later)
+  // * Rate: {r*SID} per day = {r*SIW} per week = {r*SIM} per month
+  // * Start time (unixtime in seconds): {tini = unixtime(y0, m0, d0)}
+  // * End time (unixtime in seconds): {tfin = unixtime(y, m, d)}
+  // * Goal duration: {tfin - tini}s = {(tfin - tini)/SID}d = ...
+  // * Rate in goal units per second: {r = (vfin-vini)/(tfin-tini)}
+  // * Seconds in a day / week / month: {86400 = SID}, {SIW = SID*7}, {SIM = SID*365.25/12}
   ;(() => {
     const tini = unixtime(2025, 12, 25)
+    const tfin0 = unixtime(2026, 12, 25)
+    const r0 = -3 / (tfin0 - tini)
     const eqns = [
-      ['SID', 86400],
+      // Start date cells - frozen (constant comes first in urtext)
       ['y0', 2025],
       ['m0', 12],
       ['d0', 25],
-      ['y'],  // end date - should change
+      // Start weight - user freezes this
+      ['vini', 73],
+      // End date cells - should change (var comes first, so unfrozen)
+      ['y'],
       ['m'],
       ['d'],
-      ['vini', 73],
+      // End weight - user freezes this
       ['vfin', 70],
+      // Days later display
+      ['(tfin-tini)/SID'],
+      // Rate cells - user edits r*SID
+      ['r*SID', -0.008],  // user types new rate
+      ['r*SIW'],
+      ['r*SIM'],
+      // Time definitions
       ['tini', 'unixtime(y0, m0, d0)'],
       ['tfin', 'unixtime(y, m, d)'],
+      // Duration displays
+      ['tfin - tini'],
+      ['(tfin - tini)/SID'],
+      ['(tfin - tini)/SIW'],
+      ['(tfin - tini)/SIM'],
+      // Rate definition
       ['r', '(vfin-vini)/(tfin-tini)'],
-      ['r*SID', -0.008],  // user edits rate to -0.008 kg/day
+      // Time constants
+      ['SID', 86400],
+      ['SIW', 'SID*7'],
+      ['SIM', 'SID*365.25/12'],
     ]
 
     const rep = solvemReport(eqns, {
       SID: 86400,
+      SIW: 86400 * 7,
+      SIM: 86400 * 365.25 / 12,
       y0: 2025,
       m0: 12,
       d0: 25,
@@ -1676,8 +1708,8 @@ function runQuals() {
       vini: 73,
       vfin: 70,
       tini: tini,
-      tfin: unixtime(2026, 12, 25),
-      r: -3 / (unixtime(2026, 12, 25) - tini),
+      tfin: tfin0,
+      r: r0,
     })
 
     // With rate = -0.008 kg/day, and (vfin-vini) = -3:

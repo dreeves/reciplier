@@ -394,52 +394,73 @@ file violates any expectations. Anti-Postel FTW.
 
 ## Future Work
 
-1. Markdown rendering
+1. Markdown rendering.
 
 2. Instead of making a slider for whatever variable is called "x", make a slider
 for every cell for which the first expression in the urtext is a variable. And
-make it easy to dismiss ones you don't need.
+make it easy to dismiss ones you don't need. Also remove the variable name from
+two of the three places it currently appears in the UI, namely, the bounds of
+the slider. Finally, right above the slider, where we currently show "x:" on the
+left and the numeric value on the right, instead show the variable name, a
+colon, and then the line from the template where the variable occurs, with
+values filled in and with the value for the slider variable highlighted.
 
-3. Direct links to recipes. Option 1: encode the entire template verbatim in the
-query string. Option 2: encode which template file and encode every variable
-explicitly in the query string.
+3. Direct links to recipes. When you select a recipe template from the dropdown,
+update the query string like "reciplier.dreev.es/?recipe=crepes" using the keys
+in `recipeDropdown`. If the user edits the template, encode the whole thing with
+lz-string in real time like "reciplier.dreev.es/?rawcipe=GARBLEDYGOOK". Also, as
+the user edits fields, append the cvals to the URL as well, like
+"reciplier.dreev.es/?recipe=pyzza&x=3&a=9&b=12&c=15".
 
-4. Double-clicking to freeze/unfreeze is pretty terrible. For one thing, I 
-double-click cells by muscle memory to highlight the current contents of a field
-in order to overwrite it. Worse, if you don't happen to ever double-click a
-cell, freezing/unfreezing is totally undiscoverable.
+4. Crowdsource templates. If the template text area doesn't match one of the 
+existing reciplates (the dropdown shows "Custom Template" in this case) then 
+a buttom becomes clickable that opens a popup that prompts the user to submit 
+their template to be considered for inclusion in the dropdown. Prompt the user
+for a name for their recipe too.
 
-5. Bug: "2 x" should parse to "2*x".
+5. Refactor: Put the reciple templates in their own file called reciplates.js.
 
-6. Thinking out loud about going more anti-magic: Currently when you edit a
+6. Double-clicking to freeze/unfreeze is terrible. For one thing, I double-click
+cells by muscle memory to highlight the current contents of a field in order to
+overwrite it. Worse, if you don't happen to ever double-click a cell then
+freezing/unfreezing is totally undiscoverable.
+
+7. Bug: "2 x" should parse to "2*x".
+
+8. Thinking out loud about going more anti-magic: Currently when you edit a
 field the system just tries changing other variables until something works.
 That's pretty magical. What if instead you could see other fields kind of cross
 themselves out and show the new values implied by your edit? Or, like, if more
 than one cell can change to accommodate your edit you're forced to explicitly
 freeze cells until that's no longer the case?
 
-7. Get rid of gemini-solver.js if we've incorporated all the ideas we want from
+9. Get rid of gemini-solver.js if we've incorporated all the ideas we want from
 it.
 
-8. Make it easy to add any utility functions we want available to in the vareval
+10. Make it easy to add any utility functions we want available for defining
+cells. I.e., functions or constants that can be referred to in the vareval
 environment. Maybe even have that code available in the UI, unobtrusively so as
 not to clutter the UI for the simple recipe use case.
 
-9. Should cells that depend only on frozen cells automatically freeze?
-
-10. Is it too weird to define constants via constraints where the constant part
+11. Is it too weird to define constants via constraints where the constant part
 comes first? Syntax like {tau := 6.28} could define a constant and it's just
-uneditable, rendering as normal text, no field.
+uneditable, rendering as normal text, no field. Another option is the idea above
+about utility functions.
 
-11. Then could we support something like {goal_units := "kg"} and then ... I
+12. Then could we support something like {goal_units := "kg"} and then ... I
 guess that's turning this thing into a whole templating engine like ERB.
 
-12. Support arithmetic in the fields, not just the template.
+13. Support arithmetic in the fields, not just the template.
 
-13. Kitchen-sink solver: Try as many solvers as we can scrounge up. The outer
+14. Kitchen-sink solver: Try as many solvers as we can scrounge up. The outer
 solvem function can call out to each solver and if any return a satisfying 
 assignment, Bob is one's uncle. The beauty of NP-complete problems is it's easy
 to check candidate solutions.
+
+15. Should cells that depend only on frozen cells automatically freeze? Probably
+that doesn't make sense, like if there are just two cells that depend on each
+other, freezing one shouldn't freeze the other. So probably never mind.
+
 
 SCRATCH AREA:
 
