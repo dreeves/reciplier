@@ -445,3 +445,18 @@ SCRATCH AREA:
 
 Brainstorming: 
 * double square brackets could indicate frozen, or a symbol in all caps
+
+
+Bug report 1:
+
+Replicata:
+
+1. load the dial recipe
+2. freeze the vini cell at 73
+3. freeze the vfin cell at 70
+4. freeze the start date fields
+5. change the rate
+
+Expectata: That the end date changes.
+
+Resultata: No solution.

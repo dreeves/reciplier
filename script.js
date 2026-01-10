@@ -13,7 +13,7 @@ const recipesShown = {
   'biketour':  "Bike Tour Burritos",
   'dial':      "Beeminder Commitment Dial",
   'sugarcalc': "Sugar Calculator",
-  'kpounder':  "Pounds ↔ Kilograms Converter",
+  'converter': "Unit Converter",
   'cheesepan': "Cheese Wheels in a Pan",
   'test':      "Just Testing",
   'blank':     "Blank -- go crazy",
@@ -187,9 +187,15 @@ Grams_of_sugar_per_serving_in_junk_food /
 Calories_per_serving_in_junk_food
 */
 // -----------------------------------------------------------------------------
-'kpounder': `\
-{p = x/P} pounds = {x = 70} kilograms
-<!-- exact definition of a pound is {0.45359237 = P} kilograms -->
+'converter': `\
+# Kilograms vs Pounds
+{p = k/LB} pounds = {k = 70} kilograms
+<!-- The fully exact definition of a pound is {0.45359237 = LB} kilograms -->
+
+# Grams-per-square-meter vs Ounces-per-square-yard
+{m} g/m^2 = {m*YD^2/OZ} oz/yd^2
+<!-- The fully exact definition of an ounce is {28.349523125 = OZ} grams -->
+<!-- The fully exact definition of a yard is {0.9144 = YD} meters -->
 `,
 // -----------------------------------------------------------------------------
 'cheesepan': `\

@@ -195,26 +195,36 @@ function solveFor(expr, varName, target, values) {
 
   // If generic bracketing failed, try expanding a bracket around the current
   // value (helps with discontinuities not at 0, eg, 1/(tfin-tini)).
+  // Try BOTH directions at each scale to avoid finding brackets that cross
+  // discontinuities (prefer the smaller bracket which is less likely to cross).
   if (lo === null || hi === null) {
     const x0 = values[varName]
     const y0 = (typeof x0 === 'number' && isFinite(x0)) ? evalAt(x0) : null
     if (y0 !== null) {
       const f0 = y0 - target
-      const directions = [-1, 1]
-      for (const dir of directions) {
-        for (let scale = 1; scale < 1e12; scale *= 10) {
+      for (let scale = 1; scale < 1e12; scale *= 10) {
+        let bestLo = null
+        let bestHi = null
+        for (const dir of [-1, 1]) {
           const x1 = x0 + dir * scale
           const y1 = evalAt(x1)
           if (y1 === null) continue
           const f1 = y1 - target
           if (!isFinite(f1)) continue
           if (f0 * f1 <= 0) {
-            lo = Math.min(x0, x1)
-            hi = Math.max(x0, x1)
-            break
+            const candidateLo = Math.min(x0, x1)
+            const candidateHi = Math.max(x0, x1)
+            if (bestLo === null || (candidateHi - candidateLo) < (bestHi - bestLo)) {
+              bestLo = candidateLo
+              bestHi = candidateHi
+            }
           }
         }
-        if (lo !== null && hi !== null) break
+        if (bestLo !== null) {
+          lo = bestLo
+          hi = bestHi
+          break
+        }
       }
     }
   }
@@ -246,9 +256,13 @@ function solveFor(expr, varName, target, values) {
   if (finalValRes === null || Math.abs(finalValRes - target) > Math.abs(target) * 0.01 + 0.01) {
     return null
   }
+  // Only round to integer if the rounded value still satisfies the constraint
   const rounded = Math.round(finalVal)
   if (Math.abs(finalVal) >= 1 && Math.abs(finalVal - rounded) < 1e-4) {
-    return rounded
+    const roundedRes = evalAt(rounded)
+    if (roundedRes !== null && Math.abs(roundedRes - target) < tol) {
+      return rounded
+    }
   }
   return finalVal
 }
@@ -1629,6 +1643,71 @@ function runQuals() {
     check('solvem: breakaway vp=42', rep.ass.vp, 42, 1e-9)
     check('solvem: breakaway gt=0.025', rep.ass.gt, 0.025, 1e-12)
     check('solvem: breakaway gd=1', rep.ass.gd, 1, 1e-12)
+  })()
+
+  // Bug 1: Dial recipe - changing rate should update end date
+  // When vini, vfin, and start date are frozen, changing rate should solve for end date
+  ;(() => {
+    const tini = unixtime(2025, 12, 25)
+    const eqns = [
+      ['SID', 86400],
+      ['y0', 2025],
+      ['m0', 12],
+      ['d0', 25],
+      ['y'],  // end date - should change
+      ['m'],
+      ['d'],
+      ['vini', 73],
+      ['vfin', 70],
+      ['tini', 'unixtime(y0, m0, d0)'],
+      ['tfin', 'unixtime(y, m, d)'],
+      ['r', '(vfin-vini)/(tfin-tini)'],
+      ['r*SID', -0.008],  // user edits rate to -0.008 kg/day
+    ]
+
+    const rep = solvemReport(eqns, {
+      SID: 86400,
+      y0: 2025,
+      m0: 12,
+      d0: 25,
+      y: 2026,
+      m: 12,
+      d: 25,
+      vini: 73,
+      vfin: 70,
+      tini: tini,
+      tfin: unixtime(2026, 12, 25),
+      r: -3 / (unixtime(2026, 12, 25) - tini),
+    })
+
+    // With rate = -0.008 kg/day, and (vfin-vini) = -3:
+    // tfin - tini = (vfin-vini) / r = -3 / (-0.008/86400) = 32400000 seconds = 375 days
+    // So end date should be 2025-12-25 + 375 days = 2027-01-04
+    check('solvem: dial rate change updates end date (sat)', rep.sat, true)
+    check('solvem: dial rate change end year', rep.ass.y, 2027, 0.01)
+    check('solvem: dial rate change end month', rep.ass.m, 1, 0.01)
+    check('solvem: dial rate change end day', rep.ass.d, 4, 0.01)
+  })()
+
+  // Bug 2: Breakaway biscuits - typing k*d should compute d without rounding errors
+  // When k is frozen and user types a value for k*d, d should be exact enough to satisfy
+  ;(() => {
+    const k = 0.621371
+    const eqns = [
+      ['k', k],
+      ['d'],  // unfrozen
+      ['k*d', 12.4274],  // user is typing this value
+    ]
+
+    const rep = solvemReport(eqns, {
+      k: k,
+      d: 20,
+    })
+
+    // Expected: d = 12.4274 / 0.621371 = 19.99996781...
+    // The key is that k*d should equal 12.4274 exactly (within floating point)
+    check('solvem: breakaway k*d typing (sat)', rep.sat, true)
+    check('solvem: breakaway k*d = 12.4274', rep.ass.k * rep.ass.d, 12.4274, 1e-9)
   })()
 
 
