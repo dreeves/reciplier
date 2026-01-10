@@ -268,12 +268,11 @@ instead of the initial 6. Cell c's ceqn is [`x`, `3y`]. As soon as the edit
 happens, we call `solvem([..., ['x', '3y', 12], ...], {x: null, y: null})`.
 The 12 is included because the user is editing the field for cell c.
 
-If the solver finds a solution, all the cells insta-update. If not, and if any
-cells besides c are frozen (c's frozen status doesn't matter since we're editing
-it), put up a banner saying "Overconstrained! Try unfreezing cells.". If the
-solver finds no solution despite all cells other than c being unfrozen, put up a
-banner saying "No solution found". These banners are shown live, while the user
-is typing, i.e., they're recomputed on every keystroke.
+If the solver finds a solution, all the cells insta-update. If not, put up a
+banner saying "No solution found". If any cells besides c are frozen (c's frozen
+status doesn't matter since we're editing it) then the banner says "No solution
+found (try unfreezing cells)". The banner is shown live, while the user is
+typing, i.e., it's recomputed on every keystroke.
 
 ## Use Cases Beyond Recipes
 
@@ -436,6 +435,11 @@ uneditable, rendering as normal text, no field.
 guess that's turning this thing into a whole templating engine like ERB.
 
 12. Support arithmetic in the fields, not just the template.
+
+13. Kitchen-sink solver: Try as many solvers as we can scrounge up. The outer
+solvem function can call out to each solver and if any return a satisfying 
+assignment, Bob is one's uncle. The beauty of NP-complete problems is it's easy
+to check candidate solutions.
 
 SCRATCH AREA:
 

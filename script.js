@@ -1276,8 +1276,76 @@ function setSolveBannerFromSatisfaction(sat) {
 
   const anyFrozen = state.fixedCellIds.size > 0
   state.solveBanner = anyFrozen
-    ? 'No solution found (try unfreezing cells)'
+    ? 'Overconstrained (try unfreezing cells)'
     : 'No solution found'
+}
+
+function solveAndApply({
+  editedCellId = null,
+  editedValue = null,
+  editedFieldEl = null,
+  seedOverrides = null,
+  allowFallbackWithoutEditedConstraint = false,
+  fallbackSeedValues = null,
+} = {}) {
+  const seedValues = { ...state.values, ...(seedOverrides || {}) }
+
+  let eqns = buildInteractiveEqns(editedCellId, editedValue)
+  let solved = solvemAss(eqns, seedValues)
+  let sat = eqnsSatisfied(eqns, solved)
+  let didFallback = false
+
+  if (!sat && allowFallbackWithoutEditedConstraint && editedCellId !== null) {
+    eqns = buildInteractiveEqns(null, null)
+    const fallbackSeed = fallbackSeedValues ? { ...fallbackSeedValues } : { ...state.values }
+    solved = solvemAss(eqns, fallbackSeed)
+    sat = eqnsSatisfied(eqns, solved)
+    didFallback = true
+  }
+
+  setSolveBannerFromSatisfaction(sat)
+  updateSolveBannerInDom()
+
+  state.values = solved
+
+  if (editedCellId !== null && !didFallback) {
+    const editedCell = state.cells.find(c => c.id === editedCellId)
+    if (editedCell) editedCell.cval = editedValue
+  }
+
+  const skipRecomputeCellId = didFallback ? null : editedCellId
+  recomputeCellCvals(state.cells, state.values, state.fixedCellIds, skipRecomputeCellId)
+
+  const violatedCellIds = getViolatedCellIds(state.cells, state.values)
+  const invalidCellIds = new Set(violatedCellIds)
+  if (state.solveBanner) {
+    for (const id of getUnsatisfiedCellIds(eqns, state.values)) invalidCellIds.add(id)
+  }
+
+  const output = $('recipeOutput')
+  if (output) {
+    output.querySelectorAll('input.recipe-field').forEach(field => {
+      if (editedFieldEl && field === editedFieldEl) {
+        if (invalidCellIds.has(field.dataset.cellId)) {
+          field.classList.add('invalid')
+        } else {
+          field.classList.remove('invalid')
+        }
+        return
+      }
+
+      const c = state.cells.find(x => x.id === field.dataset.cellId)
+      if (c) field.value = formatNum(c.cval)
+      if (invalidCellIds.has(field.dataset.cellId)) {
+        field.classList.add('invalid')
+      } else {
+        field.classList.remove('invalid')
+      }
+    })
+  }
+
+  updateSliderDisplay()
+  return { eqns, solved, sat, invalidCellIds }
 }
 
 function buildInteractiveEqns(editedCellId = null, editedValue = null) {
@@ -1366,57 +1434,7 @@ function handleFieldInput(e) {
     state.valuesBeforeEdit = { ...state.values }
   }
 
-  // Build equations for solving
-  // Per spec: "A cell is always treated temporarily as frozen while it's being
-  // edited" - meaning we add its new value as a constraint.
-  // Per spec: "If its ceqn includes a bare number, it's frozen" - but initially
-  // bare numbers go to cval not ceqn, so cells with values are NOT frozen by
-  // default. Only user-frozen cells (state.fixedVars) are frozen.
-  const eqns = buildInteractiveEqns(cellId, newValue)
-
-  // Frozen = only user-frozen cells (not the edited cell - we added its
-  // constraint above but the solver may need to derive other values from it)
-  // Solve
-  const seedValues = { ...state.values }
-  const newValues = solvemAss(eqns, seedValues)
-
-  const constraintsSatisfied = eqnsSatisfied(eqns, newValues)
-  setSolveBannerFromSatisfaction(constraintsSatisfied)
-  updateSolveBannerInDom()
-
-  // Commit the new values
-  state.values = newValues
-  cell.cval = newValue
-  recomputeCellCvals(state.cells, state.values, state.fixedCellIds, cellId)
-
-  // Get ALL violated cells for UI highlighting
-  const violatedCellIds = getViolatedCellIds(state.cells, state.values)
-  const invalidCellIds = new Set(violatedCellIds)
-  if (state.solveBanner) {
-    for (const id of getUnsatisfiedCellIds(eqns, state.values)) invalidCellIds.add(id)
-  }
-
-  // Update all fields with new values and highlight violations
-  $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
-    if (field === input) {
-      // Don't overwrite what user is typing, but do update invalid status
-      if (invalidCellIds.has(field.dataset.cellId)) {
-        field.classList.add('invalid')
-      } else {
-        field.classList.remove('invalid')
-      }
-      return
-    }
-    const otherCell = state.cells.find(c => c.id === field.dataset.cellId)
-    if (otherCell) field.value = formatNum(otherCell.cval)
-    if (invalidCellIds.has(field.dataset.cellId)) {
-      field.classList.add('invalid')
-    } else {
-      field.classList.remove('invalid')
-    }
-  })
-
-  updateSliderDisplay()
+  solveAndApply({ editedCellId: cellId, editedValue: newValue, editedFieldEl: input })
 }
 
 /*
@@ -1477,34 +1495,38 @@ function handleFieldBlur(e) {
     return
   }
 
-  // When nothing else is frozen, don't do a blur-time re-solve that can snap
-  // values back (eg, pyzza editing c should persist). But do enforce the
-  // invariant: show an error banner if constraints are not satisfied.
-  const anyOtherFrozen = [...state.fixedCellIds].some(id => id !== blurredCellId)
-  if (!anyOtherFrozen) {
-    state.currentEditCellId = null
-    state.valuesBeforeEdit = null
-    const blurEqns = buildInteractiveEqns(null, null)
-    setSolveBannerFromSatisfaction(eqnsSatisfied(blurEqns, state.values))
-    updateSolveBannerInDom()
-
-    const violatedCellIds = getViolatedCellIds(state.cells, state.values)
-    const invalidCellIds = new Set(violatedCellIds)
-    if (state.solveBanner) {
-      for (const id of getUnsatisfiedCellIds(blurEqns, state.values)) invalidCellIds.add(id)
-    }
-
-    $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
-      if (invalidCellIds.has(field.dataset.cellId)) {
-        field.classList.add('invalid')
-      } else {
-        field.classList.remove('invalid')
-      }
-    })
-
-    updateSliderDisplay()
-    return
-  }
+  // NOTE: Keeping the old "no other frozen" blur behavior commented out rather
+  // than deleting. Blur should accept satisfiable edits and only revert on
+  // unsatisfiable edits (via fallback).
+  //
+  // // When nothing else is frozen, don't do a blur-time re-solve that can snap
+  // // values back (eg, pyzza editing c should persist). But do enforce the
+  // // invariant: show an error banner if constraints are not satisfied.
+  // const anyOtherFrozen = [...state.fixedCellIds].some(id => id !== blurredCellId)
+  // if (!anyOtherFrozen) {
+  //   state.currentEditCellId = null
+  //   state.valuesBeforeEdit = null
+  //   const blurEqns = buildInteractiveEqns(null, null)
+  //   setSolveBannerFromSatisfaction(eqnsSatisfied(blurEqns, state.values))
+  //   updateSolveBannerInDom()
+  //
+  //   const violatedCellIds = getViolatedCellIds(state.cells, state.values)
+  //   const invalidCellIds = new Set(violatedCellIds)
+  //   if (state.solveBanner) {
+  //     for (const id of getUnsatisfiedCellIds(blurEqns, state.values)) invalidCellIds.add(id)
+  //   }
+  //
+  //   $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
+  //     if (invalidCellIds.has(field.dataset.cellId)) {
+  //       field.classList.add('invalid')
+  //     } else {
+  //       field.classList.remove('invalid')
+  //     }
+  //   })
+  //
+  //   updateSliderDisplay()
+  //   return
+  // }
 
   // NOTE: This guard was introduced to stop blur-triggered drift when tabbing.
   // It's safe to delete because blur-solving is now only wired up for fields
@@ -1520,119 +1542,25 @@ function handleFieldBlur(e) {
   const blurredValue = toNum(e.target.value)
   if (blurredValue === null || !isFinite(blurredValue)) {
     e.target.classList.add('invalid')
+    setSolveBannerFromSatisfaction(false)
+    updateSolveBannerInDom()
     return
   }
 
   const blurredCell = state.cells.find(c => c.id === blurredCellId)
   if (!blurredCell) return
 
-  blurredCell.cval = blurredValue
-
-  const isSingletonIdentifier = (
-    blurredCell.ceqn.length === 1 &&
-    /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(blurredCell.ceqn[0].trim())
-  )
-
-  const shouldSnapBack = (
-    isSingletonIdentifier &&
-    !blurredCell.hasNumber &&
-    !state.fixedCellIds.has(blurredCellId)
-  )
-
-  const useBaseline = (
-    state.currentEditCellId === blurredCellId &&
-    state.valuesBeforeEdit
-  )
-
-  const baseline = useBaseline ? state.valuesBeforeEdit : state.values
-
-  // const baseline = state.values
-
-  const eqns = state.cells.map(c => {
-    const eqn = [...c.ceqn]
-
-    // NOTE: Per the core algorithm, constants from the template are not
-    // treated as constraints after initialization unless the cell is frozen.
-    // Old blur-path behavior added non-frozen template constants as constraints;
-    // keep it commented out rather than deleting:
-    //
-    // const isAssignmentSeed =
-    //   c.hasConstraint &&
-    //   c.hasNumber &&
-    //   !c.startsFrozen &&
-    //   c.ceqn.length === 1 &&
-    //   /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(c.ceqn[0].trim())
-    //
-    // if (!isAssignmentSeed && c.hasConstraint && c.hasNumber) {
-    //   eqn.push(c.cval)
-    // }
-
-    if (state.fixedCellIds.has(c.id)) {
-      eqn.push(c.cval)
-    }
-    if (c.id === blurredCellId && !state.fixedCellIds.has(c.id) && !shouldSnapBack) {
-      eqn.push(blurredValue)
-    }
-    return eqn
-  })
-
-  let solved = solvemAss(eqns, { ...baseline })
-
-  const acceptBlurredValue = eqnsSatisfied(eqns, solved)
-  if (!acceptBlurredValue) {
-    const eqnsWithoutBlurredConstraint = state.cells.map(c => {
-      const eqn = [...c.ceqn]
-
-      // Old blur-path constant-injection preserved as comment (see above).
-      // if (!isAssignmentSeed && c.hasConstraint && c.hasNumber) {
-      //   eqn.push(c.cval)
-      // }
-
-      if (state.fixedCellIds.has(c.id)) {
-        eqn.push(c.cval)
-      }
-      return eqn
-    })
-
-    solved = solvemAss(eqnsWithoutBlurredConstraint, { ...baseline })
-  }
-
-  state.values = solved
-  // Banner is driven by satisfiable constraints, not by blur events.
-  const finalEqns = acceptBlurredValue ? eqns : state.cells.map(c => {
-    const eqn = [...c.ceqn]
-    if (state.fixedCellIds.has(c.id)) eqn.push(c.cval)
-    return eqn
-  })
-  setSolveBannerFromSatisfaction(eqnsSatisfied(finalEqns, solved))
-
+  const fallbackSeedValues = state.valuesBeforeEdit ? { ...state.valuesBeforeEdit } : null
   state.currentEditCellId = null
-  state.valuesBeforeEdit = null
 
-  recomputeCellCvals(state.cells, state.values, state.fixedCellIds)
-
-  const violatedCellIds = getViolatedCellIds(state.cells, state.values)
-  const invalidCellIds = new Set(violatedCellIds)
-  if (state.solveBanner) {
-    for (const id of getUnsatisfiedCellIds(finalEqns, state.values)) invalidCellIds.add(id)
-  }
-
-  $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
-    const c = state.cells.find(x => x.id === field.dataset.cellId)
-    if (c) field.value = formatNum(c.cval)
-    if (invalidCellIds.has(field.dataset.cellId)) {
-      field.classList.add('invalid')
-    } else {
-      field.classList.remove('invalid')
-    }
+  solveAndApply({
+    editedCellId: blurredCellId,
+    editedValue: blurredValue,
+    allowFallbackWithoutEditedConstraint: true,
+    fallbackSeedValues,
   })
 
-  // NOTE: Don't hide the solve banner on blur; only clear it when solved.
-  // const banner = $('solveBanner')
-  // if (banner) banner.hidden = true
-  updateSolveBannerInDom()
-
-  updateSliderDisplay()
+  state.valuesBeforeEdit = null
 }
 
 function handleFieldKeypress(e) {
@@ -1660,11 +1588,7 @@ function handleFieldDoubleClick(e) {
   }
 
   // Re-solve under the new frozen constraints and update the banner invariant.
-  const eqns = buildInteractiveEqns(null, null)
-  const solved = solvemAss(eqns, { ...state.values })
-  state.values = solved
-  recomputeCellCvals(state.cells, state.values, state.fixedCellIds)
-  setSolveBannerFromSatisfaction(eqnsSatisfied(eqns, solved))
+  solveAndApply({ editedCellId: null, editedValue: null })
   renderRecipe()
 }
 
@@ -1798,41 +1722,7 @@ function handleSliderChange(e) {
   const xCell = state.cells.find(c => c.ceqn.some(expr => expr.trim() === 'x'))
   if (!xCell) return
 
-  // Build equations with x temporarily frozen at new value
-  const eqns = state.cells.map(c => {
-    const eqn = [...c.ceqn]
-
-    // NOTE: Old slider-path behavior injected template constants as constraints.
-    // Keep it commented out rather than deleting.
-    // const isAssignmentSeed =
-    //   c.hasConstraint &&
-    //   c.hasNumber &&
-    //   !c.startsFrozen &&
-    //   c.ceqn.length === 1 &&
-    //   /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(c.ceqn[0].trim())
-    //
-    // if (!isAssignmentSeed && c.hasConstraint && c.hasNumber) {
-    //   eqn.push(c.cval)
-    // }
-
-    if (c.id === xCell.id) {
-      eqn.push(newX)
-    } else if (state.fixedCellIds.has(c.id)) {
-      eqn.push(c.cval)
-    }
-    return eqn
-  })
-
-  const seedValues = { ...state.values, x: newX }
-  const solved = solvemAss(eqns, seedValues)
-  state.values = solved
-  setSolveBannerFromSatisfaction(eqnsSatisfied(eqns, solved))
-
-  xCell.cval = newX
-  recomputeCellCvals(state.cells, state.values, state.fixedCellIds, xCell.id)
-
-  // Update display and re-render
-  updateSliderDisplay()
+  solveAndApply({ editedCellId: xCell.id, editedValue: newX, seedOverrides: { x: newX } })
   renderRecipe()
 }
 

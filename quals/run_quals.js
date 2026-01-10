@@ -161,6 +161,55 @@ async function main() {
     const areaInvalid = await page.$eval('input.recipe-field[data-label="A"]', el => el.classList.contains('invalid'))
     assert.equal(areaInvalid, false)
 
+    // Qual: cheesepan editing {d} should persist on tab (no snapback)
+    await page.waitForSelector('#recipeSelect', { visible: true })
+    await page.select('#recipeSelect', 'cheesepan')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    const dBareHandle = await page.evaluateHandle(() => {
+      const inputs = Array.from(document.querySelectorAll('input.recipe-field'))
+      return inputs.find(i => (i.getAttribute('title') || '').trim() === 'd') || null
+    })
+    const dBareIsNull = await dBareHandle.evaluate(el => el === null)
+    assert.equal(dBareIsNull, false)
+
+    const dBareBefore = await dBareHandle.evaluate(el => el.value)
+    const rBefore = await getInputValue(page, 'input.recipe-field[data-label="r"]')
+    const xBefore = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+
+    // Match the bug report flow: change 9 to 9.1 then tab away.
+    await dBareHandle.click({ clickCount: 1 })
+    await page.keyboard.press('End')
+    await page.keyboard.type('.1')
+    await page.keyboard.press('Tab')
+    await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentEditCellId === null)
+
+    const dBareStrAfterTab = await dBareHandle.evaluate(el => el.value)
+    const dBareValAfterTab = Number(dBareStrAfterTab)
+    const rAfter = await getInputValue(page, 'input.recipe-field[data-label="r"]')
+    const xAfter = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+
+    const dDebug = await page.evaluate(() => ({
+      solveBanner: String(state?.solveBanner || ''),
+      d: state?.values?.d,
+      r: state?.values?.r,
+      x: state?.values?.x,
+    }))
+    assert.ok(
+      Math.abs(dBareValAfterTab - 9.1) < 1e-6,
+      `d after tab: ${dBareStrAfterTab}; debug: ${JSON.stringify(dDebug)}`
+    )
+
+    // Also assert we did not snap back to the initial state.
+    assert.equal(dBareBefore, '9')
+    assert.equal(rBefore, '4.5')
+    assert.equal(dBareStrAfterTab, '9.1')
+    assert.equal(rAfter, '4.55')
+    assert.equal(xBefore, '1')
+    assert.equal(xAfter, '1.0223')
+
+    await dBareHandle.dispose()
+
     // Qual: simeq edit unfrozen x to 60 then tab should not redden everything
     await page.waitForSelector('#recipeSelect', { visible: true })
     await page.select('#recipeSelect', 'simeq')
