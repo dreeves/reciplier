@@ -418,36 +418,34 @@ a buttom becomes clickable that opens a popup that prompts the user to submit
 their template to be considered for inclusion in the dropdown. Prompt the user
 for a name for their recipe too.
 
-5. Refactor: Put the reciple templates in their own file called reciplates.js.
-
-6. Double-clicking to freeze/unfreeze is terrible. For one thing, I double-click
+5. Double-clicking to freeze/unfreeze is terrible. For one thing, I double-click
 cells by muscle memory to highlight the current contents of a field in order to
 overwrite it. Worse, if you don't happen to ever double-click a cell then
 freezing/unfreezing is totally undiscoverable.
 
-7. Bug: "2 x" should parse to "2*x".
+6. Bug: "2 x" should parse to "2*x".
 
-8. Thinking out loud about going more anti-magic: Currently when you edit a
+7. Thinking out loud about going more anti-magic: Currently when you edit a
 field the system just tries changing other variables until something works.
 That's pretty magical. What if instead you could see other fields kind of cross
 themselves out and show the new values implied by your edit? Or, like, if more
 than one cell can change to accommodate your edit you're forced to explicitly
 freeze cells until that's no longer the case?
 
-9. Make it easy to add any utility functions we want available for defining
+8. Make it easy to add any utility functions we want available for defining
 cells. I.e., functions or constants that can be referred to in the vareval
 environment. Maybe even have that code available in the UI, unobtrusively so as
 not to clutter the UI for the simple recipe use case.
 
-10. Is it too weird to define constants via constraints where the constant part
+9. Is it too weird to define constants via constraints where the constant part
 comes first? Syntax like {tau := 6.28} could define a constant and it's just
 uneditable, rendering as normal text, no field. Another option is the idea above
 about utility functions.
 
-11. Then could we support something like {goal_units := "kg"} and then ... I
+10. Then could we support something like {goal_units := "kg"} and then ... I
 guess that's turning this thing into a whole templating engine like ERB.
 
-12. Support arithmetic in the fields, not just the template.
+11. Support arithmetic in the fields, not just the template.
 
 12. Refactor: Put the constraint solver in csolver.js
 
@@ -458,7 +456,11 @@ to check candidate solutions. In particular, move the solver currently in
 gemini-solver.js into a sub-black-box in the solvem() black box. Keep track of
 whether its solution is ever used.
 
-14. Any time a solution 
+14. Each time solvem returns sat==false, print to the browser console the qual 
+for it. Also print the constraint satisfaction problem in Mathematica syntax so
+I can confirm if it's really true that there's no solution. For example:
+Solve[{c == 50, a == 3x, b == 4x, 25 == a^2 + b^2 == c^2}, {c, a, b, x}]
+
 
 SCRATCH AREA:
 
