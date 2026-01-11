@@ -405,6 +405,9 @@ left and the numeric value on the right, instead show the variable name, a
 colon, and then the line from the template where the variable occurs, with
 values filled in and with the value for the slider variable highlighted.
 
+2.5 Idea for syntax for specifying the bounds of the sliders (which by default
+can be cvar/10 to cvar*10): {0 < x = 1 < 10}
+
 3. Direct links to recipes. When you select a recipe template from the dropdown,
 update the query string like "reciplier.dreev.es/?recipe=crepes" using the keys
 in `recipeDropdown`. If the user edits the template, encode the whole thing with
@@ -460,6 +463,10 @@ whether its solution is ever used.
 for it. Also print the constraint satisfaction problem in Mathematica syntax so
 I can confirm if it's really true that there's no solution. For example:
 Solve[{c == 50, a == 3x, b == 4x, 25 == a^2 + b^2 == c^2}, {c, a, b, x}]
+
+15. It's kind of buggy-seeming how choosing "Custom Template" doesn't change
+what's in the recipe template text area. PS: I fixed that, so now maybe we can
+just ditch the Blank one.
 
 
 SCRATCH AREA:
