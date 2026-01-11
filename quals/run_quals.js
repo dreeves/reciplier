@@ -472,6 +472,39 @@ async function main() {
     await dialBug1bMHandle.dispose()
     await dialBug1bDHandle.dispose()
 
+    // Qual: dial soft fallback - editing derived r*SID to an unsatisfiable value
+    // should not show "No solution"; it should just leave the field invalid/red.
+    await page.select('#recipeSelect', 'blank')
+    await page.select('#recipeSelect', 'dial')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Freeze vini, vfin, and tini (start TIME field)
+    const dialSoftFreezeTitles = ['vini = 73', 'vfin = 70', 'tini = unixtime']
+    for (const t of dialSoftFreezeTitles) {
+      const h = await findFieldByTitleSubstring(page, t)
+      const isNull = await h.evaluate(el => el === null)
+      assert.equal(isNull, false, `dial soft fallback: couldn't find field with title containing "${t}"`)
+      await h.click({ clickCount: 2 })
+      await h.dispose()
+    }
+
+    // Enter an unsatisfiable rate-per-day value (requires fractional day count)
+    const dialSoftRateHandle = await findFieldByTitleSubstring(page, 'r*SID')
+    const dialSoftRateIsNull = await dialSoftRateHandle.evaluate(el => el === null)
+    assert.equal(dialSoftRateIsNull, false)
+    await dialSoftRateHandle.click({ clickCount: 3 })
+    await page.keyboard.type('-0.8')
+    await page.keyboard.press('Tab')
+    await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentEditCellId === null)
+
+    const dialSoftBanner = await page.evaluate(() => String(state?.solveBanner || ''))
+    assert.equal(dialSoftBanner, '', 'dial soft fallback: expected no solveBanner but got: ' + dialSoftBanner)
+
+    const dialSoftRateInvalid = await handleHasClass(dialSoftRateHandle, 'invalid')
+    assert.equal(dialSoftRateInvalid, true, 'dial soft fallback: expected edited r*SID field to be invalid')
+
+    await dialSoftRateHandle.dispose()
+
     await page.select('#recipeSelect', 'blank')
     await page.select('#recipeSelect', 'crepes')
     await page.waitForSelector('#recipeOutput', { visible: true })

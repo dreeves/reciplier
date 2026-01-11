@@ -156,14 +156,14 @@ dial: `\
 // -----------------------------------------------------------------------------
 'sugarcalc': `\
 Nutrition info for healthy stuff (e.g., Greek yogurt):
-* {omega = 170} grams per serving
-* {gamma = 120} calories per serving
-* {sigma = 5} grams of sugar per serving
+* {170 = omega} grams per serving
+* {120 = gamma} calories per serving
+* {5 = sigma} grams of sugar per serving
 
 Nutrition info for junk food (e.g., Go-gurt):
-* {w} grams per serving (don't actually need to know this) <!-- {w} -->
-* {c = 150} calories per serving
-* {s = 23} grams of sugar per serving
+* w grams per serving (don't actually need to know this) <!-- {w} -->
+* {150 = c} calories per serving
+* {23 = s} grams of sugar per serving
 
 (Fun facts: There are {3.87 = k} calories per gram of normal sugar and {3.80 = kappa} calories per gram of brown sugar.)
 
@@ -1296,6 +1296,7 @@ function solveAndApply({
   editedFieldEl = null,
   seedOverrides = null,
   allowFallbackWithoutEditedConstraint = false,
+  preserveEditedCvalOnFallback = false,
   fallbackSeedValues = null,
 } = {}) {
   const seedValues = { ...state.values, ...(seedOverrides || {}) }
@@ -1318,12 +1319,13 @@ function solveAndApply({
 
   state.values = solved
 
-  if (editedCellId !== null && !didFallback) {
+  const preserveEdited = editedCellId !== null && (!didFallback || preserveEditedCvalOnFallback)
+  if (preserveEdited) {
     const editedCell = state.cells.find(c => c.id === editedCellId)
     if (editedCell) editedCell.cval = editedValue
   }
 
-  const skipRecomputeCellId = didFallback ? null : editedCellId
+  const skipRecomputeCellId = preserveEdited ? editedCellId : null
   recomputeCellCvals(state.cells, state.values, state.fixedCellIds, skipRecomputeCellId)
 
   const violatedCellIds = getViolatedCellIds(state.cells, state.values)
@@ -1444,7 +1446,22 @@ function handleFieldInput(e) {
     state.valuesBeforeEdit = { ...state.values }
   }
 
-  solveAndApply({ editedCellId: cellId, editedValue: newValue, editedFieldEl: input })
+  const isBareIdentifier = (s) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(String(s || '').trim())
+  const isDerivedExpressionCell =
+    Array.isArray(cell?.ceqn) &&
+    cell.ceqn.length === 1 &&
+    !isBareIdentifier(cell.ceqn[0])
+
+  const allowFallbackWithoutEditedConstraint = isDerivedExpressionCell
+  const preserveEditedCvalOnFallback = isDerivedExpressionCell
+
+  solveAndApply({
+    editedCellId: cellId,
+    editedValue: newValue,
+    editedFieldEl: input,
+    allowFallbackWithoutEditedConstraint,
+    preserveEditedCvalOnFallback,
+  })
 }
 
 /*
@@ -1560,6 +1577,12 @@ function handleFieldBlur(e) {
   const blurredCell = state.cells.find(c => c.id === blurredCellId)
   if (!blurredCell) return
 
+  const isBareIdentifier = (s) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(String(s || '').trim())
+  const isDerivedExpressionCell =
+    Array.isArray(blurredCell?.ceqn) &&
+    blurredCell.ceqn.length === 1 &&
+    !isBareIdentifier(blurredCell.ceqn[0])
+
   const fallbackSeedValues = state.valuesBeforeEdit ? { ...state.valuesBeforeEdit } : null
   state.currentEditCellId = null
 
@@ -1567,6 +1590,8 @@ function handleFieldBlur(e) {
     editedCellId: blurredCellId,
     editedValue: blurredValue,
     allowFallbackWithoutEditedConstraint: true,
+    preserveEditedCvalOnFallback: isDerivedExpressionCell,
+    editedFieldEl: isDerivedExpressionCell ? e.target : null,
     fallbackSeedValues,
   })
 

@@ -458,6 +458,7 @@ to check candidate solutions. In particular, move the solver currently in
 gemini-solver.js into a sub-black-box in the solvem() black box. Keep track of
 whether its solution is ever used.
 
+14. Any time a solution 
 
 SCRATCH AREA:
 
