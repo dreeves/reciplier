@@ -94,8 +94,13 @@ async function main() {
     for (const key of recipeKeys) {
       await page.select('#recipeSelect', key)
       await page.waitForFunction(k => (typeof state !== 'undefined') && state.currentRecipeKey === k, {}, key)
-      if (key !== 'blank') {
-        await page.waitForSelector('#recipeOutput', { visible: true })
+      if (key !== 'blank' && key !== 'custom') {
+        try {
+          await page.waitForSelector('#recipeOutput', { visible: true, timeout: 5000 })
+        } catch (e) {
+          console.error(`Recipe ${key} timed out waiting for #recipeOutput`)
+          throw e
+        }
       }
 
       const stateSummary = await page.evaluate(() => {
@@ -122,8 +127,8 @@ async function main() {
         return { invalidCount, cellCount, errors, errorCount, solveBanner, sat }
       })
 
-      // For the blank recipe, just require it not to error.
-      if (key === 'blank') {
+      // For blank and custom recipes, just require them not to error.
+      if (key === 'blank' || key === 'custom') {
         assert.equal(stateSummary.errorCount, 0, `recipe ${key}: errorCount`)
         continue
       }
@@ -421,6 +426,51 @@ async function main() {
 
     await dialDayHandle.dispose()
     await dialRateHandle.dispose()
+
+    // Qual: dial bug1b - freeze tini directly (not y0/m0/d0), edit rate to -1
+    // This is the exact repro from the bug report
+    await page.select('#recipeSelect', 'blank')
+    await page.select('#recipeSelect', 'dial')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Freeze vini, vfin, and tini (the start TIME field, not the start DATE fields)
+    const dialBug1bFreezeTitles = ['vini = 73', 'vfin = 70', 'tini = unixtime']
+    for (const t of dialBug1bFreezeTitles) {
+      const h = await findFieldByTitleSubstring(page, t)
+      const isNull = await h.evaluate(el => el === null)
+      assert.equal(isNull, false, `dial bug1b: couldn't find field with title containing "${t}"`)
+      await h.click({ clickCount: 2 })  // Double-click to freeze
+      await h.dispose()
+    }
+
+    // Now edit the rate to -1
+    const dialBug1bRateHandle = await findFieldByTitleSubstring(page, 'r*SID')
+    const dialBug1bRateIsNull = await dialBug1bRateHandle.evaluate(el => el === null)
+    assert.equal(dialBug1bRateIsNull, false)
+    await dialBug1bRateHandle.click({ clickCount: 3 })
+    await page.keyboard.type('-1')
+    await page.keyboard.press('Tab')
+    await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentEditCellId === null)
+
+    // The end date should change and there should be no "No solution" banner
+    const dialBug1bBanner = await page.evaluate(() => String(state?.solveBanner || ''))
+    assert.equal(dialBug1bBanner, '', 'dial bug1b: expected no solveBanner but got: ' + dialBug1bBanner)
+
+    // The end date should be 2025-12-28 (3 days after start at rate of -1 kg/day to lose 3kg)
+    const dialBug1bYHandle = await findFieldByTitleSubstring(page, 'y = ')
+    const dialBug1bMHandle = await findFieldByTitleSubstring(page, 'm = ')
+    const dialBug1bDHandle = await findFieldByTitleSubstring(page, 'd = ')
+    const dialBug1bY = await getHandleValue(dialBug1bYHandle)
+    const dialBug1bM = await getHandleValue(dialBug1bMHandle)
+    const dialBug1bD = await getHandleValue(dialBug1bDHandle)
+    assert.equal(dialBug1bY, '2025', 'dial bug1b: end year should be 2025')
+    assert.equal(dialBug1bM, '12', 'dial bug1b: end month should be 12')
+    assert.equal(dialBug1bD, '28', 'dial bug1b: end day should be 28')
+
+    await dialBug1bRateHandle.dispose()
+    await dialBug1bYHandle.dispose()
+    await dialBug1bMHandle.dispose()
+    await dialBug1bDHandle.dispose()
 
     await page.select('#recipeSelect', 'blank')
     await page.select('#recipeSelect', 'crepes')

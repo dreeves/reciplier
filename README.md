@@ -434,32 +434,29 @@ themselves out and show the new values implied by your edit? Or, like, if more
 than one cell can change to accommodate your edit you're forced to explicitly
 freeze cells until that's no longer the case?
 
-9. Get rid of gemini-solver.js if we've incorporated all the ideas we want from
-it.
-
-10. Make it easy to add any utility functions we want available for defining
+9. Make it easy to add any utility functions we want available for defining
 cells. I.e., functions or constants that can be referred to in the vareval
 environment. Maybe even have that code available in the UI, unobtrusively so as
 not to clutter the UI for the simple recipe use case.
 
-11. Is it too weird to define constants via constraints where the constant part
+10. Is it too weird to define constants via constraints where the constant part
 comes first? Syntax like {tau := 6.28} could define a constant and it's just
 uneditable, rendering as normal text, no field. Another option is the idea above
 about utility functions.
 
-12. Then could we support something like {goal_units := "kg"} and then ... I
+11. Then could we support something like {goal_units := "kg"} and then ... I
 guess that's turning this thing into a whole templating engine like ERB.
 
-13. Support arithmetic in the fields, not just the template.
+12. Support arithmetic in the fields, not just the template.
 
-14. Kitchen-sink solver: Try as many solvers as we can scrounge up. The outer
+12. Refactor: Put the constraint solver in csolver.js
+
+13. Kitchen-sink solver: Try as many solvers as we can scrounge up. The outer
 solvem function can call out to each solver and if any return a satisfying 
 assignment, Bob is one's uncle. The beauty of NP-complete problems is it's easy
-to check candidate solutions.
-
-15. Should cells that depend only on frozen cells automatically freeze? Probably
-that doesn't make sense, like if there are just two cells that depend on each
-other, freezing one shouldn't freeze the other. So probably never mind.
+to check candidate solutions. In particular, move the solver currently in 
+gemini-solver.js into a sub-black-box in the solvem() black box. Keep track of
+whether its solution is ever used.
 
 
 SCRATCH AREA:
@@ -472,12 +469,12 @@ Bug report 1:
 
 Replicata:
 
-1. load the dial recipe
-2. freeze the vini cell at 73
-3. freeze the vfin cell at 70
-4. freeze the start date fields
-5. change the rate
+1. Load the dial recipe
+2. Freeze the vini cell at 73
+3. Freeze the vfin cell at 70
+4. Freeze the start time (tini) field
+5. Change the rate (r) to -1
 
 Expectata: That the end date changes.
 
-Resultata: No solution.
+Resultata: "No solution (try unfreezing cells)" and the tfin field is red.

@@ -202,7 +202,20 @@ function solveFor(expr, varName, target, values) {
     const y0 = (typeof x0 === 'number' && isFinite(x0)) ? evalAt(x0) : null
     if (y0 !== null) {
       const f0 = y0 - target
-      for (let scale = 1; scale < 1e12; scale *= 10) {
+      // Generate scales: 1, 1.5, 2, 3, 5, 7, 10, 15, 20, 30, 50, 70, ...
+      const scales = []
+      for (let decade = 1; decade < 1e12; decade *= 10) {
+        for (const mult of [1, 1.5, 2, 3, 5, 7]) {
+          scales.push(decade * mult)
+        }
+      }
+
+      // Track the last valid evaluation for each direction to detect discontinuities
+      const lastValid = { [-1]: null, [1]: null }
+      // Track ranges where we might have crossed a discontinuity (evalAt sign change)
+      const discontinuityRanges = []
+
+      for (const scale of scales) {
         let bestLo = null
         let bestHi = null
         for (const dir of [-1, 1]) {
@@ -211,6 +224,8 @@ function solveFor(expr, varName, target, values) {
           if (y1 === null) continue
           const f1 = y1 - target
           if (!isFinite(f1)) continue
+
+          // Check for sign change with x0
           if (f0 * f1 <= 0) {
             const candidateLo = Math.min(x0, x1)
             const candidateHi = Math.max(x0, x1)
@@ -219,11 +234,77 @@ function solveFor(expr, varName, target, values) {
               bestHi = candidateHi
             }
           }
+
+          // Check for sign change between consecutive valid points in same direction
+          // This catches narrow valid ranges between discontinuities
+          if (lastValid[dir] !== null && lastValid[dir].f * f1 < 0) {
+            const candidateLo = Math.min(lastValid[dir].x, x1)
+            const candidateHi = Math.max(lastValid[dir].x, x1)
+            if (bestLo === null || (candidateHi - candidateLo) < (bestHi - bestLo)) {
+              bestLo = candidateLo
+              bestHi = candidateHi
+            }
+          }
+
+          // Detect discontinuity by checking if evalAt itself changes sign
+          // (even if f doesn't change sign). Record the range for finer search later.
+          if (lastValid[dir] !== null && lastValid[dir].y * y1 < 0) {
+            discontinuityRanges.push([lastValid[dir].x, x1])
+          }
+
+          lastValid[dir] = { x: x1, y: y1, f: f1 }
         }
         if (bestLo !== null) {
           lo = bestLo
           hi = bestHi
           break
+        }
+      }
+
+      // If we found discontinuity ranges but no bracket, search more finely in those ranges
+      // The solution might be in a narrow band near the discontinuity
+      if (lo === null && discontinuityRanges.length > 0) {
+        for (const [rangeA, rangeB] of discontinuityRanges) {
+          const rangeLo = Math.min(rangeA, rangeB)
+          const rangeHi = Math.max(rangeA, rangeB)
+          // Binary search to find the discontinuity point
+          let searchLo = rangeLo
+          let searchHi = rangeHi
+          for (let i = 0; i < 30; i++) {
+            const mid = (searchLo + searchHi) / 2
+            const midVal = evalAt(mid)
+            if (midVal === null || !isFinite(midVal)) {
+              // Discontinuity is here - search on the side where evalAt matches y0's sign
+              if (y0 < 0) {
+                searchHi = mid  // Search toward lower end (where evalAt is negative)
+              } else {
+                searchLo = mid  // Search toward upper end (where evalAt is positive)
+              }
+              continue
+            }
+            const loVal = evalAt(searchLo)
+            if (loVal === null || !isFinite(loVal)) {
+              searchLo = mid
+              continue
+            }
+            if (loVal * midVal < 0) {
+              searchHi = mid
+            } else {
+              searchLo = mid
+            }
+          }
+          // Now searchLo should be near the discontinuity, on the same side as x0
+          // The solution should be between x0 and searchLo (or searchHi)
+          const nearDiscont = (Math.abs(searchLo - x0) < Math.abs(searchHi - x0)) ? searchLo : searchHi
+          const nearVal = evalAt(nearDiscont)
+          if (nearVal !== null && isFinite(nearVal)) {
+            const nearF = nearVal - target
+            if (f0 * nearF <= 0) {
+              lo = Math.min(x0, nearDiscont)
+              hi = Math.max(x0, nearDiscont)
+              break
+            }
+          }
         }
       }
     }
@@ -1058,6 +1139,40 @@ function runQuals() {
   check('solveFor: with other vars', solveFor('x + y', 'x', 10, {y: 3}), 7)
   check('solveFor: division d/t=15 finds t=4.4', solveFor('d/t', 't', 15, {d: 66}), 4.4, 1e-9)
 
+  // Dial recipe specific: solve for tfin from rate equation with tiny rate
+  // r = (vfin-vini)/(tfin-tini), solving for tfin when r = -1/86400
+  ;(() => {
+    const tini = unixtime(2025, 12, 25)
+    const tfin0 = unixtime(2026, 12, 25)  // initial guess ~31M away from solution
+    const r = -1 / 86400  // rate of -1 kg/day
+    // r = -3/(tfin-tini) => tfin = tini + (-3/r) = tini + 259200
+    const expectedTfin = tini + 259200
+    const result = solveFor('(vfin-vini)/(tfin-tini)', 'tfin', r, {
+      vfin: 70,
+      vini: 73,
+      tfin: tfin0,
+      tini: tini
+    })
+    console.log('DEBUG solveFor dial: target r =', r, 'result tfin =', result, 'expected =', expectedTfin)
+    check('solveFor: dial rate eq finds tfin (tiny r)', result, expectedTfin, 1)
+  })()
+
+  // Same but with larger rate to factor out tolerance issues
+  ;(() => {
+    const tini = unixtime(2025, 12, 25)
+    const tfin0 = unixtime(2026, 12, 25)  // initial guess
+    const r = -0.01 / 86400  // rate of -0.01 kg/day (300 days to lose 3kg)
+    const expectedTfin = tini + 300 * 86400
+    const result = solveFor('(vfin-vini)/(tfin-tini)', 'tfin', r, {
+      vfin: 70,
+      vini: 73,
+      tfin: tfin0,
+      tini: tini
+    })
+    console.log('DEBUG solveFor dial: target r =', r, 'result tfin =', result, 'expected =', expectedTfin)
+    check('solveFor: dial rate eq finds tfin (larger r)', result, expectedTfin, 1)
+  })()
+
   console.log('\n=== solvem quals ===')
 
   /*
@@ -1719,6 +1834,80 @@ function runQuals() {
     check('solvem: dial rate change end year', rep.ass.y, 2027, 0.01)
     check('solvem: dial rate change end month', rep.ass.m, 1, 0.01)
     check('solvem: dial rate change end day', rep.ass.d, 4, 0.01)
+  })()
+
+  // Bug 1b: Same dial recipe bug but with exact repro steps from bug report:
+  // Freeze tini directly (not y0/m0/d0), edit r*SID to -1
+  // IMPORTANT: When the UI freezes a cell, it creates a 3-element equation:
+  // [var, expr, frozen_value] -- not a 2-element equation [var, frozen_value]
+  ;(() => {
+    const tiniVal = unixtime(2025, 12, 25)
+    const tfin0 = unixtime(2026, 12, 25)
+    const r0 = (70 - 73) / (tfin0 - tiniVal)
+
+    // The equations from the dial recipe, matching the EXACT UI structure when:
+    // - vini is frozen at 73
+    // - vfin is frozen at 70
+    // - tini field is frozen (3-element equation!)
+    // - r*SID is edited to -1
+    const eqns = [
+      // Start date (from template, constant first so frozen)
+      ['y0', 2025],
+      ['m0', 12],
+      ['d0', 25],
+      // End date (var first, so unfrozen - these should be computed)
+      ['y'],
+      ['m'],
+      ['d'],
+      // Values - when frozen, UI adds cval to end of ceqn
+      ['vini', 73, 73],  // frozen: ceqn=['vini', 73], cval=73 → eqn=['vini', 73, 73]
+      ['vfin', 70, 70],  // frozen: ceqn=['vfin', 70], cval=70 → eqn=['vfin', 70, 70]
+      // Rate (user edits r*SID to -1)
+      ['r*SID', -1],  // edited: ceqn=['r*SID'], editedValue=-1 → eqn=['r*SID', -1]
+      ['r*SIW'],
+      ['r*SIM'],
+      // Time definitions - tini is FROZEN (3-element equation!)
+      // ceqn=['tini', 'unixtime(y0, m0, d0)'], cval=tiniVal
+      // When frozen, UI adds cval → ['tini', 'unixtime(y0, m0, d0)', tiniVal]
+      ['tini', 'unixtime(y0, m0, d0)', tiniVal],
+      ['tfin', 'unixtime(y, m, d)'],
+      // Duration displays
+      ['tfin - tini'],
+      ['(tfin - tini)/SID'],
+      ['(tfin - tini)/SIW'],
+      ['(tfin - tini)/SIM'],
+      // Rate definition
+      ['r', '(vfin-vini)/(tfin-tini)'],
+      // Time constants
+      ['SID', 86400],
+      ['SIW', 'SID*7'],
+      ['SIM', 'SID*365.25/12'],
+    ]
+
+    const rep = solvemReport(eqns, {
+      SID: 86400,
+      SIW: 86400 * 7,
+      SIM: 86400 * 365.25 / 12,
+      y0: 2025,
+      m0: 12,
+      d0: 25,
+      y: 2026,
+      m: 12,
+      d: 25,
+      vini: 73,
+      vfin: 70,
+      tini: tiniVal,
+      tfin: tfin0,
+      r: r0,
+    })
+
+    // With r*SID = -1 (rate = -1 kg/day), and (vfin-vini) = -3:
+    // tfin - tini = (vfin-vini) / r = -3 / (-1/86400) = 259200 seconds = 3 days
+    // So end date should be 2025-12-25 + 3 days = 2025-12-28
+    check('solvem: dial bug1b tini frozen (sat)', rep.sat, true)
+    check('solvem: dial bug1b end year', rep.ass.y, 2025, 0.01)
+    check('solvem: dial bug1b end month', rep.ass.m, 12, 0.01)
+    check('solvem: dial bug1b end day', rep.ass.d, 28, 0.01)
   })()
 
   // Bug 2: Breakaway biscuits - typing k*d should compute d without rounding errors

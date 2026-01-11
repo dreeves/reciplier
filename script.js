@@ -226,7 +226,7 @@ Scaled by a factor of x where x/2 is {x/2 = 8} for some reason.
 };
 
 // =============================================================================
-// Utility Functions
+// Utility Functions (TODO: move to util.js?)
 // =============================================================================
 
 function $(id) { return document.getElementById(id) }
