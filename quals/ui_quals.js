@@ -82,16 +82,19 @@ async function main() {
     await page.goto(fileUrl(path.join(__dirname, '..', 'index.html')))
 
     // Inject browser quals script
-    const browserQualsCode = fs.readFileSync(path.join(__dirname, 'solver_quals_browser.js'), 'utf8')
-    await page.evaluate(browserQualsCode)
+    // NOTE: Solver quals are now consolidated in `quals/solver_quals.js` and run in Node.
+    // Puppeteer quals should focus on browser/UI behavior.
+    // const browserQualsCode = fs.readFileSync(path.join(__dirname, 'solver_quals_browser.js'), 'utf8')
+    // await page.evaluate(browserQualsCode)
 
     // Qual: help text includes Calca.io link
     const hasCalcaLink = await page.$eval('a[href="https://calca.io"]', el => !!el)
     assert.equal(hasCalcaLink, true)
 
     // Qual: browser_quals.js runQuals() passes
-    const browserQualsResult = await page.evaluate(() => runQuals())
-    assert.equal(browserQualsResult, 'All quals passed!')
+    // NOTE: This qual is intentionally disabled; see note above.
+    // const browserQualsResult = await page.evaluate(() => runQuals())
+    // assert.equal(browserQualsResult, 'All quals passed!')
 
     // Quals: every recipe in dropdown loads sanely
     await page.waitForSelector('#recipeSelect', { visible: true })

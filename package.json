@@ -3,7 +3,9 @@
   "description": "Recipe Multiplier and Calculator Calculator",
 
   "scripts": {
-    "quals": "node quals/solver_quals.js && node quals/run_quals.js"
+    "quals": "node quals/quals.js",
+    "quals:solver": "node quals/solver_quals.js",
+    "quals:ui": "node quals/ui_quals.js"
   },
 
   "devDependencies": {
