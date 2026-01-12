@@ -502,5 +502,22 @@ Scaled by a factor of x={x=1}.
 Roll out dough into a right triangle with legs of length a={A = a*x} and b={B = b*x} and hypotenuse c={C = c*x}.
 Then eat it.
 
-Sanity check: {A}^2 + {B}^2 = {A^2} + {B^2} = {A^2 + B^2 = C^2}
-{a^2 + b^2 = c^2}
+Sanity check unscaled: {a}^2 + {b}^2 = {a^2} + {b^2} = {a^2 + b^2 = c^2}
+Sanity check scaled:   {A}^2 + {B}^2 = {A^2} + {B^2} = {A^2 + B^2 = C^2}
+```
+
+Quals to add:
+
+solvem([["x",1],["A","a*x"],["B","b*x"],["C","c*x"],["A"],["B"],["A^2"],["B^2"],["A^2 + B^2","C^2"]], {"x":1,"A":1,"a":1,"B":1,"b":1,"C":1,"c":1})
+Expected:
+{"x":1,"A":1,"a":1,"B":1,"b":1,"C":1.4142135623730951,"c":1.4142135623730951}
+
+solvem([
+      ['x', 1],
+      ['A', 'a*x'],
+      ['B', 'b*x'],
+      ['C', 'c*x'],
+      ['A^2 + B^2', 'C^2']
+    ], {x: 1, A: null, B: null, C: null, a: null, b: null, c: null})
+Expected:
+{"x":1,"A":1,"a":1,"B":1,"b":1,"C":1.4142135623730951,"c":1.4142135623730951}

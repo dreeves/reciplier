@@ -82,7 +82,7 @@ async function main() {
     await page.goto(fileUrl(path.join(__dirname, '..', 'index.html')))
 
     // Inject browser quals script
-    const browserQualsCode = fs.readFileSync(path.join(__dirname, 'browser_quals.js'), 'utf8')
+    const browserQualsCode = fs.readFileSync(path.join(__dirname, 'solver_quals_browser.js'), 'utf8')
     await page.evaluate(browserQualsCode)
 
     // Qual: help text includes Calca.io link

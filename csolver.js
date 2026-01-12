@@ -480,7 +480,6 @@ function solvemPrimary(eqns, vars) {
     const aHasLiteral = a.some(e => typeof e === 'number')
     const bHasLiteral = b.some(e => typeof e === 'number')
     if (aHasLiteral !== bHasLiteral) return aHasLiteral ? -1 : 1
-    if (a.length !== b.length) return a.length - b.length
     return 0
   })
 
@@ -518,9 +517,15 @@ function solvemPrimary(eqns, vars) {
       if (typeof expr === 'number') return { value: expr, isTrustworthy: true, isStable: true, stableNonSingleton: true }
     }
     for (const expr of eqn) {
-      if (typeof expr === 'string' && isSimpleVar(expr) &&
-          (trustworthy.has(expr) || stableDerived.has(expr) || solvedFromStableThisPass.has(expr))) {
-        return { value: values[expr], isTrustworthy: trustworthy.has(expr), isStable: true, stableNonSingleton: true }
+      if (typeof expr === 'string' && isSimpleVar(expr) && trustworthy.has(expr)) {
+        return { value: values[expr], isTrustworthy: true, isStable: true, stableNonSingleton: true }
+      }
+    }
+    if (eqn.length === 2) {
+      for (const expr of eqn) {
+        if (typeof expr === 'string' && isSimpleVar(expr) && (stableDerived.has(expr) || solvedFromStableThisPass.has(expr))) {
+          return { value: values[expr], isTrustworthy: false, isStable: true, stableNonSingleton: true }
+        }
       }
     }
     let bestStable = null
@@ -539,10 +544,16 @@ function solvemPrimary(eqns, vars) {
       const score = (allTrustworthy ? 1000 : 0) + trustworthyCount
       if (score > bestStableScore) {
         bestStableScore = score
-        bestStable = { value: r.value, isTrustworthy: allTrustworthy, isStable: true, stableNonSingleton: hasNonSingletonStable }
+        bestStable = { value: r.value, isTrustworthy: allTrustworthy, isStable: true, stableNonSingleton: (eqn.length === 2) ? true : hasNonSingletonStable }
       }
     }
     if (bestStable !== null) return bestStable
+    for (const expr of eqn) {
+      if (typeof expr === 'string' && isSimpleVar(expr) &&
+          (trustworthy.has(expr) || stableDerived.has(expr) || solvedFromStableThisPass.has(expr))) {
+        return { value: values[expr], isTrustworthy: trustworthy.has(expr), isStable: true, stableNonSingleton: true }
+      }
+    }
     for (const expr of eqn) {
       if (typeof expr === 'string' && isSimpleVar(expr) && isKnown(expr)) {
         return { value: values[expr], isTrustworthy: false, stableNonSingleton: false }
@@ -556,8 +567,8 @@ function solvemPrimary(eqns, vars) {
         }
       }
     }
-    if (constrained.size === 0 && eqn.some(e => typeof e === 'string' && isSimpleVar(e))) {
-      return { value: 1, isTrustworthy: false, stableNonSingleton: false }
+    if (eqn.some(e => typeof e === 'string' && isSimpleVar(e))) {
+      return { value: 1, isTrustworthy: false, isStable: false, stableNonSingleton: false }
     }
     return null
   }
@@ -573,10 +584,10 @@ function solvemPrimary(eqns, vars) {
     }
 
     for (const eqn of sortedEqns) {
-      if (checkEquation(eqn)) continue
+      const eqnSatisfiedNow = checkEquation(eqn)
+      if (eqnSatisfiedNow) continue
 
       const eqnHasLiteral = eqn.some(e => typeof e === 'number')
-
       let targetResult = null
       if (isDefinitionPair(eqn) && !literalPinned.has(eqn[0]) && (usesAsInput.get(eqn[0]) || 0) === 0) {
         const rhs = eqn[1]
@@ -598,17 +609,17 @@ function solvemPrimary(eqns, vars) {
         if (isSimpleVar(expr)) {
           if (literalPinned.has(expr)) continue
           if (!eqnHasLiteral && constrained.has(expr) && isKnown(expr) && values[expr] !== target) continue
-          if (!solvedThisPass.has(expr) && (!isKnown(expr) || values[expr] !== target)) {
+          if (!isKnown(expr) || values[expr] !== target) {
             values[expr] = target
             changed = true
             solvedThisPass.add(expr)
             if (isTrustworthy || targetIsStable) solvedFromStableThisPass.add(expr)
             if (isTrustworthy) trustworthy.add(expr)
-            if (targetIsStable && (isTrustworthy || targetStableNonSingleton || constrained.size === 0)) stableDerived.add(expr)
+            if (targetIsStable && (isTrustworthy || (eqn.length === 2 && targetStableNonSingleton) || constrained.size === 0)) stableDerived.add(expr)
           }
-          if (!solvedThisPass.has(expr) && targetIsStable && isKnown(expr) && values[expr] === target) {
+          if (targetIsStable && isKnown(expr) && values[expr] === target) {
             if (!stableDerived.has(expr)) {
-              if (isTrustworthy || targetStableNonSingleton || constrained.size === 0) {
+              if (isTrustworthy || (eqn.length === 2 && targetStableNonSingleton) || constrained.size === 0) {
                 stableDerived.add(expr)
                 changed = true
               }
@@ -629,9 +640,9 @@ function solvemPrimary(eqns, vars) {
             solvedThisPass.add(unknowns[0])
             if (isTrustworthy || targetIsStable) solvedFromStableThisPass.add(unknowns[0])
             if (isTrustworthy) trustworthy.add(unknowns[0])
-            if (targetIsStable && (isTrustworthy || targetStableNonSingleton || constrained.size === 0)) stableDerived.add(unknowns[0])
+            if (targetIsStable && (isTrustworthy || (eqn.length === 2 && targetStableNonSingleton) || constrained.size === 0)) stableDerived.add(unknowns[0])
           }
-        } else if (unknowns.length === 0 && (isTrustworthy || targetIsStable)) {
+        } else if (unknowns.length === 0 && (isTrustworthy || targetIsStable || (eqn.length === 2 && !eqnSatisfiedNow))) {
           // Handle unixtime inversion
           const uargs = unixtimeArgs(expr)
           if (uargs) {
@@ -663,7 +674,7 @@ function solvemPrimary(eqns, vars) {
                       trustworthy.add(mov)
                       trustworthy.add(dv)
                     }
-                    if (targetIsStable && (isTrustworthy || targetStableNonSingleton || constrained.size === 0)) {
+                    if (targetIsStable && (isTrustworthy || (eqn.length === 2 && targetStableNonSingleton) || constrained.size === 0)) {
                       stableDerived.add(yv)
                       stableDerived.add(mov)
                       stableDerived.add(dv)
@@ -718,7 +729,7 @@ function solvemPrimary(eqns, vars) {
                       trustworthy.add(a)
                       trustworthy.add(b)
                     }
-                    if (targetIsStable && (isTrustworthy || targetStableNonSingleton || constrained.size === 0)) {
+                    if (targetIsStable && (isTrustworthy || (eqn.length === 2 && targetStableNonSingleton) || constrained.size === 0)) {
                       stableDerived.add(a)
                       stableDerived.add(b)
                     }
@@ -751,7 +762,7 @@ function solvemPrimary(eqns, vars) {
             solvedThisPass.add(bestVar)
             if (isTrustworthy || targetIsStable) solvedFromStableThisPass.add(bestVar)
             if (isTrustworthy) trustworthy.add(bestVar)
-            if (targetIsStable && (isTrustworthy || targetStableNonSingleton || constrained.size === 0)) stableDerived.add(bestVar)
+            if (targetIsStable && (isTrustworthy || (eqn.length === 2 && targetStableNonSingleton) || constrained.size === 0)) stableDerived.add(bestVar)
           }
         }
       }
