@@ -1,12 +1,11 @@
 /*
 Solver quals runner.
 
-Runs the solvem-focused qual set against:
-- the main solver in util.js
-- the experimental solver in gemini-solver.js
+Runs the solvem-focused qual set against the main solver in csolver.js
 
 Usage:
-  node quals/solver_quals.js
+  npm run quals           (runs this + browser quals)
+  node quals/solver_quals.js   (runs just this)
 */
 
 const assert = require('node:assert/strict')
@@ -34,6 +33,7 @@ function makeContext() {
     isFinite,
     parseFloat,
     eval,
+    Date,
   }
   return vm.createContext(ctx)
 }
@@ -185,7 +185,9 @@ function runSolvemQuals(solvemImpl, label) {
   for (const tc of cases) {
     let res
     try {
-      res = solvemImpl(tc.eqns, tc.vars)
+      const result = solvemImpl(tc.eqns, tc.vars)
+      // solvem now returns {ass, zij, sat}, extract ass for backward compatibility
+      res = result.ass || result
     } catch (e) {
       failures.push(`${tc.name}: threw ${e && e.message ? e.message : String(e)}`)
       continue
@@ -209,27 +211,17 @@ function runSolvemQuals(solvemImpl, label) {
 
 function main() {
   const root = path.resolve(__dirname, '..')
-  const utilPath = path.join(root, 'util.js')
-  const geminiPath = path.join(root, 'gemini-solver.js')
+  const csolverPath = path.join(root, 'csolver.js')
 
-  const utilCtx = makeContext()
-  loadScriptIntoContext(utilPath, utilCtx)
+  const ctx = makeContext()
+  loadScriptIntoContext(csolverPath, ctx)
 
-  assert.equal(typeof utilCtx.solvem, 'function', 'util.js should define solvem')
+  assert.equal(typeof ctx.solvem, 'function', 'csolver.js should define solvem')
 
-  const geminiCtx = makeContext()
-  loadScriptIntoContext(geminiPath, geminiCtx)
+  const res = runSolvemQuals(ctx.solvem, 'csolver.js solvem')
+  console.log(res.message)
 
-  assert.equal(typeof geminiCtx.solvem, 'function', 'gemini-solver.js should define solvem')
-
-  const utilRes = runSolvemQuals(utilCtx.solvem, 'util.js solvem')
-  console.log(utilRes.message)
-
-  const geminiRes = runSolvemQuals(geminiCtx.solvem, 'gemini-solver.js solvem')
-  console.log(geminiRes.message)
-
-  if (!utilRes.ok) process.exitCode = 1
-  if (!geminiRes.ok) process.exitCode = 1
+  if (!res.ok) process.exitCode = 1
 }
 
 main()

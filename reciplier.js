@@ -1,5 +1,5 @@
 // =============================================================================
-// Utility Functions (TODO: move to util.js?)
+// Utility Functions
 // =============================================================================
 
 function $(id) { return document.getElementById(id) }
@@ -26,6 +26,35 @@ function formatNum(num) {
   let s = num.toFixed(4).replace(/\.?0+$/, '')
   if (s === '-0') s = '0'
   return s
+}
+
+// =============================================================================
+// Debug Logging for Failed Solves (Future Work Item 14)
+// =============================================================================
+
+// Log a failed solve to console in qual format and Mathematica syntax
+function logFailedSolve(eqns, seedValues, solvedValues) {
+  // Format as qual test case
+  const eqnsStr = JSON.stringify(eqns)
+  const seedStr = JSON.stringify(seedValues)
+  const solvedStr = JSON.stringify(solvedValues)
+  console.log(`// Failed solve - qual format:`)
+  console.log(`solvem(${eqnsStr}, ${seedStr})`)
+  console.log(`// Solver returned: ${solvedStr}`)
+
+  // Format as Mathematica syntax
+  // Each equation [a, b, c] becomes constraints a == b, b == c
+  const constraints = []
+  for (const eqn of eqns) {
+    for (let i = 0; i < eqn.length - 1; i++) {
+      const left = String(eqn[i]).replace(/\*/g, ' ').replace(/\^/g, '^')
+      const right = String(eqn[i + 1]).replace(/\*/g, ' ').replace(/\^/g, '^')
+      constraints.push(`${left} == ${right}`)
+    }
+  }
+  const vars = Object.keys(seedValues).sort()
+  console.log(`// Mathematica syntax:`)
+  console.log(`Solve[{${constraints.join(', ')}}, {${vars.join(', ')}}]`)
 }
 
 // =============================================================================
@@ -185,50 +214,11 @@ function parseCell(cell) {
   }
 }
 
-/*
-// Add nonce cvars to cells that don't have them, and build ceqn
-function preprocessLabels(cells) {
-  let nonceCounter = 1
-  return cells.map(cell => {
-    let cvar = cell.cvar
-    let isNonce = false
-
-    if (cvar === null) {
-      cvar = `_var${String(nonceCounter++).padStart(3, '0')}`
-      isNonce = true
-    }
-
-    // Build ceqn: cvar followed by all expressions (per spec)
-    const ceqn = [cvar, ...cell.expressions]
-
-    return {
-      ...cell,
-      cvar,
-      ceqn,
-      isNonce,
-      // Keep label as alias for backward compatibility during refactor
-      label: cvar
-    }
-  })
-}
-*/
-
 // =============================================================================
 // Symbol Table and Validation
 // =============================================================================
 
-// Find all variable names referenced in an expression
-// Works on the ORIGINAL expression (before preval transform) to preserve variable names
-function findVariables(expr) {
-  if (!expr || expr.trim() === '') return new Set()
-  
-  const reserved = new Set(['sqrt', 'floor', 'ceil', 'round', 'min', 'max', 
-    'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'exp', 'abs',
-    'unixtime'])
-  
-  const matches = expr.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || []
-  return new Set(matches.filter(v => !reserved.has(v)))
-}
+// findVariables is now provided by csolver.js
 
 // Build symbol table from parsed cells
 function buildSymbolTable(cells) {
@@ -331,7 +321,9 @@ function contradictionsForEqns(eqns, values) {
     if (results.some(r => r === null)) continue
 
     const first = results[0]
-    const tolerance = Math.abs(first) * 1e-6 + 1e-6
+    // Tolerance must be >= display precision (4 decimal places) to avoid
+    // showing contradictions like "1.4023 ≠ 1.4023"
+    const tolerance = Math.abs(first) * 1e-4 + 1e-4
     for (let i = 1; i < results.length; i++) {
       if (Math.abs(results[i] - first) > tolerance) {
         const exprStr = eqn.join(' = ')
@@ -387,7 +379,7 @@ function buildInitialValues(cells) {
 }
 
 // Compute initial values for all variables using solvem()
-function computeInitialValues(cells, symbols) {
+function computeInitialValues(cells) {
   const errors = []
 
   // Step 1: Solve the template as written (including constants).
@@ -395,7 +387,7 @@ function computeInitialValues(cells, symbols) {
   const seedValues = buildInitialSeedValues(cells)
   let values
   try {
-    values = solvemAss(eqns, seedValues)
+    values = solvem(eqns, seedValues).ass
   } catch (e) {
     errors.push(String(e && e.message ? e.message : e))
     values = { ...seedValues }
@@ -403,6 +395,7 @@ function computeInitialValues(cells, symbols) {
 
   const sat = eqnsSatisfied(eqns, values)
   if (!sat) {
+    logFailedSolve(eqns, seedValues, values)
     errors.push(...contradictionsForEqns(eqns, values))
   }
 
@@ -412,154 +405,6 @@ function computeInitialValues(cells, symbols) {
 // =============================================================================
 // Constraint Solver
 // =============================================================================
-
-// The ONE solver function: find value of varName such that expr evaluates to target
-// Tries smart guesses first (handles non-monotonic cases like c^2), then binary search
-function solve(expr, varName, target, values) {
-  const test = { ...values }
-  const tol = Math.abs(target) * 1e-9 + 1e-9
-  
-  // Helper to check if a guess works
-  function tryGuess(guess) {
-    if (!isFinite(guess)) return null
-    test[varName] = guess
-    const r = vareval(expr, test)
-    if (!r.error && isFinite(r.value) && Math.abs(r.value - target) < tol) {
-      return guess
-    }
-    return null
-  }
-  
-  // Smart guesses - handles non-monotonic cases like x^2 = 25 -> try sqrt(25) = 5
-  const guesses = [
-    target,                              // direct
-    Math.sqrt(Math.abs(target)),         // for squared expressions
-    -Math.sqrt(Math.abs(target)),        // negative root
-    Math.cbrt(target),                   // for cubed expressions  
-    1, 0, -1,                            // common values
-    target / 2, target * 2,              // nearby
-  ]
-  
-  // Prefer positive solutions (try positive guesses first)
-  for (const g of guesses) {
-    if (g >= 0) {
-      const result = tryGuess(g)
-      if (result !== null) return result
-    }
-  }
-  for (const g of guesses) {
-    if (g < 0) {
-      const result = tryGuess(g)
-      if (result !== null) return result
-    }
-  }
-  
-  // Binary search as fallback (for monotonic expressions)
-  let lo = 0, hi = 1000
-  
-  // Find valid bounds
-  for (let scale = 1; scale < 1e10; scale *= 10) {
-    test[varName] = scale
-    const hiRes = vareval(expr, test)
-    test[varName] = -scale  
-    const loRes = vareval(expr, test)
-    
-    if (!hiRes.error && !loRes.error) {
-      if ((hiRes.value - target) * (loRes.value - target) <= 0) {
-        lo = -scale
-        hi = scale
-        break
-      }
-    }
-    
-    test[varName] = 0
-    const zeroRes = vareval(expr, test)
-    if (!hiRes.error && !zeroRes.error) {
-      if ((hiRes.value - target) * (zeroRes.value - target) <= 0) {
-        lo = 0
-        hi = scale
-        break
-      }
-    }
-  }
-  
-  // Binary search
-  for (let i = 0; i < 60; i++) {
-    const mid = (lo + hi) / 2
-    test[varName] = mid
-    const r = vareval(expr, test)
-    if (r.error) return null
-    
-    if (Math.abs(r.value - target) < tol) return mid
-    
-    test[varName] = lo
-    const loRes = vareval(expr, test)
-    if (loRes.error) return null
-    
-    if ((loRes.value - target) * (r.value - target) > 0) {
-      lo = mid
-    } else {
-      hi = mid
-    }
-  }
-
-  // Verify the result is actually close to target before returning
-  const finalVal = (lo + hi) / 2
-  test[varName] = finalVal
-  const finalRes = vareval(expr, test)
-  if (finalRes.error || Math.abs(finalRes.value - target) > Math.abs(target) * 0.01 + 0.01) {
-    return null  // Couldn't find a valid solution
-  }
-  return finalVal
-}
-
-// Find a constraint involving varName and solve for it
-// Uses ceqn which includes cvar at index 0
-/*
-function solveFromConstraints(varName, cells, values) {
-  for (const cell of cells) {
-    if (!cell.hasConstraint) continue  // Only look at cells with actual constraints
-
-    // Find expressions with and without the variable
-    // Skip ceqn[0] which is the cvar (nonce variable)
-    let targetExpr = null, solveExpr = null
-    for (let i = 1; i < cell.ceqn.length; i++) {
-      const expr = cell.ceqn[i]
-      const vars = findVariables(expr)
-      if (vars.has(varName)) {
-        solveExpr = expr
-      } else if (!targetExpr) {
-        targetExpr = expr
-      }
-    }
-
-    if (!solveExpr) continue // Variable not in this constraint
-
-    // Get target value - either from expression or from cell's value
-    let targetValue = null
-    if (targetExpr) {
-      // Check all other variables have values
-      const allVars = findVariables(targetExpr)
-      if (![...allVars].every(v => values[v] !== undefined)) continue
-      // Evaluate target expression
-      const targetRes = vareval(targetExpr, values)
-      if (targetRes.error || !isFinite(targetRes.value)) continue
-      targetValue = targetRes.value
-    } else if (values[cell.cvar] !== undefined) {
-      // Use cell's current value (from bare number or prior solving) as target
-      targetValue = values[cell.cvar]
-    } else {
-      continue // No target available
-    }
-
-    // Solve
-    const result = solve(solveExpr, varName, targetValue, values)
-    if (result !== null) return result
-  }
-  return null
-}
-
-*/
 
 // Check if initial values contradict any constraints (fail loudly per Anti-Postel)
 // Skip checking constraints that involve variables with empty expressions (those need solving)
@@ -611,7 +456,9 @@ function checkInitialContradictions(cells, values, emptyExprVars) {
 
       // Check if all results are approximately equal
       const first = results[0]
-      const tolerance = Math.abs(first) * 1e-6 + 1e-6
+      // Tolerance must be >= display precision (4 decimal places) to avoid
+      // showing contradictions like "1.4023 ≠ 1.4023"
+      const tolerance = Math.abs(first) * 1e-4 + 1e-4
       for (let i = 1; i < results.length; i++) {
         if (Math.abs(results[i] - first) > tolerance) {
           // TODO: only count expressions from the urtext, not the cvar
@@ -658,133 +505,6 @@ function getViolatedCellIds(cells, values) {
   }
   return violatedIds
 }
-
-/*
-
-// Check constraints for solver purposes (only cells with explicit constraints like a=b)
-// Used by solveConstraints to know which constraints to try to satisfy
-function checkConstraints(cells, values) {
-  const violations = []
-  const tol = 1e-9
-
-  for (const cell of cells) {
-    // Only check cells that actually have constraints (multiple expressions or expr=number)
-    if (!cell.hasConstraint) continue
-
-    // Skip ceqn[0] (the cvar/nonce) - only check actual expressions in ceqn[1:]
-    const exprs = cell.ceqn.slice(1)
-    if (exprs.length < 2) continue  // Need at least 2 expressions to compare
-
-    const results = exprs.map(expr => {
-      const r = vareval(expr, values)
-      return r.error ? null : r.value
-    })
-
-    if (results.some(r => r === null)) {
-      violations.push({ cell, message: 'Evaluation error' })
-      continue
-    }
-
-    const first = results[0]
-    const tolerance = Math.abs(first) * tol + tol
-    for (let i = 1; i < results.length; i++) {
-      if (Math.abs(results[i] - first) > tolerance) {
-        violations.push({ cell, message: `${formatNum(first)} ≠ ${formatNum(results[i])}` })
-        break
-      }
-    }
-  }
-  return violations
-}
-
-// Solve constraints by adjusting unfixed variables
-// Uses ceqn which includes cvar at index 0
-function solveConstraints(cells, values, fixedVars, changedVar) {
-  const newValues = { ...values }
-
-  const cellByCvar = new Map(cells.map(cell => [cell.cvar, cell]))
-
-  function isEmptyExprVar(varName) {
-    const cell = cellByCvar.get(varName)
-    if (!cell) return false
-    // Empty if ceqn only has cvar and no other expressions
-    if (cell.ceqn.length <= 1) return true
-    const expr = cell.ceqn[1]  // First expression after cvar
-    return !expr || expr.trim() === ''
-  }
-
-  function varsInConstraintInOrder(cell) {
-    const vars = []
-    const seen = new Set()
-    for (const expr of cell.ceqn) {
-      for (const v of findVariables(expr)) {
-        if (seen.has(v)) continue
-        seen.add(v)
-        vars.push(v)
-      }
-    }
-    return vars
-  }
-
-  for (let pass = 0; pass < 10; pass++) {
-    const violations = checkConstraints(cells, newValues)
-    if (violations.length === 0) break
-
-    let madeProgress = false
-    for (const { cell } of violations) {
-      if (!cell.hasConstraint) continue  // Only solve cells with actual constraints
-
-      // Find all variables and which are adjustable
-      const adjustable = varsInConstraintInOrder(cell)
-        .filter(v => !fixedVars.has(v) && v !== changedVar)
-        .sort((a, b) => Number(isEmptyExprVar(b)) - Number(isEmptyExprVar(a)))
-      if (adjustable.length === 0) continue
-
-      const violationsBefore = checkConstraints(cells, newValues)
-      const violationCountBefore = violationsBefore.length
-
-      for (const varToSolve of adjustable) {
-        // Find target (expression without varToSolve) and solve expression (one that contains varToSolve)
-        // Skip ceqn[0] which is the cvar - we want actual expressions
-        let targetExpr = null, solveExpr = null
-
-        for (let i = 1; i < cell.ceqn.length; i++) {
-          const expr = cell.ceqn[i]
-          const vars = findVariables(expr)
-          if (vars.has(varToSolve)) {
-            if (!solveExpr) solveExpr = expr
-          } else if (!targetExpr) {
-            targetExpr = expr
-          }
-        }
-
-        if (!targetExpr || !solveExpr) continue
-
-        const targetRes = vareval(targetExpr, newValues)
-        if (targetRes.error) continue
-
-        const oldVal = newValues[varToSolve]
-        const newVal = solve(solveExpr, varToSolve, targetRes.value, newValues)
-        if (newVal === null) continue
-
-        const candidateValues = { ...newValues, [varToSolve]: newVal }
-        const violationCountAfter = checkConstraints(cells, candidateValues).length
-        if (violationCountAfter < violationCountBefore) {
-          newValues[varToSolve] = newVal
-          madeProgress = true
-          break
-        }
-
-        newValues[varToSolve] = oldVal
-      }
-    }
-
-    if (!madeProgress) break
-  }
-
-  return newValues
-}
-*/
 
 // =============================================================================
 // State Management
@@ -842,7 +562,7 @@ function parseRecipe() {
   const { symbols, errors: symbolErrors } = buildSymbolTable(cells)
   
   // Compute initial values (includes template satisfiability check)
-  const { values, errors: valueErrors } = computeInitialValues(cells, symbols)
+  const { values, errors: valueErrors } = computeInitialValues(cells)
 
   const allErrors = [...syntaxErrors, ...symbolErrors, ...valueErrors]
 
@@ -1075,16 +795,20 @@ function solveAndApply({
   const seedValues = { ...state.values, ...(seedOverrides || {}) }
 
   let eqns = buildInteractiveEqns(editedCellId, editedValue)
-  let solved = solvemAss(eqns, seedValues)
+  let solved = solvem(eqns, seedValues).ass
   let sat = eqnsSatisfied(eqns, solved)
   let didFallback = false
 
   if (!sat && allowFallbackWithoutEditedConstraint && editedCellId !== null) {
     eqns = buildInteractiveEqns(null, null)
     const fallbackSeed = fallbackSeedValues ? { ...fallbackSeedValues } : { ...state.values }
-    solved = solvemAss(eqns, fallbackSeed)
+    solved = solvem(eqns, fallbackSeed).ass
     sat = eqnsSatisfied(eqns, solved)
     didFallback = true
+  }
+
+  if (!sat) {
+    logFailedSolve(eqns, seedValues, solved)
   }
 
   setSolveBannerFromSatisfaction(sat)
@@ -1236,54 +960,6 @@ function handleFieldInput(e) {
     preserveEditedCvalOnFallback,
   })
 }
-
-/*
-// Recompute all field values based on current variable values (mutates state.values)
-function recomputeAllValues() {
-  state.values = recomputeValues(state.cells, state.values)
-}
-
-// Pure version: recompute derived values and return new values object
-// Uses ceqn where [0] is cvar and [1:] are expressions
-// skipVars: optional Set of cvars that should not be recomputed (user-edited vars)
-function recomputeValues(cells, values, skipVars = new Set()) {
-  const newValues = { ...values }
-
-  // Multiple passes to handle dependencies
-  for (let pass = 0; pass < 10; pass++) {
-    let changed = false
-
-    for (const cell of cells) {
-      // Don't recompute user-edited variables - their values should stick
-      if (skipVars.has(cell.cvar)) continue
-
-      // ceqn[1] is the first expression (ceqn[0] is cvar)
-      if (cell.ceqn.length < 2) continue
-      const expr = cell.ceqn[1]
-      if (!expr || expr.trim() === '') continue
-
-      const vars = findVariables(expr)
-
-      // If all variables are defined, recompute this value
-      const allDefined = [...vars].every(v => newValues[v] !== undefined)
-      if (allDefined && vars.size > 0) {
-        const result = vareval(expr, newValues)
-        if (!result.error && isFinite(result.value)) {
-          const oldVal = newValues[cell.cvar]
-          if (oldVal === undefined || Math.abs(result.value - oldVal) > 1e-10) {
-            newValues[cell.cvar] = result.value
-            changed = true
-          }
-        }
-      }
-    }
-
-    if (!changed) break
-  }
-
-  return newValues
-}
-*/
 
 function handleFieldBlur(e) {
   const blurredCellId = e.target.dataset.cellId

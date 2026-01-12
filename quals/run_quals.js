@@ -8,6 +8,7 @@ Usage:
 */
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const path = require('node:path')
 const puppeteer = require('puppeteer')
 
@@ -80,13 +81,17 @@ async function main() {
   try {
     await page.goto(fileUrl(path.join(__dirname, '..', 'index.html')))
 
+    // Inject browser quals script
+    const browserQualsCode = fs.readFileSync(path.join(__dirname, 'browser_quals.js'), 'utf8')
+    await page.evaluate(browserQualsCode)
+
     // Qual: help text includes Calca.io link
     const hasCalcaLink = await page.$eval('a[href="https://calca.io"]', el => !!el)
     assert.equal(hasCalcaLink, true)
 
-    // Qual: util.js runQuals() passes
-    const utilQualsResult = await page.evaluate(() => runQuals())
-    assert.equal(utilQualsResult, 'All quals passed!')
+    // Qual: browser_quals.js runQuals() passes
+    const browserQualsResult = await page.evaluate(() => runQuals())
+    assert.equal(browserQualsResult, 'All quals passed!')
 
     // Quals: every recipe in dropdown loads sanely
     await page.waitForSelector('#recipeSelect', { visible: true })

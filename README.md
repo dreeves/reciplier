@@ -151,10 +151,10 @@ expression using a given assignment of the variables referenced in the
 expression. For example, `vareval('2x+y', {x: 3, y: 1})` returns 7. If the eval
 fails to return a number, `vareval` returns null.
 
-Another helper function we need is `varparse` which takes an expression returns
-the list of variables used in it. Also `constant` which just checks if an
-expression evals to a number using `vareval` with an empty hash for the variable
-assignments.
+Another helper function we need is `varparse` which takes an expression and
+returns the list of variables used in it. Also `isconstant` which just checks if
+an expression evals to a number using `vareval` with an empty hash for the
+variable assignments.
 
 Finally, the `solvem` function takes a list of equations and a hash of variables
 with initial numerical assignments (as in `vareval` except that for `solvem`,
@@ -450,8 +450,6 @@ guess that's turning this thing into a whole templating engine like ERB.
 
 11. Support arithmetic in the fields, not just the template.
 
-12. Refactor: Put the constraint solver in csolver.js
-
 13. Kitchen-sink solver: Try as many solvers as we can scrounge up. The outer
 solvem function can call out to each solver and if any return a satisfying 
 assignment, Bob is one's uncle. The beauty of NP-complete problems is it's easy
@@ -468,6 +466,7 @@ Solve[{c == 50, a == 3x, b == 4x, 25 == a^2 + b^2 == c^2}, {c, a, b, x}]
 what's in the recipe template text area. PS: I fixed that, so now maybe we can
 just ditch the Blank one.
 
+16. Show a spinner or something while searching for a solution.
 
 SCRATCH AREA:
 
@@ -488,3 +487,20 @@ Replicata:
 Expectata: That the end date changes.
 
 Resultata: "No solution (try unfreezing cells)" and the tfin field is red.
+
+
+one of the kitchen sink solvers must be way too slow. everything's laggy :(
+is it the gradient descent solver? do all quals still pass without that one?
+
+also i'm seeing this:
+
+Contradiction: {A^2 + B^2 = C^2} evaluates to 1.4023 ≠ 1.4023
+
+```
+Scaled by a factor of x={x=1}.
+
+Roll out dough into a right triangle with legs of length a={A = a*x} and b={B = b*x} and hypotenuse c={C = c*x}.
+Then eat it.
+
+Sanity check: {A}^2 + {B}^2 = {A^2} + {B^2} = {A^2 + B^2 = C^2}
+{a^2 + b^2 = c^2}
