@@ -1,6 +1,15 @@
 // csolver.js - Constraint Solver for Reciplier
 // See README.md for the spec of this interface.
 
+/* 
+Kitchen-sink solver: Try as many solvers as we can scrounge up. The outer
+solvem function can call out to each solver and if any return a satisfying 
+assignment, Bob is one's uncle. The beauty of NP-complete problems is it's easy
+to check candidate solutions. 
+
+Idea: keep track of which sub-solvers give valid solutions.
+*/
+
 // =============================================================================
 // preval: Preprocess a math expression string so we can eval it as JavaScript
 // =============================================================================
@@ -94,6 +103,11 @@ function findVariables(expr) {
 
 function varparse(expr) {
   return [...findVariables(expr)].sort()
+}
+
+function isbarevar(expr) {
+  if (typeof expr !== 'string') return false
+  return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(expr.trim())
 }
 
 // =============================================================================
@@ -367,10 +381,11 @@ function solvemPrimary(eqns, vars) {
   const tol = 1e-6
   const absTol = 1e-12
 
-  function isSimpleVar(expr) {
-    if (typeof expr !== 'string') return false
-    return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(expr.trim())
-  }
+  // NOTE: `isSimpleVar` is redundant now that we have `isbarevar`.
+  // Safe to delete if nothing references it.
+  // function isSimpleVar(expr) {
+  //   return isbarevar(expr)
+  // }
 
   function evalExpr(expr) {
     if (typeof expr === 'number') return { value: expr, error: null }
@@ -386,7 +401,7 @@ function solvemPrimary(eqns, vars) {
   for (const eqn of eqns) {
     if (eqn.some(e => typeof e === 'number')) {
       for (const e of eqn) {
-        if (isSimpleVar(e)) constrained.add(e)
+        if (isbarevar(e)) constrained.add(e)
       }
     }
   }
@@ -398,7 +413,7 @@ function solvemPrimary(eqns, vars) {
       if (typeof term !== 'string') continue
       const t = term.trim()
       if (t === '') continue
-      if (i === 0 && isSimpleVar(t)) continue
+      if (i === 0 && isbarevar(t)) continue
       for (const v of findVariables(t)) {
         usesAsInput.set(v, (usesAsInput.get(v) || 0) + 1)
       }
@@ -411,7 +426,7 @@ function solvemPrimary(eqns, vars) {
     const n = eqn.find(e => typeof e === 'number')
     if (typeof n !== 'number') continue
     for (const e of eqn) {
-      if (isSimpleVar(e) && !literalPinned.has(e)) {
+      if (isbarevar(e) && !literalPinned.has(e)) {
         literalPinned.set(e, n)
       }
     }
@@ -423,7 +438,7 @@ function solvemPrimary(eqns, vars) {
   // Singletons
   const singletons = new Map()
   for (const eqn of eqns) {
-    if (eqn.length === 1 && isSimpleVar(eqn[0]) && isKnown(eqn[0])) {
+    if (eqn.length === 1 && isbarevar(eqn[0]) && isKnown(eqn[0])) {
       singletons.set(eqn[0], values[eqn[0]])
     }
   }
@@ -472,8 +487,8 @@ function solvemPrimary(eqns, vars) {
 
   function isDefinitionPair(eqn) {
     return eqn.length === 2 &&
-      typeof eqn[0] === 'string' && isSimpleVar(eqn[0]) &&
-      typeof eqn[1] === 'string' && !isSimpleVar(eqn[1])
+      typeof eqn[0] === 'string' && isbarevar(eqn[0]) &&
+      typeof eqn[1] === 'string' && !isbarevar(eqn[1])
   }
 
   const sortedEqns = [...eqns].sort((a, b) => {
@@ -489,8 +504,8 @@ function solvemPrimary(eqns, vars) {
       if (eqn.length !== 2) continue
       const [lhs, rhs] = eqn
 
-      if (!isSimpleVar(lhs)) continue
-      if (typeof rhs !== 'string' || isSimpleVar(rhs)) continue
+      if (!isbarevar(lhs)) continue
+      if (typeof rhs !== 'string' || isbarevar(rhs)) continue
       if (!isKnown(lhs)) continue
 
       const rhsVars = findVariables(rhs)
@@ -517,13 +532,13 @@ function solvemPrimary(eqns, vars) {
       if (typeof expr === 'number') return { value: expr, isTrustworthy: true, isStable: true, stableNonSingleton: true }
     }
     for (const expr of eqn) {
-      if (typeof expr === 'string' && isSimpleVar(expr) && trustworthy.has(expr)) {
+      if (typeof expr === 'string' && isbarevar(expr) && trustworthy.has(expr)) {
         return { value: values[expr], isTrustworthy: true, isStable: true, stableNonSingleton: true }
       }
     }
     if (eqn.length === 2) {
       for (const expr of eqn) {
-        if (typeof expr === 'string' && isSimpleVar(expr) && (stableDerived.has(expr) || solvedFromStableThisPass.has(expr))) {
+        if (typeof expr === 'string' && isbarevar(expr) && (stableDerived.has(expr) || solvedFromStableThisPass.has(expr))) {
           return { value: values[expr], isTrustworthy: false, isStable: true, stableNonSingleton: true }
         }
       }
@@ -531,7 +546,7 @@ function solvemPrimary(eqns, vars) {
     let bestStable = null
     let bestStableScore = -1
     for (const expr of eqn) {
-      if (typeof expr !== 'string' || isSimpleVar(expr)) continue
+      if (typeof expr !== 'string' || isbarevar(expr)) continue
       const vars = findVariables(expr)
       if (vars.size === 0) continue
       if (![...vars].every(v => isStable(v))) continue
@@ -549,25 +564,25 @@ function solvemPrimary(eqns, vars) {
     }
     if (bestStable !== null) return bestStable
     for (const expr of eqn) {
-      if (typeof expr === 'string' && isSimpleVar(expr) &&
+      if (typeof expr === 'string' && isbarevar(expr) &&
           (trustworthy.has(expr) || stableDerived.has(expr) || solvedFromStableThisPass.has(expr))) {
         return { value: values[expr], isTrustworthy: trustworthy.has(expr), isStable: true, stableNonSingleton: true }
       }
     }
     for (const expr of eqn) {
-      if (typeof expr === 'string' && isSimpleVar(expr) && isKnown(expr)) {
+      if (typeof expr === 'string' && isbarevar(expr) && isKnown(expr)) {
         return { value: values[expr], isTrustworthy: false, stableNonSingleton: false }
       }
     }
     for (const expr of eqn) {
-      if (typeof expr === 'string' && !isSimpleVar(expr)) {
+      if (typeof expr === 'string' && !isbarevar(expr)) {
         const r = evalExpr(expr)
         if (!r.error && isFinite(r.value) && r.value !== null) {
           return { value: r.value, isTrustworthy: false, stableNonSingleton: false }
         }
       }
     }
-    if (eqn.some(e => typeof e === 'string' && isSimpleVar(e))) {
+    if (eqn.some(e => typeof e === 'string' && isbarevar(e))) {
       return { value: 1, isTrustworthy: false, isStable: false, stableNonSingleton: false }
     }
     return null
@@ -606,7 +621,7 @@ function solvemPrimary(eqns, vars) {
       for (const expr of eqn) {
         if (typeof expr === 'number') continue
 
-        if (isSimpleVar(expr)) {
+        if (isbarevar(expr)) {
           if (literalPinned.has(expr)) continue
           if (!eqnHasLiteral && constrained.has(expr) && isKnown(expr) && values[expr] !== target) continue
           if (!isKnown(expr) || values[expr] !== target) {
@@ -778,10 +793,10 @@ function solvemPrimary(eqns, vars) {
     for (const eqn of eqns) {
       if (eqn.length === 2) {
         const [e1, e2] = eqn
-        if (isSimpleVar(e1) && isSimpleVar(e2)) {
+        if (isbarevar(e1) && isbarevar(e2)) {
           copies.push([e1, e2])
         }
-        if (isSimpleVar(e1) && typeof e2 === 'string' && !isSimpleVar(e2)) {
+        if (isbarevar(e1) && typeof e2 === 'string' && !isbarevar(e2)) {
           const vars = findVariables(e2)
           if (vars.size === 1) {
             const root = [...vars][0]
@@ -790,7 +805,7 @@ function solvemPrimary(eqns, vars) {
             }
           }
         }
-        if (isSimpleVar(e2) && typeof e1 === 'string' && !isSimpleVar(e1)) {
+        if (isbarevar(e2) && typeof e1 === 'string' && !isbarevar(e1)) {
           const vars = findVariables(e1)
           if (vars.size === 1) {
             const root = [...vars][0]
@@ -830,7 +845,7 @@ function solvemPrimary(eqns, vars) {
         for (const eqn of eqns) {
           if (eqn.length < 2) continue
           const head = eqn[0]
-          if (typeof head !== 'string' || !isSimpleVar(head)) continue
+          if (typeof head !== 'string' || !isbarevar(head)) continue
           if (head === root) continue
           if (constrained.has(head)) continue
 
@@ -880,7 +895,7 @@ function solvemPrimary(eqns, vars) {
         for (const eqn of eqns) {
           if (eqn.length < 2) continue
           const head = eqn[0]
-          if (typeof head !== 'string' || !isSimpleVar(head)) continue
+          if (typeof head !== 'string' || !isbarevar(head)) continue
           if (head === root) continue
           if (constrained.has(head)) continue
           let bestVal = null

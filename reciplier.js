@@ -411,11 +411,6 @@ function computeInitialValues(cells) {
 function checkInitialContradictions(cells, values, emptyExprVars) {
   const errors = []
 
-  function isBareIdentifierExpr(expr) {
-    const t = (expr || '').trim()
-    return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(t)
-  }
-
   for (const cell of cells) {
     // Only check cells that actually have constraints
     if (cell.hasConstraint) {
@@ -428,7 +423,7 @@ function checkInitialContradictions(cells, values, emptyExprVars) {
         cell.hasNumber &&
         !cell.startsFrozen &&
         cell.ceqn.length === 1 &&
-        isBareIdentifierExpr(cell.ceqn[0])
+        isbarevar(cell.ceqn[0])
 
       if (!isAssignmentSeed && cell.hasConstraint && cell.hasNumber) {
         eqnParts.push(String(cell.cval))
@@ -947,7 +942,7 @@ function handleFieldInput(e) {
   const isDerivedExpressionCell =
     Array.isArray(cell?.ceqn) &&
     cell.ceqn.length === 1 &&
-    !isBareIdentifier(cell.ceqn[0])
+    !isbarevar(String(cell.ceqn[0] || ''))
 
   const allowFallbackWithoutEditedConstraint = isDerivedExpressionCell
   const preserveEditedCvalOnFallback = isDerivedExpressionCell
@@ -1191,7 +1186,7 @@ function updateSliderDisplay() {
   display.textContent = formatNum(x) //+ 'x'
   slider.value = Math.min(10, Math.max(0.1, x))
   
-  // Green thumb when at 1x
+  // Green thumb when at 1x (TODO: be smarter about the tolerance here)
   if (Math.abs(x - 1) < 0.005) {
     slider.classList.add('at-one-x')
   } else {

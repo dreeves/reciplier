@@ -3,9 +3,7 @@
 Hosted at [reciplier.dreev.es](https://reciplier.dreev.es).
 Background at [AGI Friday](https://agifriday.substack.com/p/reciplier).
 
-See also http://doc.dreev.es/recipes which maybe I want to merge with this.
-
-Turns out this is way more general than recipes and is kind of halfway to a 
+It turns out this is way more general than recipes and is kind of halfway to a 
 spreadsheet. Much better than a spreadsheet in some ways. It also subsume's my
 old "calculator calculator" app that I called Sheeq.
 
@@ -24,12 +22,14 @@ a numeric field in the UI and you can edit any of them at will, causing the
 others to change accordingly to keep all the constraints satisfied, like how the
 number of wheels of cheese is always 3 times whatever x is. Or edit the field
 for wheels of cheese to 18 and the number of eggs will automatically change to
-12 and x to 6.
+12 and x to 6. (See the next section on the math syntax Reciplier supports.)
 
 Also you can edit the recipe template and Reciplier reparses it and updates the 
 fields and the rest of the UI keystroke by keystroke as you edit. The template
 defines the UI and you can use that UI and redefine it all on the same page. It
-should make sense when you try it.
+will make sense when you try it.
+
+### Fancier Constraints
 
 Now consider a recipe that has you mix 2 eggs and 3 wheels of cheese in a 9-inch
 diameter pan. Of course that 9 doesn't scale linearly with the ingredients. It's
@@ -63,14 +63,11 @@ diameter, d1, which we set to 9, implying an original radius, r1, of 4.5. The
 new radius, r, after scaling, is implied by the next equality in A's cell.
 Namely, the area must also equal pi times r^2. And, if using a rectangular pan,
 the width and height need to multiply to that same area. The final line in the
-template says what the diagonal of the w-by-h pan must be, per Pythagoras.
+template says what the diagonal of the w-by-h pan must be, per Pythagoras. Phew.
 
 (Side note: Having both {d = 2r} and {r = d/2} is unnecessary. If a variable is
 defined/constrained elsewhere, you can just put it in braces, no equation
 needed. But redundant constraints don't hurt. They're nice sanity checks.)
-
-(Technical note: We support Mathematica-style arithmetic syntax where "2x" means
-"2*x". More on math syntax in the section about the constraint solver.)
 
 (Note on prior art: Embedded Ruby (ERB) syntax has `<% code to just evaluate %>`
 and `<%= code to print the output of %>` and `<%# comments %>`.)
@@ -121,7 +118,28 @@ a slider for scaling the recipe.
 
 As always with Reciplier, changing any field causes the rest to insta-update.
 
-[TODO: put the supported math syntax in its own section]
+## Math Syntax
+
+We support normal JavaScript syntax for expressions, like `2+x*y` with these 
+additions/exceptions:
+
+1. Equality uses single equal signs, `=` not `==`.
+2. We do the thing Mathematica does where you can say `2x` to mean `2*x`. Just
+note that only works for a number followed by a variable, not the other way
+around. So `x2` is just a variable and `x 2` with a space is a syntax error.
+3. Exponentiation is done with `^` but JavaScript's `**` works as well.
+4. Standard functions like sqrt, sin, cos, etc, don't need `Math.` prepended.
+5. We've defined additional custom functions like `unixtime(y, m, d)`.
+
+The idea is to support standard ascii math like `3y+cos(x)/4`.
+
+The variables in an expression must be strings that are valid identifiers in
+JavaScript-like languages, like `x` or `a1` or `some_var`.
+
+Technical note: The `preval` function preprocesses a math expression string so
+we can eval it as JavaScript. It turns `^` into `**`, prepends the `Math.`
+prefix as needed, adds explicit multiplication symbols, etc.
+
 
 ## The Constraint Solver
 
@@ -130,31 +148,20 @@ treats the solver as a black box. Inside the black box is currently an
 abomination cobbled together by Claude and Gemini and GPT. Or it's a work of
 genius, who knows. I just know it works for the use cases I've contrived so far.
 In the future we could swap in something fancier, or call out to Mathematica's
-NSolve or NMinimize or something.
+NSolve or NMinimize or something. In the meantime, we just need to make sure the
+interface to the solver in the code is clean and nice. 
 
-In the meantime, we just need to make sure the interface to the solver in the
-code is clean and nice. For that, and for details about what kind of math
-notation Reciplier supports, read on.
-
-The constraint solver has a few components. First is `preval` which preprocesses
-a math expression string so we can eval it as JavaScript. This includes implicit
-multiplication, like `2x` → `2*x`, exponentiation with `^`, and all the standard
-functions like sqrt, sin, cos, etc, which JavaScript needs to have `Math.`
-prepended to. The idea is to support standard ascii math like `3y+cos(x)/4`.
-
-The variables in an expression must be strings that are valid identifiers in
-JavaScript-like languages, like `x` or `a1` or `some_var`. Note that even though
-we turn `2x` into `2*x`, `x2` is not `x*2`, it's just its own variable.
-
-Next is `vareval` which, after preprocessing with `preval`, evals a math
-expression using a given assignment of the variables referenced in the
-expression. For example, `vareval('2x+y', {x: 3, y: 1})` returns 7. If the eval
-fails to return a number, `vareval` returns null.
+The solver defines a few helper functions. First is `vareval` which, after
+preprocessing with `preval` (described in the previous section on math syntax),
+evals a math expression using a given assignment of values to the variables
+referenced in the expression. For example, `vareval('2x+y', {x: 3, y: 1})`
+returns 7. If the eval fails to return a number, `vareval` returns null.
 
 Another helper function we need is `varparse` which takes an expression and
 returns the list of variables used in it. Also `isconstant` which just checks if
 an expression evals to a number using `vareval` with an empty hash for the
-variable assignments.
+variable assignments. And `isbarevar` to check if an expression consists solely
+of a variable.
 
 Finally, the `solvem` function takes a list of equations and a hash of variables
 with initial numerical assignments (as in `vareval` except that for `solvem`,
@@ -194,7 +201,14 @@ returns `{ass: {x: 6, y: 7}, zij: [0, 0], sat: true}`
   `{x: 1, a: 1, b: 1, c: 1, v1: 1})` 
 returns `{ass: {x: 1, a: 3, b: 4, c: 5, v1: 25}, zij: [0, 0], sat: true}`
 
-The constraint solver is the core of Reciplier but how it comes up with those
+Optionally, two additional hashes can be passed to `solvem`: An infimum hash
+gives lower bounds for variables, and a supremum hash gives upper bounds. For
+example, if we only want positive values for a Pythagorean triple, we could do
+this: `solvem([['a^2+b^2', 'c^2']], {a: 3, b: 4, c: null}, {c: 0}, {})`.
+The final two arguments default to empty hashes, meaning no constraints on the
+variables.
+
+The constraint solver is the core of Reciplier but how it comes up with its
 satisfying assignments is black magic.
 
 
@@ -220,7 +234,7 @@ Each cell in the recipe template is parsed like so:
 4. Set cval to the constant if there is one, null otherwise.
 5. Set ceqn to the list of non-constant expressions.
 
-## Core Algorithm
+### Core Algorithm
 
 1. Initially we just send everything to solvem as written. Each urtext is parsed
 as an list of expressions, including constants, and we use varparse to get the 
@@ -392,81 +406,114 @@ same value. Like {x = 1 = 2} or {x = 1 = y*z = 1}.
 6. Unknown unknowns: Other errors we haven't thought of yet or ways the template
 file violates any expectations. Anti-Postel FTW.
 
+## Inequalities 
+
+(This hasn't been implemented yet.)
+
+If a cell includes any inequalities then all of the following criteria must be
+met:
+
+* The cell urtext starts with a constant followed by `<` or `<=`. We call this
+  constant the inf (or infimum).
+* The cell urtext ends with a constant preceded by `<` or `<=`. We call this
+  constant the sup (or supremum).
+* After removing the the inf and sup and the adjacent inequality symbols, the
+  urtext is a normal equation with no other inequality symbols.
+* One of the expressions in the urtext is a bare variable.
+* Either inf < sup or, if inf = sup, then both inequalities in the urtext are
+  nonstrict. So you can have `3 <= x <= 3` but not `3 < x <= 3`.
+
+If any of those are not met, we show this error banner:
+
+"Unsupported inequality; see 'Inequalities' in the spec"
+
+
+## Sliders
+
+(Originally we had a single slider, hard-coded for whatever variable was called
+"x". That "x" would appear in three places: above the slider and at the bounds.
+In the current spec, the variable appears just once, above the slider,
+left-aligned. This parenthetical can self-destruct when general sliders are
+implemented.)
+
+For every variable which appears as a bare variable (see `isbarevar` in the 
+Constraint Solver section) in a cell, we create a slider for that variable. Each
+slider is created with a close button in the upper right so the user can dismiss
+sliders they don't want.
+
+If a cell does not include inequalities (see previous section) then default to
+`cval/10` and `cval*10` for the slider bounds.
+
+Above the slider [where we previously show "x:" on the left and the numeric
+value on the right] we show the variable name, a colon, and then the line from
+the template where the variable occurs, with all values filled in, and with the
+value for the slider variable highlighted. If the line is too long, replace the
+beginning and/or end of it with ellipses so it fits nicely
+
+
 ## Future Work
 
 1. Markdown rendering.
 
-2. Instead of making a slider for whatever variable is called "x", make a slider
-for every cell for which the first expression in the urtext is a variable. And
-make it easy to dismiss ones you don't need. Also remove the variable name from
-two of the three places it currently appears in the UI, namely, the bounds of
-the slider. Finally, right above the slider, where we currently show "x:" on the
-left and the numeric value on the right, instead show the variable name, a
-colon, and then the line from the template where the variable occurs, with
-values filled in and with the value for the slider variable highlighted.
-
-2.5 Idea for syntax for specifying the bounds of the sliders (which by default
-can be cvar/10 to cvar*10): {0 < x = 1 < 10}
-
-3. Direct links to recipes. When you select a recipe template from the dropdown,
+2. Direct links to recipes. When you select a recipe template from the dropdown,
 update the query string like "reciplier.dreev.es/?recipe=crepes" using the keys
 in `recipeDropdown`. If the user edits the template, encode the whole thing with
 lz-string in real time like "reciplier.dreev.es/?rawcipe=GARBLEDYGOOK". Also, as
 the user edits fields, append the cvals to the URL as well, like
 "reciplier.dreev.es/?recipe=pyzza&x=3&a=9&b=12&c=15".
 
-4. Crowdsource templates. If the template text area doesn't match one of the 
+3. Crowdsource templates. If the template text area doesn't match one of the 
 existing reciplates (the dropdown shows "Custom Template" in this case) then 
 a buttom becomes clickable that opens a popup that prompts the user to submit 
 their template to be considered for inclusion in the dropdown. Prompt the user
 for a name for their recipe too.
 
-5. Double-clicking to freeze/unfreeze is terrible. For one thing, I double-click
+4. Double-clicking to freeze/unfreeze is terrible. For one thing, I double-click
 cells by muscle memory to highlight the current contents of a field in order to
 overwrite it. Worse, if you don't happen to ever double-click a cell then
 freezing/unfreezing is totally undiscoverable.
 
-6. Bug: "2 x" should parse to "2*x".
+5. Bug: "2 x" should parse to "2*x".
 
-7. Thinking out loud about going more anti-magic: Currently when you edit a
+6. Thinking out loud about going more anti-magic: Currently when you edit a
 field the system just tries changing other variables until something works.
 That's pretty magical. What if instead you could see other fields kind of cross
 themselves out and show the new values implied by your edit? Or, like, if more
 than one cell can change to accommodate your edit you're forced to explicitly
 freeze cells until that's no longer the case?
 
-8. Make it easy to add any utility functions we want available for defining
-cells. I.e., functions or constants that can be referred to in the vareval
-environment. Maybe even have that code available in the UI, unobtrusively so as
-not to clutter the UI for the simple recipe use case.
+7. Make it easy to add any new math functions or other utilities that we want
+available for defining cells. Like how we currently have `unixtime()`. I.e.,
+functions or constants that can be referred to in the vareval environment. Maybe
+even have that code available in the UI, unobtrusively so as not to clutter the
+UI for the simple recipe use case.
 
-9. Is it too weird to define constants via constraints where the constant part
+8. Is it too weird to define constants via constraints where the constant part
 comes first? Syntax like {tau := 6.28} could define a constant and it's just
 uneditable, rendering as normal text, no field. Another option is the idea above
-about utility functions.
+about defining new functions and constants.
 
-10. Then could we support something like {goal_units := "kg"} and then ... I
+9. Then could we support something like {goal_units := "kg"} and then ... I
 guess that's turning this thing into a whole templating engine like ERB.
 
-11. Support arithmetic in the fields, not just the template.
+10. Support arithmetic in the fields, not just the template.
 
-13. Kitchen-sink solver: Try as many solvers as we can scrounge up. The outer
-solvem function can call out to each solver and if any return a satisfying 
-assignment, Bob is one's uncle. The beauty of NP-complete problems is it's easy
-to check candidate solutions. In particular, move the solver currently in 
-gemini-solver.js into a sub-black-box in the solvem() black box. Keep track of
-whether its solution is ever used.
-
-14. Each time solvem returns sat==false, print to the browser console the qual 
-for it. Also print the constraint satisfaction problem in Mathematica syntax so
-I can confirm if it's really true that there's no solution. For example:
+11. Each time solvem returns sat==false, print to the browser console a qual for
+it. Also print the constraint satisfaction problem in Mathematica syntax so I
+can confirm if it's really true that there's no solution. For example:
 Solve[{c == 50, a == 3x, b == 4x, 25 == a^2 + b^2 == c^2}, {c, a, b, x}]
+(Done?)
 
-15. It's kind of buggy-seeming how choosing "Custom Template" doesn't change
+12. It's kind of buggy-seeming how choosing "Custom Template" doesn't change
 what's in the recipe template text area. PS: I fixed that, so now maybe we can
-just ditch the Blank one.
+just ditch the Blank one?
 
-16. Show a spinner or something while searching for a solution.
+13. Show a spinner or something while searching for a solution. (Not currently
+necessary; could be in the future with fancier solvers.)
+
+14. Add more recipes from http://doc.dreev.es/recipes or even make Reciplier the
+master copy for those recipes.
+
 
 SCRATCH AREA:
 
@@ -488,14 +535,6 @@ Expectata: That the end date changes.
 
 Resultata: "No solution (try unfreezing cells)" and the tfin field is red.
 
-
-one of the kitchen sink solvers must be way too slow. everything's laggy :(
-is it the gradient descent solver? do all quals still pass without that one?
-
-also i'm seeing this:
-
-Contradiction: {A^2 + B^2 = C^2} evaluates to 1.4023 ≠ 1.4023
-
 ```
 Scaled by a factor of x={x=1}.
 
@@ -505,19 +544,3 @@ Then eat it.
 Sanity check unscaled: {a}^2 + {b}^2 = {a^2} + {b^2} = {a^2 + b^2 = c^2}
 Sanity check scaled:   {A}^2 + {B}^2 = {A^2} + {B^2} = {A^2 + B^2 = C^2}
 ```
-
-Quals to add:
-
-solvem([["x",1],["A","a*x"],["B","b*x"],["C","c*x"],["A"],["B"],["A^2"],["B^2"],["A^2 + B^2","C^2"]], {"x":1,"A":1,"a":1,"B":1,"b":1,"C":1,"c":1})
-Expected:
-{"x":1,"A":1,"a":1,"B":1,"b":1,"C":1.4142135623730951,"c":1.4142135623730951}
-
-solvem([
-      ['x', 1],
-      ['A', 'a*x'],
-      ['B', 'b*x'],
-      ['C', 'c*x'],
-      ['A^2 + B^2', 'C^2']
-    ], {x: 1, A: null, B: null, C: null, a: null, b: null, c: null})
-Expected:
-{"x":1,"A":1,"a":1,"B":1,"b":1,"C":1.4142135623730951,"c":1.4142135623730951}
