@@ -307,7 +307,7 @@ met:
 
 If any of those are not met, we show this error banner:
 
-"Unsupported inequality; see 'Inequalities' in the spec"
+"Inequalities must start and end with a constant"
 
 
 ## Sliders
