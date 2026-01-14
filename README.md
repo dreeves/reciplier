@@ -288,6 +288,48 @@ status doesn't matter since we're editing it) then the banner says "No solution
 found (try unfreezing cells)". The banner is shown live, while the user is
 typing, i.e., it's recomputed on every keystroke.
 
+## Inequalities 
+
+[TODO: implement this section]
+
+If a cell includes any inequalities then all of the following criteria must be
+met:
+
+* The cell urtext starts with a constant followed by `<` or `<=`. We call this
+  constant the inf (or infimum).
+* The cell urtext ends with a constant preceded by `<` or `<=`. We call this
+  constant the sup (or supremum).
+* After removing the the inf and sup and the adjacent inequality symbols, the
+  urtext is a normal equation with no other inequality symbols.
+* One of the expressions in the urtext is a bare variable.
+* Either inf < sup or, if inf = sup, then both inequalities in the urtext are
+  nonstrict. So you can have `3 <= x <= 3` but not `3 < x <= 3`.
+
+If any of those are not met, we show this error banner:
+
+"Unsupported inequality; see 'Inequalities' in the spec"
+
+
+## Sliders
+
+[TODO: Implement this section. Originally we had a single slider, hard-coded for
+whatever variable was called "x".]
+
+For every variable which appears as a bare variable (see `isbarevar` in the 
+Constraint Solver section) in a cell, we create a slider for that variable. Each
+slider is created with a close button in the upper right so the user can dismiss
+sliders they don't want.
+
+If a cell does not include inequalities (see previous section) then default to
+`cval/10` and `cval*10` for the slider bounds.
+
+Above the slider [where we previously show "x:" on the left and the numeric
+value on the right] we show the variable name, a colon, and then the line from
+the template where the variable occurs, with all values filled in, and with the
+value for the slider variable highlighted. If the line is too long, replace the
+beginning and/or end of it with ellipses so it fits nicely
+
+
 ## Use Cases Beyond Recipes
 
 Consider this, which does exactly what you'd expect:
@@ -406,47 +448,6 @@ same value. Like {x = 1 = 2} or {x = 1 = y*z = 1}.
 6. Unknown unknowns: Other errors we haven't thought of yet or ways the template
 file violates any expectations. Anti-Postel FTW.
 
-## Inequalities 
-
-[TODO: implement this section]
-
-If a cell includes any inequalities then all of the following criteria must be
-met:
-
-* The cell urtext starts with a constant followed by `<` or `<=`. We call this
-  constant the inf (or infimum).
-* The cell urtext ends with a constant preceded by `<` or `<=`. We call this
-  constant the sup (or supremum).
-* After removing the the inf and sup and the adjacent inequality symbols, the
-  urtext is a normal equation with no other inequality symbols.
-* One of the expressions in the urtext is a bare variable.
-* Either inf < sup or, if inf = sup, then both inequalities in the urtext are
-  nonstrict. So you can have `3 <= x <= 3` but not `3 < x <= 3`.
-
-If any of those are not met, we show this error banner:
-
-"Unsupported inequality; see 'Inequalities' in the spec"
-
-
-## Sliders
-
-[TODO: Implement this section. Originally we had a single slider, hard-coded for
-whatever variable was called "x".]
-
-For every variable which appears as a bare variable (see `isbarevar` in the 
-Constraint Solver section) in a cell, we create a slider for that variable. Each
-slider is created with a close button in the upper right so the user can dismiss
-sliders they don't want.
-
-If a cell does not include inequalities (see previous section) then default to
-`cval/10` and `cval*10` for the slider bounds.
-
-Above the slider [where we previously show "x:" on the left and the numeric
-value on the right] we show the variable name, a colon, and then the line from
-the template where the variable occurs, with all values filled in, and with the
-value for the slider variable highlighted. If the line is too long, replace the
-beginning and/or end of it with ellipses so it fits nicely
-
 
 ## Future Work
 
@@ -516,10 +517,16 @@ UI you're trying to interact with never shifts on you.
 
 16. See if this can subsume https://dreeves.github.io/loanwolf/
 
+
+
 SCRATCH AREA:
 
-Brainstorming: 
-* double square brackets could indicate frozen, or a symbol in all caps
+Brainstorming was to indicate an initially frozen field:
+* number first in urtext: {6.28 = tau} or {0 < 6.18 = tau < 7}
+* double curly braces: {{tau = 6.28}}
+* double square brackets: [[tau = 6.28]]
+* symbol in all caps: {TAU = 6.28}
+* colon-equals: {tau := 6.28}
 
 
 Bug report 1:

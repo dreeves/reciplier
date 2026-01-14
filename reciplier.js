@@ -898,9 +898,8 @@ function solveAndApply({
     didFallback = true
   }
 
-  const showAttemptedBanner = didFallback && (preserveEditedCvalOnFallback || !!editedFieldEl)
-  const bannerEqns = showAttemptedBanner ? attemptedEqns : eqns
-  const bannerSat = showAttemptedBanner ? attemptedSat : sat
+  const bannerEqns = didFallback ? attemptedEqns : eqns
+  const bannerSat = didFallback ? attemptedSat : sat
 
   if (!bannerSat) {
     logFailedSolve(bannerEqns, seedValues, solved)
