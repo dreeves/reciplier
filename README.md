@@ -1,3 +1,5 @@
+[This document is strictly human-written and human-edited.]
+
 # Reciplier
 
 Hosted at [reciplier.dreev.es](https://reciplier.dreev.es).
@@ -44,8 +46,7 @@ Here's how we do all that by annotating the recipe template:
 ```
 Mix {2x} eggs and {3x} wheels of cheese in a {d}-inch diameter pan.
 Or a {w}x{h}-inch rectangular pan (with a {z}-inch diagonal) is fine.
-Or any pan as long as its area is {A = x*1/2*tau*r1^2 = 1/2*tau*r^2 = w*h}
-square inches. Heat at 350 degrees.
+Or any pan as long as its area is {A} square inches. Heat at 350 degrees.
 
 This recipe is scaled by a factor of {x = 1}.
 
@@ -54,16 +55,18 @@ Constraints, constants, and sanity checks:
 * The original pan diameter at 1x scale is {9 = d1} (radius {r1 = d1 / 2})
 * Scaled radius is {r = d/2} and scaled diameter is {d = 2r}
 * The squared diagonal of the rectangular pan is {w^2 + h^2 = z^2}
+* The area again is {A = x*1/2*tau*r1^2 = 1/2*tau*r^2 = w*h}
 ```
 
 Any cell that scales linearly is multiplied by x, what we're using in this
 template as the scale variable. The confusing bit is the area, A, which is
 constrained to be x times the _original_ area, which is based on the original
 diameter, d1, which we set to 9, implying an original radius, r1, of 4.5. The
-new radius, r, after scaling, is implied by the next equality in A's cell.
-Namely, the area must also equal pi times r^2. And, if using a rectangular pan,
-the width and height need to multiply to that same area. The final line in the
-template says what the diagonal of the w-by-h pan must be, per Pythagoras. Phew.
+new radius, r, after scaling, is implied by the next expression in A's cell in
+the final line. Namely, the area must also equal pi times r^2 (`1/2*tau*r^2`).
+And, if using a rectangular pan, the width and height need to multiply to that
+same area. The penultimate line in the template says what the diagonal of the
+w-by-h pan must be, per Pythagoras. Phew.
 
 (Side note: Having both {d = 2r} and {r = d/2} is unnecessary. If a variable is
 defined/constrained elsewhere, you can just put it in braces, no equation
@@ -233,6 +236,9 @@ Each cell in the recipe template is parsed like so:
 3. Filter out all constant expressions. If more than one, that's an error.
 4. Set cval to the constant if there is one, null otherwise.
 5. Set ceqn to the list of non-constant expressions.
+
+TODO: Update the above in light of bounds (inf/sup) and colon syntax for
+specifying an expression for the initial cval.
 
 ### Core Algorithm
 
@@ -451,7 +457,8 @@ file violates any expectations. Anti-Postel FTW.
 
 ## Future Work
 
-1. Markdown rendering.
+1. Markdown rendering. So far we respect html comments in rendering reciplates
+but we want to support all markdown + html.
 
 2. Direct links to recipes. When you select a recipe template from the dropdown,
 update the query string like "reciplier.dreev.es/?recipe=crepes" using the keys
@@ -517,16 +524,126 @@ UI you're trying to interact with never shifts on you.
 
 16. See if this can subsume https://dreeves.github.io/loanwolf/
 
+17. Make error messages dismissable. That way if you, say, intentionally make an
+unreferenced variable, maybe in order to have a slider for it, then you get the
+warning but don't have to employ the workaround of adding a dummy cell in an
+html comment in order to suppress the "unreferenced variable" banner.
+
+18. It shouldn't be hard to add a Gaussian elimination solver to the kitchen
+sink in csolver.js, why not.
+
+19. If x is defined implicitly, the slider should still work.
+
+20. Refactor: Use only varparse, not findVariables.
+
+21. The preval function should handle things like `2(a+b)`. And what about 
+`x(a+b)`? That ambiguous between multiplication and a function called `x`. Which
+is why Mathematica uses square brackets for function, which, maybe we want to
+just embrace that? In the meantime, numbers followed by parentheses should be
+treated as multiplication.
+
+22. While we're at it, supporting "23%" to mean 0.23 might be handy. Or maybe we
+want the percent sign to mean mod.
+
+23. When the solver fails and we generate a qual, the version in Mathematica
+syntax is buggy. Eg:
+```
+solvem([["r",0.5],["100*(1-r)"],["100r"],["fmv"],["pay","(1-"],["get"]], {"r":1,"fmv":1,"pay":1,"get":1})
+Solver returned: {"r":0.5,"fmv":1,"pay":1,"get":1}
+Mathematica syntax:
+Solve[{r == 0.5, pay == (1-}, {fmv, get, pay, r}]
+```
+
+## New way to specify initially frozen cells and initial/default cvals
+
+[TODO: not yet implemented and a big refactor]
+
+Background: It was too easy to forget that having a cell like {x+y=0} is not
+actually a constraint unless you freeze the cell, either in the UI or by writing
+it as {0=x+y} in the reciplate. Especially if you put a cell like that in an
+html comment, since then you think of it as purely a constraint because it
+doesn't show up in the UI at all. Claude misguidedly tried fixing this by having
+a special case for cells in html comments, which is an egregious anti-magic
+violation. 
+
+We want to drop the confusing convention of flipping the order of an equation to
+mean that a cell starts frozen. That itself is kind of an anti-magic violation.
+Or a POLA violation since you expect equations to be symmetric. 
+
+Instead we introduce colon syntax (in a previous version of Reciplier we used 
+colons to label cells by associating each cell with a specific variable, but
+that was wrong-headed and now ancient history) for specifying an expression to
+use as the initial/default cval for a cell.
+
+For example, {x: 1} means x is initially unfrozen and not unconstrained, whereas
+{x = 1} means the cell _is_ initially frozen, just by virtue of having a
+constant expression in the list of expressions that are set equal to each other.
+The user can still edit it and, orthogonally, still unfreeze it. Cells like 
+{a+b = 0} are no different. The constant 0 means the cell is initially frozen.
+You can instead specify it as {a+b : 0} and it will start unfrozen. Either way
+the field for the cell will start with a 0 in it. 
+
+If you do something like {x = 1 : 2} that's an error:
+"Initial value for cell {x = 1 : 2} incompatible with constraints"
+But that's fully general. Maybe you have {x : 3} and also have other cells that
+imply x=2. Then you'd get that same error.
+
+The expression after the colon doesn't even need to be a constant. The only
+difference is that if it is a constant, it will be used in the initial call to
+solvem to find a valid assignment of all the variables. If it's a variable
+expression it won't be. But the assignment that comes back from solvem is used
+to then eval the post-colon expression. We run solvem _again_ with those values
+as constraints and give the above error if that's not a valid assignment. Like
+if there are cells {x : 2y} and {6 = y+1} then we make a call to solvem with the
+equations x (an "equation" with just one side, which doesn't do anything but we
+send it anyway to avoid the if-statement) and 6 = y+1 and with x and y
+initialized to null. We get back a valid assignment like x=1, y=5. Using that
+assignment we can eval (with vareval) the post-colon expression for the {x : 2y}
+cell, yielding 10. So on the follow-on call to solvem we send x = 2y and 6 = y+1
+as the equations and with x = 10 and y = 5 as the initial assignments. This 
+echoes back x = 10 and y = 5 as a valid assignment and we're done. Again, the
+failure to echo back the assignment on the second solvem call yields the above
+error about incompatible initial values. 
+
+From that point on, when reciplate is rendered and the user is editing values in
+the fields, the post-colon expression is irrelevant. Again, post-colon
+expressions are only used to get initial numbers to populate the fields, i.e.,
+the initial cvals.
+
+Review:
+* Order never matters for equations.
+* All equations are explicit constraints, at least initially.
+* The user can override that by unfreezing a cell. At that point any constant 
+  expression is removed from the cell's ceqn.
+* Any cell can optionally specify an initial value, using a colon followed by an
+  expression as the last part of the cell's urtext.
+* This makes the distinction nice and clear between constraints and 
+  initial/default cell assignments.
 
 
-SCRATCH AREA:
+What about {0 < x < 9 : 5} vs {0 < x : 5 < 9}? Parsing is a bit messier if we
+allow both so we pick the former. Parsing a cell's urtext means first getting
+the expression after the colon for use as the cval, if present. Then remove the
+colon and everything to the right of it and get the bounds, if present. Remove
+those and, finally, split on "=" to parse the ceqn.
 
-Brainstorming was to indicate an initially frozen field:
+It's an error to have more than one colon in a cell and if a colon appears then
+no equal signs or inequality signs can appear anywhere to the right of it. The
+error texts are:
+* "Only one colon allowed in cell {urtext}"
+* "Initialization value after a colon must be last in cell {urtext}"
+* "Only one expression allowed after colon as initialization value in {urtext}"
+
+
+SCRATCH AREA: ------------------------------------------------------------------
+
+Brainstorming ways to indicate an initially frozen field:
 * number first in urtext: {6.28 = tau} or {0 < 6.18 = tau < 7}
 * double curly braces: {{tau = 6.28}}
 * double square brackets: [[tau = 6.28]]
 * symbol in all caps: {TAU = 6.28}
 * colon-equals: {tau := 6.28}
+* cell has a constant as one of the sides of the equation
 
 
 Bug report 1:
@@ -556,28 +673,7 @@ Replicata:
 Expectata: To see a "no solution" banner.
 
 Resultata:
-⚠️ Syntax error in template: {r*SID}
-
-
-TODO: add qual to ensure this behaves the same with b vs b+0
-```
-Frozen: {5 = a}
-Computed: {b+0}
-Constraint: {10 = a + b}
-```
-
-TODO: doesn't solve for x when you change a, b, and c, even if all but x frozen:
-```
-{a=3}x^2+{b=4}x+{c=-20}=0
-<!-- {a*x^2+b*x+c=0} -->
-x={x}
-```
-
-TODO: fails to find the golden ratio
-```
-{1/phi = phi - 1}
-{phi}
-```
+TODO
 
 
 ```

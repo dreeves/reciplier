@@ -1,26 +1,31 @@
+/* This file is strictly human-written and human-edited */
+
 // Recipe names as they appear in the main dropdown menu. Note that the keys in
 // this hash are (will be) used in the URL query string.
 const recipeDropdown = {
-'crepes':    "Soule-Reeves Crepes",
-'pyzza':     "Pythagorean Triple Pizza",
-'cookies':   "Camelot Chocolate Chip Cookies",
-'shortcake': "Shortcake",
-'simeq':     "Simultaneous Equation Cake",
-'pancakes':  "Pancakes according to Claude",
-'breakaway': "Breakaway Biscuits",
-'biketour':  "Bike Tour Burritos",
-'dial':      "Beeminder Commitment Dial",
-'sugarcalc': "Sugar Calculator aka Junkfoodifier",
-'converter': "Unit Converter",
-'cheesepan': "Cheese Wheels in a Pan aka Geometry Puzzles",
-'test':      "Just Testing",
-'custom':    "Custom Template",
+crepes:    "Soule-Reeves Crepes",
+pyzza:     "Pythagorean Triple Pizza",
+cookies:   "Camelot Chocolate Chip Cookies",
+shortcake: "Shortcake",
+simeq:     "Simultaneous Equation Cake",
+pancakes:  "Pancakes according to Claude",
+breakaway: "Breakaway Biscuits",
+biketour:  "Bike Tour Burritos",
+cheesepan: "Cheese Wheels in a Pan aka Geometry Puzzles",
+quadratic: "Quadratic Quesadillas",
+gratio:    "Golden Ratio Granola",
+dial:      "Beeminder Commitment Dial",
+sugarcalc: "Sugar Calculator aka Junkfoodifier",
+converter: "Unit Converter",
+auction:   "Decision Auction",
+test:      "Just Testing",
+custom:    "Custom Template",
 };
 
-// Recipe templates.
+// Recipe templates aka reciplates (the keys here match those in recipeDropdown)
 const reciplates = {
 // -----------------------------------------------------------------------------
-'crepes': `\
+crepes: `\
 * Eggs: {12x} large
 * Milk: {5.333x} cups = {1.262x} liters = {1302x} grams
 * Flour: {3x} cups = {410x} grams
@@ -34,7 +39,7 @@ Scaled by a factor of {x = 1}
 (Flour notes: We did ~{440x}g for years via packed cups but {360x}g (up to {365x}g) is most likely what the recipe intended. Most recently we tried {420x}g and it worked well so we're trying lower.)
 `,
 // -----------------------------------------------------------------------------
-'pyzza': `\
+pyzza: `\
 Scaled by a factor of x={x = 1}.
 
 Roll out dough into a right triangle with legs of length a={a = 3x} and b={b = 4x} and hypotenuse c={c}.
@@ -43,7 +48,7 @@ Then eat it.
 Sanity check: {a}^2 + {b}^2 = {a^2} + {b^2} = {a^2 + b^2 = c^2}
 `,
 // -----------------------------------------------------------------------------
-'cookies': `\
+cookies: `\
 * {1x} cup ({200x}g) granulated sugar
 * {1x} cup ({206x}g) brown sugar (up to {220x}g)
 * {1x} cup ({227x}g) butter, softened
@@ -65,14 +70,14 @@ Yield: {54x} cookies, 117 cal (17g carb) per cookie.
 Scaled by a factor of {x = 1 }
 `,
 // -----------------------------------------------------------------------------
-'simeq': `\
+simeq: `\
 2*{x = 6} + 3*{y} = {33 = 2x + 3y}
 5*{x} - 4*{y} = {2 = 5x - 4y}
 
 (Expected solution: x=6, y=7)
 `,
 // -----------------------------------------------------------------------------
-'shortcake': `\
+shortcake: `\
 Preheat oven to 325°F. Line bottom of 9x{9x}-inch pan with parchment paper.
 
 * {2x}    C   flour (can do half/half cake flour)
@@ -94,7 +99,7 @@ Bake 30 to 40 minutes @ 325°F
 Scaled by a factor of {x = 1}
 `,
 // -----------------------------------------------------------------------------
-'pancakes': `\
+pancakes: `\
 {1x} cup all-purpose flour
 {2x} tablespoons sugar
 {2x} teaspoons baking powder
@@ -111,7 +116,7 @@ Makes {8x} pancakes, 120 calories each.
 Scaled by a factor of {x} <!-- prius: x:1 -->
 `,
 // -----------------------------------------------------------------------------
-'breakaway': `\
+breakaway: `\
 The riders in the break have a {1 = m}:{30 = s}s gap with {20 = d}km ({k*d}mi) to go.
 So if the break averages {40 = vb}km/h ({k*vb}mph) then the peloton needs to average {vp = pd/t}km/h ({k*vp}mph) to catch them at the line.
 
@@ -123,7 +128,7 @@ Scratchpad:
 * Miles in a kilometer: {0.621371 = k}mi/km
 `,
 // -----------------------------------------------------------------------------
-'biketour': `\
+biketour: `\
 Distance:        {66 = d} miles
 Start time:      {h = 6}:{m = 45}am             <!-- {s = h+m/60} hours  -->
 End time:        {13 = H}:{00 = M} (24H format) <!-- {e = H+M/60} hours  -->
@@ -135,6 +140,21 @@ Total breaks:    {b = b1+b2+b3} hours
 Riding time:     {t = w-b} hours = {floor(t)}h{(t-floor(t))*60}m
 Avg speed:       {d/t} mph
 Unadjusted spd:  {d/w} mph
+`,
+// -----------------------------------------------------------------------------
+cheesepan: `\
+Mix {2x} eggs and {3x} wheels of cheese in a {d}-inch diameter pan.
+Or a {w}x{h}-inch rectangular pan (with a {z}-inch diagonal) is fine.
+Or any pan as long as its area is {A} square inches. Heat at 350 degrees.
+
+This recipe is scaled by a factor of {x = 1}.
+
+Constraints, constants, and sanity checks:
+* The true circle constant is {6.28 = tau}
+* The original pan diameter at 1x scale is {9 = d1} (radius {r1 = d1 / 2})
+* Scaled radius is {r = d/2} and scaled diameter is {d = 2r}
+* The squared diagonal of the rectangular pan is {w^2 + h^2 = z^2}
+* The area again is {A = x*1/2*tau*r1^2 = 1/2*tau*r^2 = w*h}
 `,
 // -----------------------------------------------------------------------------
 dial: `\
@@ -149,7 +169,7 @@ dial: `\
 * Seconds in a day / week / month: {86400 = SID}, {SIW = SID*7}, {SIM = SID*365.25/12}
 `,
 // -----------------------------------------------------------------------------
-'sugarcalc': `\
+sugarcalc: `\
 Nutrition info for healthy stuff (e.g., Greek yogurt):
 * {170 = omega} grams per serving
 * {120 = gamma} calories per serving
@@ -186,7 +206,7 @@ Grams_of_sugar_per_serving_in_junk_food /
 Calories_per_serving_in_junk_food
 */
 // -----------------------------------------------------------------------------
-'converter': `\
+converter: `\
 # Kilograms vs Pounds
 {p = k/LB} pounds = {k = p*LB = 70} kilograms
 <!-- The fully exact definition of a pound is {0.45359237 = LB} kilograms -->
@@ -197,27 +217,46 @@ Calories_per_serving_in_junk_food
 <!-- The fully exact definition of a yard is {0.9144 = YD} meters -->
 `,
 // -----------------------------------------------------------------------------
-'cheesepan': `\
-Mix {2x} eggs and {3x} wheels of cheese in a {d}-inch diameter pan.
-Or a {w}x{h}-inch rectangular pan (with a {z}-inch diagonal) is fine.
-Or any pan as long as its area is {A = x*1/2*tau*r1^2 = 1/2*tau*r^2 = w*h}
-square inches. Heat at 350 degrees.
+auction: `\
+Fraction of the thing/decision that's yours: 
+{.5 = r} ({100*(1-r)}/{100r} them/you)
 
-This recipe is scaled by a factor of {x = 1}.
+Your Bid: (any of these imply the other two)
+* Fair Market Value (FMV): {fmv}
+* Most you pay if you win: {pay = (1-r)*fmv}
+* What you get paid if you lose: {get = r*fmv}
 
-Constraints, constants, and sanity checks:
-* The true circle constant is {6.28 = tau}
-* The original pan diameter at 1x scale is {9 = d1} (radius {r1 = d1 / 2})
-* Scaled radius is {r = d/2} and scaled diameter is {d = 2r}
-* The squared diagonal of the rectangular pan is {w^2 + h^2 = z^2}
+
+If your FMV of \${fmv} is higher:
+You'll pay up to \${pay} (for the {100*(1-r)}% that's not yours).
+
+
+If their FMV is higher:
+You'll get paid \${get} (for the {100r}% that's yours).
+
+iou[2026.01.14, {get}, them, you, "decision auction"]
 `,
 // -----------------------------------------------------------------------------
-'test': `\
+quadratic: `\
+{a=3}x^2+{b=4}x+{c=-20}={0=a*x^2+b*x+c} implies x={x}
+`,
+// -----------------------------------------------------------------------------
+gratio: `\
+The reciprocal of {phi} is {1/phi = phi - 1}, same as subtracting 1.
+`,
+// -----------------------------------------------------------------------------
+test: `\
 Recipe for eggs: eat {1x} egg(s).
 Scaled by a factor of x where x/2 is {x/2 = 8} for some reason.
+
+---
+
+Frozen: {5 = a}
+Computed: {b+0} <!-- Nothing should change if this is {b} vs {b+0} -->
+Constraint: {10 = a + b}
 `,
 // -----------------------------------------------------------------------------
-'custom': `\
+custom: `\
 Replace me with {x=1} or {x+1} of your own recipes.
 `,
 // -----------------------------------------------------------------------------

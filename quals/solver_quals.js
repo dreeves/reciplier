@@ -997,6 +997,59 @@ function runAllSolverQuals(ctx) {
     check('solvem: breakaway k*d = 12.4274', rep.ass.k * rep.ass.d, 12.4274, 1e-9)
   })()
 
+  // TODO case 1: b vs b+0 should behave identically
+  // {5 = a} {b+0} {10 = a + b} should solve to b=5
+  ;(() => {
+    const eqns = [
+      ['a', 5],
+      ['b+0'],
+      ['a + b', 10],
+    ]
+    const rep = solvem(eqns, { a: 5, b: 1 })
+    check('solvem: b+0 behaves same as b (sat)', rep.sat, true)
+    check('solvem: b+0 behaves same as b (b=5)', rep.ass.b, 5, 1e-9)
+  })()
+
+  // Verify {b} also works the same way
+  ;(() => {
+    const eqns = [
+      ['a', 5],
+      ['b'],
+      ['a + b', 10],
+    ]
+    const rep = solvem(eqns, { a: 5, b: 1 })
+    check('solvem: bare b also works (sat)', rep.sat, true)
+    check('solvem: bare b also works (b=5)', rep.ass.b, 5, 1e-9)
+  })()
+
+  // TODO case 2: quadratic equation solving
+  // {a=3}x^2+{b=4}x+{c=-20}=0 with a*x^2+b*x+c=0 should solve for x=2
+  ;(() => {
+    const eqns = [
+      ['a', 3],
+      ['b', 4],
+      ['c', -20],
+      ['a*x^2+b*x+c', 0],
+      ['x'],
+    ]
+    const rep = solvem(eqns, { a: 3, b: 4, c: -20, x: 1 })
+    check('solvem: quadratic equation (sat)', rep.sat, true)
+    check('solvem: quadratic equation (x=2)', rep.ass.x, 2, 1e-6)
+  })()
+
+  // TODO case 3: golden ratio
+  // {1/phi = phi - 1} should solve to phi ≈ 1.618
+  ;(() => {
+    const phi = (1 + Math.sqrt(5)) / 2
+    const eqns = [
+      ['1/phi', 'phi - 1'],
+      ['phi'],
+    ]
+    const rep = solvem(eqns, { phi: 1 })
+    check('solvem: golden ratio (sat)', rep.sat, true)
+    check('solvem: golden ratio (phi)', rep.ass.phi, phi, 1e-6)
+  })()
+
   console.log('\n=== Summary ===')
   console.log(`${results.passed} passed, ${results.failed} failed`)
   if (results.failed > 0) {

@@ -1163,6 +1163,43 @@ async function main() {
     const hasUnreferencedErrorForY = (referencedInExprErrors || []).some(e => /not referenced/i.test(e) && /\by\b/.test(e))
     assert.equal(hasUnreferencedErrorForY, true, 'y only appears in one cell, SHOULD produce unreferenced error')
 
+    // Qual: b+0 behaves same as bare b
+    const bPlusZero = '{5 = a} {b+0} {10 = a + b}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, bPlusZero)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const bPlusZeroErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.equal((bPlusZeroErrors || []).filter(e => !/not referenced/i.test(e)).length, 0, 'b+0: no errors')
+    const bPlusZeroVal = await getInputValue(page, 'input.recipe-field[data-label="b+0"]')
+    assert.equal(bPlusZeroVal, '5', 'b+0 should display 5')
+
+    // Qual: quadratic equation with constraint in comment solves for x
+    const quadratic = '{3 = a}x^2+{4 = b}x+{-20 = c}=0\n<!-- {a*x^2+b*x+c=0} -->\nx={x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, quadratic)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const quadraticErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.equal((quadraticErrors || []).filter(e => !/not referenced/i.test(e)).length, 0, 'quadratic: no errors')
+    const quadraticX = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.equal(quadraticX, '2', 'quadratic should solve x=2')
+
+    // Qual: golden ratio constraint solves for phi
+    const goldenRatio = '{1/phi = phi - 1}\n{phi}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, goldenRatio)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const goldenRatioErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.equal((goldenRatioErrors || []).filter(e => !/not referenced/i.test(e)).length, 0, 'golden ratio: no errors')
+    const goldenRatioPhi = await page.evaluate(() => state?.values?.phi)
+    const expectedPhi = (1 + Math.sqrt(5)) / 2
+    assert.ok(Math.abs(goldenRatioPhi - expectedPhi) < 0.001, `golden ratio phi should be ~1.618, got ${goldenRatioPhi}`)
+
     console.log('All quals passed.')
   } catch (e) {
     if (pageConsoleLogs.length > 0) {

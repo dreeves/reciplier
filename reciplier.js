@@ -143,18 +143,6 @@ function extractCells(text) {
 // cval is the constant if there is one, null otherwise.
 function parseCell(cell) {
   const content = cell.content.trim()
-
-  // Check for cvar (identifier followed by colon)
-  // cvar pattern: starts with letter or underscore, followed by alphanumerics
-  // const cvarMatch = content.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/)
-
-  // let cvar = null
-  // let exprPart = content
-
-  // if (cvarMatch) {
-  //   cvar = cvarMatch[1]
-  //   exprPart = cvarMatch[2]
-  // }
   const exprPart = content
 
   // Split by = to get constraint expressions (but be careful with == or !=)
@@ -273,23 +261,6 @@ function buildSymbolTable(cells) {
       errors.push(`Variable ${varName} in ${firstCell.raw} not referenced in any other cell`)
     }
   }
-
-  // Fifth pass: check for self-reference (case 8)
-  // A cell that references its own cvar and no other variables is an error
-  // Self-reference is allowed: there are legitimate constraints where a symbol
-  // appears on both sides of an equation.
-  // for (const cell of cells) {
-  //   // Only check expressions in ceqn[1:] (ceqn[0] is the cvar itself)
-  //   for (let i = 1; i < cell.ceqn.length; i++) {
-  //     const expr = cell.ceqn[i]
-  //     const vars = findVariables(expr)
-  //     // Error if the only variable referenced is the cell's own cvar
-  //     if (vars.size === 1 && vars.has(cell.cvar)) {
-  //       errors.push(`Cell ${cell.raw} references only itself`)
-  //       break
-  //     }
-  //   }
-  // }
 
   return { symbols, errors }
 }
@@ -436,6 +407,7 @@ function computeInitialValues(cells) {
 // Constraint Solver
 // =============================================================================
 
+// TODO: all constraint solver code should be in csolver.js
 // Check if initial values contradict any constraints (fail loudly per Anti-Postel)
 // Skip checking constraints that involve variables with empty expressions (those need solving)
 function checkInitialContradictions(cells, values, emptyExprVars) {
@@ -486,7 +458,6 @@ function checkInitialContradictions(cells, values, emptyExprVars) {
       const tolerance = Math.abs(first) * 1e-4 + 1e-4
       for (let i = 1; i < results.length; i++) {
         if (Math.abs(results[i] - first) > tolerance) {
-          // TODO: only count expressions from the urtext, not the cvar
           const exprStr = eqnParts.join(' = ')
           const valuesStr = results.map(r => formatNum(r)).join(' ≠ ')
           errors.push(`Contradiction: {${exprStr}} evaluates to ${valuesStr}`)
@@ -595,19 +566,6 @@ function parseRecipe() {
   const { values, errors: valueErrors } = computeInitialValues(cells)
 
   const allErrors = [...syntaxErrors, ...symbolErrors, ...valueErrors]
-
-  // NOTE: Previously we tried to backfill missing variable values from the
-  // previous parse to keep the UI populated on error. Per Anti-Postel, we fail
-  // loudly instead.
-  // if (allErrors.length > 0) {
-  //   for (const cell of cells) {
-  //     if (values[cell.cvar] !== undefined) continue
-  //     const previousValue = previousValues[cell.cvar]
-  //     if (typeof previousValue === 'number' && isFinite(previousValue)) {
-  //       values[cell.cvar] = previousValue
-  //     }
-  //   }
-  // }
   
   // Update state
   state.cells = cells
@@ -991,6 +949,24 @@ function solveAndApply({
 
 function buildInteractiveEqns(editedCellId = null, editedValue = null) {
   return state.cells.map(c => {
+    // For cells in comments, use the full equation (they can't be edited)
+    // TODO: This is wrong-headed. We do not want a special case for an equation
+    // being in a comment, for Christ's sake. Egregious anti-magic violation.
+    // But this may point to a design problem. See README FOR MORE THOUGHTS.
+    /* 
+    if (c.inComment && c.hasConstraint && c.hasNumber) {
+      const parts = (c.urparts || c.urceqn || [])
+      return parts.map(p => {
+        if (typeof p !== 'string') return p
+        const vars = findVariables(p)
+        if (vars.size !== 0) return p
+        const r = vareval(p, {})
+        if (r.error || typeof r.value !== 'number' || !isFinite(r.value)) return p
+        return r.value
+      })
+    }
+    */
+
     const eqn = [...c.ceqn]
 
     if (editedCellId !== null && c.id === editedCellId) {

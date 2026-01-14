@@ -786,6 +786,81 @@ function solvemPrimary(eqns, vars) {
     if (!changed) break
   }
 
+  // TODO: It makes little sense for the following to be a whole special case,
+  // right? One of the core algorithms that solvem uses should be a binary 
+  // search on each variable, one at a time, holding the other variables fixed.
+  // If one of the cells has "1/phi = phi - 1" then phi is just a variable whose
+  // whose satisfying assignment can be found by binary search. So I'm guessing
+  // the code in the following loop is a huge DRY violation.
+  // (Incredibly frustrating how coding assistants will just slap on another 
+  // layer of code to solve each issue you give it, instead of doing the elegant
+  // generalization.)
+
+  // Handle equations where both sides depend on the same single variable
+  // Example: [['1/phi', 'phi - 1']] should solve to phi = golden ratio
+  for (const eqn of eqns) {
+    if (checkEquation(eqn)) continue
+    if (eqn.length !== 2) continue
+
+    const [e1, e2] = eqn
+    if (typeof e1 !== 'string' || typeof e2 !== 'string') continue
+    if (isbarevar(e1) || isbarevar(e2)) continue
+
+    const vars1 = findVariables(e1)
+    const vars2 = findVariables(e2)
+    if (vars1.size !== 1 || vars2.size !== 1) continue
+
+    const v1 = [...vars1][0]
+    const v2 = [...vars2][0]
+    if (v1 !== v2) continue
+
+    const v = v1
+    if (constrained.has(v) || trustworthy.has(v)) continue
+
+    // Both expressions depend on the same single variable
+    // Solve e1 - e2 = 0 for v using bisection on positive domain first
+    const diffExpr = `(${e1}) - (${e2})`
+
+    function evalDiff(x) {
+      const test = { ...values, [v]: x }
+      const r = vareval(diffExpr, test)
+      return r.error ? null : r.value
+    }
+
+    // Try to find a bracket in the positive domain
+    let solvedVal = null
+    const positiveBrackets = [
+      [0.001, 1], [1, 10], [0.1, 2], [0.01, 100], [0.5, 5]
+    ]
+    for (const [lo, hi] of positiveBrackets) {
+      const fLo = evalDiff(lo)
+      const fHi = evalDiff(hi)
+      if (fLo === null || fHi === null) continue
+      if (fLo * fHi > 0) continue  // Same sign, no root in interval
+
+      // Bisection search
+      let a = lo, b = hi
+      for (let i = 0; i < 60; i++) {
+        const mid = (a + b) / 2
+        const fMid = evalDiff(mid)
+        if (fMid === null) break
+        if (Math.abs(fMid) < 1e-10) { a = b = mid; break }
+        if (fLo * fMid < 0) b = mid
+        else a = mid
+      }
+      solvedVal = (a + b) / 2
+      break
+    }
+
+    // Fallback to solveFor if no positive root found
+    if (solvedVal === null) {
+      solvedVal = solveFor(diffExpr, v, 0, values)
+    }
+    if (solvedVal !== null) {
+      values[v] = solvedVal
+    }
+  }
+
   // Fallback: 1D search on root variables
   if (!eqnsSatisfied(eqns, values, tol)) {
     const definedBy = new Map()
