@@ -408,7 +408,7 @@ file violates any expectations. Anti-Postel FTW.
 
 ## Inequalities 
 
-(This hasn't been implemented yet.)
+[TODO: implement this section]
 
 If a cell includes any inequalities then all of the following criteria must be
 met:
@@ -430,11 +430,8 @@ If any of those are not met, we show this error banner:
 
 ## Sliders
 
-(Originally we had a single slider, hard-coded for whatever variable was called
-"x". That "x" would appear in three places: above the slider and at the bounds.
-In the current spec, the variable appears just once, above the slider,
-left-aligned. This parenthetical can self-destruct when general sliders are
-implemented.)
+[TODO: Implement this section. Originally we had a single slider, hard-coded for
+whatever variable was called "x".]
 
 For every variable which appears as a bare variable (see `isbarevar` in the 
 Constraint Solver section) in a cell, we create a slider for that variable. Each
@@ -551,9 +548,15 @@ Replicata:
 
 Expectata: To see a "no solution" banner.
 
-Resultata: No banner but the r field turns red.
-Note that any time a field turns red there should always be either a "no solution" banner or a "syntax error" banner.
+Resultata:
+⚠️ Syntax error in template: {r*SID}
 
+
+```
+Frozen: {5 = a}
+Computed: {b+0}
+Constraint: {10 = a + b}
+```
 
 ```
 Scaled by a factor of x={x=1}.

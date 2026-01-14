@@ -221,7 +221,7 @@ Scaled by a factor of x where x/2 is {x/2 = 8} for some reason.
 'blank': ``,
 // -----------------------------------------------------------------------------
 'custom': `\
-Replace me with {x} of your own recipes.
+Replace me with {x=1} or {x+1} of your own recipes.
 `,
 // -----------------------------------------------------------------------------
 };

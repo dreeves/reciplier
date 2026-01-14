@@ -883,12 +883,14 @@ function solveAndApply({
 } = {}) {
   const seedValues = { ...state.values, ...(seedOverrides || {}) }
 
-  let eqns = buildInteractiveEqns(editedCellId, editedValue)
+  const attemptedEqns = buildInteractiveEqns(editedCellId, editedValue)
+  let eqns = attemptedEqns
   let solved = solvem(eqns, seedValues).ass
-  let sat = eqnsSatisfied(eqns, solved)
+  const attemptedSat = eqnsSatisfied(eqns, solved)
+  let sat = attemptedSat
   let didFallback = false
 
-  if (!sat && allowFallbackWithoutEditedConstraint && editedCellId !== null) {
+  if (!attemptedSat && allowFallbackWithoutEditedConstraint && editedCellId !== null) {
     eqns = buildInteractiveEqns(null, null)
     const fallbackSeed = fallbackSeedValues ? { ...fallbackSeedValues } : { ...state.values }
     solved = solvem(eqns, fallbackSeed).ass
@@ -896,11 +898,15 @@ function solveAndApply({
     didFallback = true
   }
 
-  if (!sat) {
-    logFailedSolve(eqns, seedValues, solved)
+  const showAttemptedBanner = didFallback && (preserveEditedCvalOnFallback || !!editedFieldEl)
+  const bannerEqns = showAttemptedBanner ? attemptedEqns : eqns
+  const bannerSat = showAttemptedBanner ? attemptedSat : sat
+
+  if (!bannerSat) {
+    logFailedSolve(bannerEqns, seedValues, solved)
   }
 
-  setSolveBannerFromSatisfaction(sat)
+  setSolveBannerFromSatisfaction(bannerSat)
   updateSolveBannerInDom()
 
   state.values = solved
@@ -917,7 +923,7 @@ function solveAndApply({
   const violatedCellIds = getViolatedCellIds(state.cells, state.values)
   const invalidCellIds = new Set(violatedCellIds)
   if (state.solveBanner) {
-    for (const id of getUnsatisfiedCellIds(eqns, state.values)) invalidCellIds.add(id)
+    for (const id of getUnsatisfiedCellIds(bannerEqns, state.values)) invalidCellIds.add(id)
   }
   for (const id of state.invalidInputCellIds) invalidCellIds.add(id)
 
@@ -949,7 +955,7 @@ function solveAndApply({
   repositionNonCriticalBannersAfterLastInvalidBr()
 
   updateSliderDisplay()
-  return { eqns, solved, sat, invalidCellIds }
+  return { eqns: bannerEqns, solved, sat: bannerSat, invalidCellIds }
 }
 
 function buildInteractiveEqns(editedCellId = null, editedValue = null) {

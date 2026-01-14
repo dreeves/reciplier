@@ -481,7 +481,7 @@ async function main() {
     await dialBug1bDHandle.dispose()
 
     // Qual: dial soft fallback - editing derived r*SID to an unsatisfiable value
-    // should not show "No solution"; it should just leave the field invalid/red.
+    // should show "No solution" (even though the UI may fall back internally).
     await page.select('#recipeSelect', 'blank')
     await page.select('#recipeSelect', 'dial')
     await page.waitForSelector('#recipeOutput', { visible: true })
@@ -506,12 +506,54 @@ async function main() {
     await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentEditCellId === null)
 
     const dialSoftBanner = await page.evaluate(() => String(state?.solveBanner || ''))
-    assert.equal(dialSoftBanner, '', 'dial soft fallback: expected no solveBanner but got: ' + dialSoftBanner)
+    assert.ok(/No solution/i.test(dialSoftBanner), 'dial soft fallback: expected solveBanner to include "No solution" but got: ' + dialSoftBanner)
+
+    const dialSoftBannerHidden = await page.$eval('#solveBanner', el => !!el.hidden)
+    assert.equal(dialSoftBannerHidden, false, 'dial soft fallback: solveBanner should be visible')
 
     const dialSoftRateInvalid = await handleHasClass(dialSoftRateHandle, 'invalid')
     assert.equal(dialSoftRateInvalid, true, 'dial soft fallback: expected edited r*SID field to be invalid')
 
     await dialSoftRateHandle.dispose()
+
+    // Qual: dial bug - editing derived r*SID to 0 after freezing should show "No solution"
+    // and should NOT show the invalid-explain banner.
+    await page.select('#recipeSelect', 'blank')
+    await page.select('#recipeSelect', 'dial')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Freeze vini, vfin, and tini (start TIME field)
+    const dialRateZeroFreezeTitles = ['vini = 73', 'vfin = 70', 'tini = unixtime']
+    for (const t of dialRateZeroFreezeTitles) {
+      const h = await findFieldByTitleSubstring(page, t)
+      const isNull = await h.evaluate(el => el === null)
+      assert.equal(isNull, false, `dial rate=0: couldn't find field with title containing "${t}"`)
+      await h.click({ clickCount: 2 })
+      await h.dispose()
+    }
+
+    const dialRateZeroHandle = await findFieldByTitleSubstring(page, 'r*SID')
+    const dialRateZeroIsNull = await dialRateZeroHandle.evaluate(el => el === null)
+    assert.equal(dialRateZeroIsNull, false, 'dial rate=0: could not find r*SID field')
+
+    await dialRateZeroHandle.click({ clickCount: 3 })
+    await page.keyboard.type('0')
+    await page.keyboard.press('Tab')
+    await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentEditCellId === null)
+
+    const dialRateZeroBanner = await page.evaluate(() => String(state?.solveBanner || ''))
+    assert.ok(/No solution/i.test(dialRateZeroBanner), 'dial rate=0: expected solveBanner to include "No solution" but got: ' + dialRateZeroBanner)
+
+    const dialRateZeroBannerHidden = await page.$eval('#solveBanner', el => !!el.hidden)
+    assert.equal(dialRateZeroBannerHidden, false, 'dial rate=0: solveBanner should be visible')
+
+    const dialRateZeroInvalidExplainHidden = await page.$eval('#invalidExplainBanner', el => !!el.hidden)
+    assert.equal(dialRateZeroInvalidExplainHidden, true, 'dial rate=0: invalidExplainBanner should be hidden')
+
+    const dialRateZeroInvalid = await handleHasClass(dialRateZeroHandle, 'invalid')
+    assert.equal(dialRateZeroInvalid, true, 'dial rate=0: expected edited r*SID field to be invalid')
+
+    await dialRateZeroHandle.dispose()
 
     await page.select('#recipeSelect', 'blank')
     await page.select('#recipeSelect', 'crepes')
