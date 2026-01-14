@@ -639,6 +639,91 @@ async function main() {
     const testBanner = await page.evaluate(() => state.solveBanner)
     assert.equal(testBanner, '')
 
+    // Qual: invalid numeric input shows an explanation banner (even when satisfiable)
+    const invalidExplainTemplate = '{x}\n'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, invalidExplainTemplate)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    const initialExplainSolveBanner = await page.evaluate(() => state.solveBanner)
+    assert.equal(initialExplainSolveBanner, '')
+
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="x"]', '1e')
+    await new Promise(r => setTimeout(r, 100))
+
+    const invalidExplainHidden = await page.$eval('#invalidExplainBanner', el => !!el.hidden)
+    assert.equal(invalidExplainHidden, false)
+    const invalidExplainText = await page.$eval('#invalidExplainBanner', el => el.textContent || '')
+    assert.ok(/syntax error/i.test(invalidExplainText))
+    assert.ok(/only numbers allowed/i.test(invalidExplainText))
+
+    // Qual: invalid numeric input should not snap back (during typing)
+    const invalidExplainXValue = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.equal(invalidExplainXValue, '1e')
+
+    // Qual: invalid numeric input should mark field invalid
+    const invalidExplainXInvalid = await page.$eval('input.recipe-field[data-label="x"]', el => el.classList.contains('invalid'))
+    assert.equal(invalidExplainXInvalid, true)
+
+    const invalidExplainSolveBannerHidden = await page.$eval('#solveBanner', el => !!el.hidden)
+    assert.equal(invalidExplainSolveBannerHidden, true)
+
+    const invalidExplainPos = await page.evaluate(() => {
+      const rendered = document.querySelector('#recipeOutput .recipe-rendered')
+      if (!rendered) return { ok: false, why: 'no recipe-rendered' }
+
+      const invalids = rendered.querySelectorAll('input.recipe-field.invalid')
+      if (!invalids.length) return { ok: false, why: 'no invalid field' }
+      const lastInvalid = invalids[invalids.length - 1]
+
+      let br = null
+      for (let n = lastInvalid.nextSibling; n; n = n.nextSibling) {
+        if (n.nodeType === 1 && n.tagName === 'BR') { br = n; break }
+      }
+      if (!br) return { ok: false, why: 'no br after invalid' }
+
+      const banners = document.getElementById('nonCriticalBanners')
+      if (!banners) return { ok: false, why: 'no nonCriticalBanners' }
+
+      return { ok: banners.previousSibling === br, why: 'bad position' }
+    })
+    assert.equal(invalidExplainPos.ok, true, invalidExplainPos.why)
+
+    // Qual: correcting the invalid numeric input should clear the invalid-explain banner
+    await setInputValue(page, 'input.recipe-field[data-label="x"]', '1')
+    const invalidExplainHiddenAfterFix = await page.$eval('#invalidExplainBanner', el => !!el.hidden)
+    assert.equal(invalidExplainHiddenAfterFix, true)
+    const invalidExplainXInvalidAfterFix = await page.$eval('input.recipe-field[data-label="x"]', el => el.classList.contains('invalid'))
+    assert.equal(invalidExplainXInvalidAfterFix, false)
+
+    // Qual: invalid-explain banner placement works even without a <br> anchor
+    const invalidExplainNoBrTemplate = '{x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, invalidExplainNoBrTemplate)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="x"]', '1e')
+    await new Promise(r => setTimeout(r, 100))
+
+    const invalidExplainNoBrHidden = await page.$eval('#invalidExplainBanner', el => !!el.hidden)
+    assert.equal(invalidExplainNoBrHidden, false)
+
+    const invalidExplainNoBrPos = await page.evaluate(() => {
+      const rendered = document.querySelector('#recipeOutput .recipe-rendered')
+      if (!rendered) return { ok: false, why: 'no recipe-rendered' }
+
+      const banners = document.getElementById('nonCriticalBanners')
+      if (!banners) return { ok: false, why: 'no nonCriticalBanners' }
+
+      const ok = banners.parentElement === rendered && banners.nextElementSibling === null
+      return { ok, why: ok ? 'ok' : 'banners not last element child' }
+    })
+    assert.equal(invalidExplainNoBrPos.ok, true, invalidExplainNoBrPos.why)
+
     // Qual: solveBanner only clears when solved (and does not clear on invalid intermediate input)
     const noSolTemplate = '{x} {x = 2y} {x = 3y}'
     await page.$eval('#recipeTextarea', (el, v) => {

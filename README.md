@@ -514,6 +514,10 @@ necessary; could be in the future with fancier solvers.)
 14. Add more recipes from http://doc.dreev.es/recipes or even make Reciplier the
 master copy for those recipes.
 
+15. Insert the error banners directly below where the problem is, so that the
+UI you're trying to interact with never shifts on you.
+
+16. See if this can subsume https://dreeves.github.io/loanwolf/
 
 SCRATCH AREA:
 
@@ -528,12 +532,28 @@ Replicata:
 1. Load the dial recipe
 2. Freeze the vini cell at 73
 3. Freeze the vfin cell at 70
-4. Freeze the start time (tini) field
+4. Freeze the start time (tini) field (the one in unixtime in seconds)
 5. Change the rate (r) to -1
 
 Expectata: That the end date changes.
 
 Resultata: "No solution (try unfreezing cells)" and the tfin field is red.
+
+Bug report 2:
+
+Replicata:
+
+1. Load the dial recipe
+2. Freeze the vini cell at 73
+3. Freeze the vfin cell at 70
+4. Freeze the start time (tini) field (the one in unixtime in seconds)
+5. Change the rate (r) to 0
+
+Expectata: To see a "no solution" banner.
+
+Resultata: No banner but the r field turns red.
+Note that any time a field turns red there should always be either a "no solution" banner or a "syntax error" banner.
+
 
 ```
 Scaled by a factor of x={x=1}.

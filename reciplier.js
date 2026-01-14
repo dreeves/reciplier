@@ -514,6 +514,8 @@ let state = {
   userEditedVars: new Set(),  // Track variables the user has directly edited
   errors: [],
   solveBanner: '',
+  invalidExplainBanner: '',
+  invalidInputCellIds: new Set(),
   currentRecipeKey: '',
   currentEditCellId: null,
   valuesBeforeEdit: null,
@@ -536,6 +538,9 @@ function parseRecipe() {
     state.values = {}
     state.userEditedVars = new Set()
     state.errors = []
+    state.solveBanner = ''
+    state.invalidExplainBanner = ''
+    state.invalidInputCellIds = new Set()
     $('recipeOutput').style.display = 'none'
     $('copySection').style.display = 'none'
     updateRecipeDropdown()
@@ -584,6 +589,8 @@ function parseRecipe() {
   state.fixedCellIds = new Set(cells.filter(c => c.startsFrozen).map(c => c.id))
   recomputeCellCvals(cells, values, state.fixedCellIds)
   state.solveBanner = ''
+  state.invalidExplainBanner = ''
+  state.invalidInputCellIds = new Set()
   
   updateRecipeDropdown()
   renderRecipe()
@@ -614,6 +621,7 @@ function renderRecipe() {
     const eqns = buildInteractiveEqns(null, null)
     for (const id of getUnsatisfiedCellIds(eqns, state.values)) invalidCellIds.add(id)
   }
+  for (const id of state.invalidInputCellIds) invalidCellIds.add(id)
 
   function renderRecipeBody({ disableInputs, invalidCellIds }) {
     // Find all HTML comment ranges to strip them from output
@@ -716,6 +724,12 @@ function renderRecipe() {
         <div class="error-message">⚠️ ${escapeHtml(state.solveBanner)}</div>
       </div>`
 
+  const invalidExplainBanner = `<div id="invalidExplainBanner" class="error-display solve-display"${state.invalidExplainBanner ? '' : ' hidden'}>
+        <div class="error-message">⚠️ ${escapeHtml(state.invalidExplainBanner)}</div>
+      </div>`
+
+  const nonCriticalBanners = `<div id="nonCriticalBanners">${solveBanner}${invalidExplainBanner}</div>`
+
   // Update slider display
   updateSliderDisplay()
   
@@ -725,7 +739,7 @@ function renderRecipe() {
     return
   }
   
-  output.innerHTML = `${errorBanner}${solveBanner}${renderRecipeBody({ disableInputs: false, invalidCellIds })}`
+  output.innerHTML = `${errorBanner}${nonCriticalBanners}${renderRecipeBody({ disableInputs: false, invalidCellIds })}`
   output.style.display = 'block'
   copySection.style.display = 'block'
 
@@ -738,6 +752,10 @@ function renderRecipe() {
     input.addEventListener('keypress', handleFieldKeypress)
     input.addEventListener('dblclick', handleFieldDoubleClick)
   })
+
+  setInvalidExplainBannerFromInvalidity(invalidCellIds)
+  updateInvalidExplainBannerInDom()
+  repositionNonCriticalBannersAfterLastInvalidBr()
 }
 
 function escapeHtml(text) {
@@ -764,6 +782,82 @@ function updateSolveBannerInDom() {
   banner.hidden = false
   const msg = banner.querySelector('.error-message')
   if (msg) msg.textContent = `⚠️ ${state.solveBanner}`
+}
+
+function updateInvalidExplainBannerInDom() {
+  const banner = $('invalidExplainBanner')
+  if (!banner) return
+
+  if (!state.invalidExplainBanner) {
+    banner.hidden = true
+    const msg = banner.querySelector('.error-message')
+    if (msg) msg.textContent = ''
+    return
+  }
+
+  banner.hidden = false
+  const msg = banner.querySelector('.error-message')
+  if (msg) msg.textContent = `⚠️ ${state.invalidExplainBanner}`
+}
+
+function setInvalidExplainBannerFromInvalidity(invalidCellIds) {
+  if ((state.errors || []).length > 0) {
+    state.invalidExplainBanner = ''
+    return
+  }
+
+  if (state.solveBanner) {
+    state.invalidExplainBanner = ''
+    return
+  }
+
+  if (state.invalidInputCellIds && state.invalidInputCellIds.size > 0) {
+    const lastInvalidInputId = [...state.invalidInputCellIds][state.invalidInputCellIds.size - 1]
+    const cell = state.cells.find(c => c.id === lastInvalidInputId)
+    const label = cell && Array.isArray(cell.ceqn) && cell.ceqn.length > 0
+      ? String(cell.ceqn[0] || '').trim()
+      : ''
+    const shownLabel = label || '?'
+    state.invalidExplainBanner = `ERROR1753: ${shownLabel}`
+    return
+  }
+
+  if (!invalidCellIds || invalidCellIds.size === 0) {
+    state.invalidExplainBanner = ''
+    return
+  }
+
+  const lastInvalidId = [...invalidCellIds][invalidCellIds.size - 1]
+  const lastInvalidCell = state.cells.find(c => c.id === lastInvalidId)
+  state.invalidExplainBanner = 
+    `Syntax error in template: {${lastInvalidCell.urtext}}`
+}
+
+function repositionNonCriticalBannersAfterLastInvalidBr() {
+  const output = $('recipeOutput')
+  if (!output) return
+
+  const rendered = output.querySelector('.recipe-rendered')
+  if (!rendered) return
+
+  const banners = $('nonCriticalBanners')
+  if (!banners) return
+
+  const invalidFields = rendered.querySelectorAll('input.recipe-field.invalid')
+  const lastInvalid = invalidFields.length ? invalidFields[invalidFields.length - 1] : null
+
+  let br = null
+  if (lastInvalid) {
+    for (let n = lastInvalid.nextSibling; n; n = n.nextSibling) {
+      if (n.nodeType === 1 && n.tagName === 'BR') {
+        br = n
+        break
+      }
+    }
+  }
+
+  const refNode = br ? br.nextSibling : null
+  rendered.insertBefore(banners, refNode)
 }
 
 function setSolveBannerFromSatisfaction(sat) {
@@ -825,6 +919,10 @@ function solveAndApply({
   if (state.solveBanner) {
     for (const id of getUnsatisfiedCellIds(eqns, state.values)) invalidCellIds.add(id)
   }
+  for (const id of state.invalidInputCellIds) invalidCellIds.add(id)
+
+  setInvalidExplainBannerFromInvalidity(invalidCellIds)
+  updateInvalidExplainBannerInDom()
 
   const output = $('recipeOutput')
   if (output) {
@@ -839,7 +937,7 @@ function solveAndApply({
       }
 
       const c = state.cells.find(x => x.id === field.dataset.cellId)
-      if (c) field.value = formatNum(c.cval)
+      if (c && !state.invalidInputCellIds.has(field.dataset.cellId)) field.value = formatNum(c.cval)
       if (invalidCellIds.has(field.dataset.cellId)) {
         field.classList.add('invalid')
       } else {
@@ -847,6 +945,8 @@ function solveAndApply({
       }
     })
   }
+
+  repositionNonCriticalBannersAfterLastInvalidBr()
 
   updateSliderDisplay()
   return { eqns, solved, sat, invalidCellIds }
@@ -901,32 +1001,17 @@ function handleFieldInput(e) {
   const cellId = input.dataset.cellId
   const newValue = toNum(input.value)
 
-  // NOTE: local updateSolveBannerInDom moved to a top-level helper.
-  // Keeping old implementation commented out rather than deleting.
-  // function updateSolveBannerInDom() {
-  //   const banner = $('solveBanner')
-  //   if (!banner) return
-  //
-  //   if (!state.solveBanner) {
-  //     banner.hidden = true
-  //     const msg = banner.querySelector('.error-message')
-  //     if (msg) msg.textContent = ''
-  //     return
-  //   }
-  //
-  //   banner.hidden = false
-  //   const msg = banner.querySelector('.error-message')
-  //   if (msg) msg.textContent = `⚠️ ${state.solveBanner}`
-  // }
-
   // Invalid number format - just mark invalid, don't change state
   if (newValue === null || !isFinite(newValue)) {
     input.classList.add('invalid')
-    // Invariant: show an error banner whenever we don't have a satisfying assignment.
-    setSolveBannerFromSatisfaction(false)
-    updateSolveBannerInDom()
+    state.invalidInputCellIds.add(cellId)
+    state.invalidExplainBanner = `Syntax error: only numbers allowed`
+    updateInvalidExplainBannerInDom()
+    repositionNonCriticalBannersAfterLastInvalidBr()
     return
   }
+
+  state.invalidInputCellIds.delete(cellId)
 
   input.onblur = handleFieldBlur
 
@@ -966,57 +1051,17 @@ function handleFieldBlur(e) {
     return
   }
 
-  // NOTE: Keeping the old "no other frozen" blur behavior commented out rather
-  // than deleting. Blur should accept satisfiable edits and only revert on
-  // unsatisfiable edits (via fallback).
-  //
-  // // When nothing else is frozen, don't do a blur-time re-solve that can snap
-  // // values back (eg, pyzza editing c should persist). But do enforce the
-  // // invariant: show an error banner if constraints are not satisfied.
-  // const anyOtherFrozen = [...state.fixedCellIds].some(id => id !== blurredCellId)
-  // if (!anyOtherFrozen) {
-  //   state.currentEditCellId = null
-  //   state.valuesBeforeEdit = null
-  //   const blurEqns = buildInteractiveEqns(null, null)
-  //   setSolveBannerFromSatisfaction(eqnsSatisfied(blurEqns, state.values))
-  //   updateSolveBannerInDom()
-  //
-  //   const violatedCellIds = getViolatedCellIds(state.cells, state.values)
-  //   const invalidCellIds = new Set(violatedCellIds)
-  //   if (state.solveBanner) {
-  //     for (const id of getUnsatisfiedCellIds(blurEqns, state.values)) invalidCellIds.add(id)
-  //   }
-  //
-  //   $('recipeOutput').querySelectorAll('input.recipe-field').forEach(field => {
-  //     if (invalidCellIds.has(field.dataset.cellId)) {
-  //       field.classList.add('invalid')
-  //     } else {
-  //       field.classList.remove('invalid')
-  //     }
-  //   })
-  //
-  //   updateSliderDisplay()
-  //   return
-  // }
-
-  // NOTE: This guard was introduced to stop blur-triggered drift when tabbing.
-  // It's safe to delete because blur-solving is now only wired up for fields
-  // that received an actual `input` event.
-  // const didEditThisField = state.currentEditCellId === blurredCellId
-  // if (!didEditThisField) {
-  //   state.solveBanner = ''
-  //   const banner = $('solveBanner')
-  //   if (banner) banner.hidden = true
-  //   return
-  // }
-
   const blurredValue = toNum(e.target.value)
   if (blurredValue === null || !isFinite(blurredValue)) {
     e.target.classList.add('invalid')
-    setSolveBannerFromSatisfaction(false)
-    updateSolveBannerInDom()
+    state.invalidInputCellIds.add(blurredCellId)
+    state.invalidExplainBanner = `Syntax error` // unDRY warning
+    updateInvalidExplainBannerInDom()
+    repositionNonCriticalBannersAfterLastInvalidBr()
     return
   }
+
+  state.invalidInputCellIds.delete(blurredCellId)
 
   const blurredCell = state.cells.find(c => c.id === blurredCellId)
   if (!blurredCell) return
