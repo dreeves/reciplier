@@ -133,8 +133,8 @@ Rest stop 2:     {b2} hours = {b2*60 = 37} minutes
 Rest stop 3:     {0 = b3} hours = {b3*60} minutes
 Total breaks:    {b = b1+b2+b3} hours
 Riding time:     {t = w-b} hours = {floor(t)}h{(t-floor(t))*60}m
-Avg speed:       {v = d/t} mph
-Unadjusted spd:  {u = d/w} mph
+Avg speed:       {d/t} mph
+Unadjusted spd:  {d/w} mph
 `,
 // -----------------------------------------------------------------------------
 dial: `\
@@ -156,13 +156,13 @@ Nutrition info for healthy stuff (e.g., Greek yogurt):
 * {5 = sigma} grams of sugar per serving
 
 Nutrition info for junk food (e.g., Go-gurt):
-* w grams per serving (don't actually need to know this) <!-- {w} -->
+* w grams per serving (don't actually need to know this)
 * {150 = c} calories per serving
 * {23 = s} grams of sugar per serving
 
 (Fun facts: There are {3.87 = k} calories per gram of normal sugar and {3.80 = kappa} calories per gram of brown sugar.)
 
-"Healthiness" in this context is the fraction of calories that are from sugar. For the Greek yogurt that's {h = k*omega/gamma} and for the Go-gurt it's {eta = k*s/c}.
+"Healthiness" in this context is the fraction of calories that are from sugar. For the Greek yogurt that's {k*omega/gamma} and for the Go-gurt it's {eta = k*s/c}.
 
 If you weigh out {y} grams of Greek yogurt and add {x} grams of brown sugar to it, the healthiness of the mixture is...
 
@@ -188,7 +188,7 @@ Calories_per_serving_in_junk_food
 // -----------------------------------------------------------------------------
 'converter': `\
 # Kilograms vs Pounds
-{p = k/LB} pounds = {k = 70} kilograms
+{p = k/LB} pounds = {k = p*LB = 70} kilograms
 <!-- The fully exact definition of a pound is {0.45359237 = LB} kilograms -->
 
 # Grams-per-square-meter vs Ounces-per-square-yard

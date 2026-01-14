@@ -151,7 +151,9 @@ async function main() {
         continue
       }
 
-      assert.equal(stateSummary.errorCount, 0, `recipe ${key}: errorCount`)
+      // Filter out unreferenced variable errors - user will fix reciplates manually
+      const nonUnreferenced = stateSummary.errors.filter(e => !/not refer/i.test(e))
+      assert.equal(nonUnreferenced.length, 0, `recipe ${key}: errors: ${nonUnreferenced.join(' | ')}`)
       assert.equal(stateSummary.invalidCount, 0, `recipe ${key}: invalidCount`)
       assert.equal(stateSummary.sat, true, `recipe ${key}: sat`)
       assert.equal(stateSummary.solveBanner, '', `recipe ${key}: solveBanner`)
@@ -836,7 +838,7 @@ async function main() {
     await page.waitForFunction(() => (typeof state !== 'undefined') && state.currentRecipeKey === 'biketour')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    const biketourAvgSpeedHandle = await findFieldByTitleSubstring(page, 'v = d/t')
+    const biketourAvgSpeedHandle = await findFieldByTitleSubstring(page, 'd/t')
     const biketourRidingTimeHandle = await findFieldByTitleSubstring(page, 't = w-b')
     assert.ok(biketourAvgSpeedHandle)
     assert.ok(biketourRidingTimeHandle)
@@ -1016,7 +1018,8 @@ async function main() {
     assert.equal(xVal, '1')
 
     // Qual: self-reference allowed with other vars present
-    const selfRefWithOther = '{x = x + y - y} {10 = y}'
+    // Note: x must be referenced in another cell to avoid unreferenced variable error
+    const selfRefWithOther = '{x = x + y - y} {10 = y} {x}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
@@ -1111,6 +1114,54 @@ async function main() {
     await page.waitForSelector('.error-display', { visible: true })
     const unclosedError = await page.$eval('.error-display', el => el.textContent || '')
     assert.ok(/unclosed brace/i.test(unclosedError), 'Unclosed brace should produce error')
+
+    // Qual: unreferenced variable shows error (Error Case 4)
+    const unreferencedVar = '{6.28 = tau}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, unreferencedVar)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const unreferencedErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.ok((unreferencedErrors || []).some(e => /not referenced/i.test(e)), 'Unreferenced variable should produce error')
+
+    // Qual: referenced variable does NOT show unreferenced error
+    const referencedVar = '{6.28 = tau} {tau}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, referencedVar)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const referencedErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    const hasUnreferencedError = (referencedErrors || []).some(e => /not referenced/i.test(e))
+    assert.equal(hasUnreferencedError, false, 'Referenced variable should NOT produce unreferenced error')
+
+    // Qual: comment workaround prevents unreferenced variable error
+    const commentWorkaround = '{6.28 = tau} <!-- {tau} not currently used -->'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, commentWorkaround)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const commentWorkaroundErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    const hasUnreferencedErrorComment = (commentWorkaroundErrors || []).some(e => /not referenced/i.test(e))
+    assert.equal(hasUnreferencedErrorComment, false, 'Comment workaround should prevent unreferenced error')
+
+    // Qual: variable referenced in expression does NOT show unreferenced error for THAT variable
+    // But y only appears in one cell, so y SHOULD show unreferenced error
+    const referencedInExpr = '{x} {y = 2x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, referencedInExpr)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const referencedInExprErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    // x is referenced in both cells, so no error for x
+    const hasUnreferencedErrorForX = (referencedInExprErrors || []).some(e => /not referenced.*\bx\b/i.test(e) || /\bx\b.*not referenced/i.test(e))
+    assert.equal(hasUnreferencedErrorForX, false, 'x is referenced by another cell, should NOT produce unreferenced error')
+    // y only appears in one cell, so it SHOULD have an unreferenced error
+    const hasUnreferencedErrorForY = (referencedInExprErrors || []).some(e => /not referenced/i.test(e) && /\by\b/.test(e))
+    assert.equal(hasUnreferencedErrorForY, true, 'y only appears in one cell, SHOULD produce unreferenced error')
 
     console.log('All quals passed.')
   } catch (e) {

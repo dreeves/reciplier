@@ -244,6 +244,36 @@ function buildSymbolTable(cells) {
     }
   }
 
+  // Check for unreferenced variables (Error Case 4)
+  // Per README: "A variable in a cell isn't referenced by any other cell."
+  // For each variable in each cell, check if it appears in at least one OTHER cell.
+  // Cells in HTML comments count as references (that's the documented workaround).
+  const varToCell = new Map() // variable -> first cell that contains it
+  for (const cell of cells) {
+    for (const expr of cell.ceqn) {
+      for (const v of findVariables(expr)) {
+        if (!varToCell.has(v)) varToCell.set(v, cell)
+      }
+    }
+  }
+
+  for (const [varName, firstCell] of varToCell) {
+    let referencedElsewhere = false
+    for (const cell of cells) {
+      if (cell.id === firstCell.id) continue
+      for (const expr of cell.ceqn) {
+        if (findVariables(expr).has(varName)) {
+          referencedElsewhere = true
+          break
+        }
+      }
+      if (referencedElsewhere) break
+    }
+    if (!referencedElsewhere) {
+      errors.push(`Variable ${varName} in ${firstCell.raw} not referenced in any other cell`)
+    }
+  }
+
   // Fifth pass: check for self-reference (case 8)
   // A cell that references its own cvar and no other variables is an error
   // Self-reference is allowed: there are legitimate constraints where a symbol
@@ -899,7 +929,9 @@ function solveAndApply({
   }
 
   const bannerEqns = didFallback ? attemptedEqns : eqns
-  const bannerSat = didFallback ? attemptedSat : sat
+  // When fallback succeeds and value snaps back, clear banner. Only show banner
+  // for attempted failure when preserving the invalid edit (derived expression).
+  const bannerSat = (didFallback && preserveEditedCvalOnFallback) ? attemptedSat : sat
 
   if (!bannerSat) {
     logFailedSolve(bannerEqns, seedValues, solved)

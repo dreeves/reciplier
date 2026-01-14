@@ -559,11 +559,26 @@ Resultata:
 ⚠️ Syntax error in template: {r*SID}
 
 
+TODO: add qual to ensure this behaves the same with b vs b+0
 ```
 Frozen: {5 = a}
 Computed: {b+0}
 Constraint: {10 = a + b}
 ```
+
+TODO: doesn't solve for x when you change a, b, and c, even if all but x frozen:
+```
+{a=3}x^2+{b=4}x+{c=-20}=0
+<!-- {a*x^2+b*x+c=0} -->
+x={x}
+```
+
+TODO: fails to find the golden ratio
+```
+{1/phi = phi - 1}
+{phi}
+```
+
 
 ```
 Scaled by a factor of x={x=1}.
