@@ -266,7 +266,7 @@ function runAllSolverQuals(ctx) {
   console.log('\n=== preval quals ===')
   check('toJS: implicit mult', preval('2x'), '2*x')
   check('toJS: keeps var3 intact', preval('var3'), 'var3')
-  check('toJS: power', preval('x^2').includes('Math.pow'), true)
+  check('toJS: power', preval('x^2').includes('**'), true)
 
   console.log('\n=== deoctalize quals ===')
   check('deoctalize: preserves 10', deoctalize('10'), '10')
@@ -997,7 +997,7 @@ function runAllSolverQuals(ctx) {
     check('solvem: breakaway k*d = 12.4274', rep.ass.k * rep.ass.d, 12.4274, 1e-9)
   })()
 
-  // TODO case 1: b vs b+0 should behave identically
+  // In the following, b vs b+0 should behave identically:
   // {5 = a} {b+0} {10 = a + b} should solve to b=5
   ;(() => {
     const eqns = [
@@ -1022,7 +1022,7 @@ function runAllSolverQuals(ctx) {
     check('solvem: bare b also works (b=5)', rep.ass.b, 5, 1e-9)
   })()
 
-  // TODO case 2: quadratic equation solving
+  // Quadratic equation solving:
   // {a=3}x^2+{b=4}x+{c=-20}=0 with a*x^2+b*x+c=0 should solve for x=2
   ;(() => {
     const eqns = [
@@ -1037,7 +1037,7 @@ function runAllSolverQuals(ctx) {
     check('solvem: quadratic equation (x=2)', rep.ass.x, 2, 1e-6)
   })()
 
-  // TODO case 3: golden ratio
+  // Golden ratio
   // {1/phi = phi - 1} should solve to phi ≈ 1.618
   ;(() => {
     const phi = (1 + Math.sqrt(5)) / 2

@@ -33,14 +33,8 @@ function preval(expr) {
   // Math functions
   js = js.replace(/\b(sqrt|floor|ceil|round|min|max|sin|cos|tan|asin|acos|atan|log|exp|abs)\s*\(/g, 'Math.$1(')
 
-  // Exponentiation: x^2 -> Math.pow(x,2)
-  // TODO: pretty sure we can just do "^" -> "**" for this
-  for (let i = 0; i < 10; i++) {
-    const before = js
-    js = js.replace(/(\w+|\d+\.?\d*|\))\s*\^\s*(\w+|\d+\.?\d*|\([^()]*\))/g,
-      (_, base, exp) => `Math.pow(${base},${exp})`)
-    if (js === before) break
-  }
+  // Exponentiation: x^2 -> x**2
+  js = js.replace(/\^/g, '**')
 
   return js
 }
@@ -1256,11 +1250,8 @@ function solvem(eqns, init) {
   }
 
   // DISABLED: gradient descent is too slow (200k iterations)
-  // TODO: re-enable with lower iteration count or web worker
   const SKIP_GRADIENT = true
-  if (SKIP_GRADIENT) {
-    return { ass, zij, sat }
-  }
+  if (SKIP_GRADIENT) { return { ass, zij, sat } }
 
   // Try gradient descent solver as fallback
   try {

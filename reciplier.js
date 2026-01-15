@@ -193,8 +193,6 @@ function parseCell(cell) {
 
   const startsFrozen = parts.length > 0 && partIsConst[0] === true
 
-  const fix = startsFrozen
-
   // Error flag if multiple bare numbers (spec case 7)
   const multipleNumbers = bareNumbers.length > 1
 
@@ -207,7 +205,6 @@ function parseCell(cell) {
   return {
     ...cell,
     cval,
-    fix,
     startsFrozen,
     ceqn,
     urceqn: parts,
@@ -546,12 +543,11 @@ let state = {
 
 function parseRecipe() {
   const text = state.recipeText
-  const previousValues = state.values
 
   state.currentEditCellId = null
   state.valuesBeforeEdit = null
   
-  if (!text.trim()) {
+  if (!text.trim()) { // does this mean the whole reciplate is the empty string?
     state.cells = []
     state.symbols = {}
     state.values = {}
@@ -575,7 +571,6 @@ function parseRecipe() {
   // Parse
   let cells = extractCells(text)
   cells = cells.map(parseCell)
-  // cells = preprocessLabels(cells)
 
   // Build symbol table
   const { symbols, errors: symbolErrors } = buildSymbolTable(cells)
@@ -590,7 +585,7 @@ function parseRecipe() {
   state.symbols = symbols
   state.values = values
   state.errors = allErrors
-  // Per README future-work item 8: cells defined with bare numbers start frozen.
+  // Per README future-work item 8: cells defined with bare numbers start frozen
   // state.fixedCellIds = new Set(cells.filter(c => c.fix).map(c => c.id))
   state.fixedCellIds = new Set(cells.filter(c => c.startsFrozen).map(c => c.id))
   recomputeCellCvals(cells, values, state.fixedCellIds)
@@ -625,7 +620,8 @@ function renderRecipe() {
   const invalidCellIds = new Set(violatedCellIds)
   if (state.solveBanner) {
     const eqns = buildInteractiveEqns(null, null)
-    for (const id of getUnsatisfiedCellIds(eqns, state.values)) invalidCellIds.add(id)
+    for (const id of getUnsatisfiedCellIds(eqns, state.values)) 
+      invalidCellIds.add(id)
   }
   for (const id of state.invalidInputCellIds) invalidCellIds.add(id)
 
@@ -637,7 +633,8 @@ function renderRecipe() {
     let lastIndex = 0
 
     // Sort cells by start index
-    const visibleCells = state.cells.filter(c => !c.inComment).sort((a, b) => a.startIndex - b.startIndex)
+    const visibleCells = state.cells.filter(c => !c.inComment)
+                                    .sort((a, b) => a.startIndex - b.startIndex)
 
     for (const cell of visibleCells) {
       // Add text before this cell
@@ -672,20 +669,6 @@ function renderRecipe() {
     html = html.replace(/\n/g, '<br>')
     return `<div class="recipe-rendered">${html}</div>`
   }
-
-  /*
-  // If there are critical errors, fail loudly
-  if (criticalErrors.length > 0) {
-    const errorBanner = `<div class="error-display">
-        ${criticalErrors.map(e => `<div class="error-message">⚠️ ${e}</div>`).join('')}
-      </div>`
-    output.innerHTML = `${errorBanner}${renderRecipeBody({ disableInputs: true })}`
-    output.style.display = 'block'
-    copySection.style.display = 'none'
-    updateSliderDisplay()
-    return
-  }
-  */
 
   const errorBanner = criticalErrors.length > 0
     ? `<div class="error-display">

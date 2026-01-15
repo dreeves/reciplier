@@ -575,6 +575,8 @@ math parsing and eval library provides varparse and vareval and isconstant and
 isbarevar. Then custom functions could also live there. I'm not sure whether all
 that can be a black box from csolver's perspective. Possibly not.
 
+26. Make the error banners stack a little tighter when there's more than one of
+them.
 
 ## New way to specify initially frozen cells and initial/default cvals
 
