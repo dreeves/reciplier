@@ -98,27 +98,39 @@ function checkBraceSyntax(text) {
   return errors
 }
 
+function findCommentRanges(text) {
+  const ranges = []
+  const commentRegex = /<!--[\s\S]*?-->/g
+  let match
+  while ((match = commentRegex.exec(text)) !== null) {
+    ranges.push({
+      start: match.index,
+      end: match.index + match[0].length
+    })
+  }
+  return ranges
+}
+
+function nonCommentSlices(start, end, commentRanges) {
+  const slices = []
+  let pos = start
+  for (const { start: cStart, end: cEnd } of commentRanges) {
+    if (cEnd <= pos) continue
+    if (cStart >= end) break
+    if (cStart > pos) slices.push([pos, Math.min(cStart, end)])
+    pos = Math.min(cEnd, end)
+    if (pos >= end) break
+  }
+  if (pos < end) slices.push([pos, end])
+  return slices
+}
+
 // Extract all {...} cells from text, noting which are inside HTML comments
 // TODO: no, we shouldn't care whether anything's in an html comment
 function extractCells(text) {
   const cells = []
   let cellId = 0
-
-  // First, find all HTML comments and their ranges
-  const commentRanges = []
-  const commentRegex = /<!--[\s\S]*?-->/g
-  let commentMatch
-  while ((commentMatch = commentRegex.exec(text)) !== null) {
-    commentRanges.push({
-      start: commentMatch.index,
-      end: commentMatch.index + commentMatch[0].length
-    })
-  }
-
-  // Helper to check if position is inside a comment
-  function inComment(pos) {
-    return commentRanges.some(r => pos >= r.start && pos < r.end)
-  }
+  const commentRanges = findCommentRanges(text)
 
   // Find all {...} cells (simple non-nested matching)
   const cellRegex = /\{([^{}]*)\}/g
@@ -129,7 +141,7 @@ function extractCells(text) {
       raw: match[0],
       urtext: match[1],
       content: match[1],
-      inComment: inComment(match.index),
+      inComment: commentRanges.some(r => match.index >= r.start && match.index < r.end),
       startIndex: match.index,
       endIndex: match.index + match[0].length
     })
@@ -612,42 +624,20 @@ function renderRecipe() {
   for (const id of state.invalidInputCellIds) invalidCellIds.add(id)
 
   function renderRecipeBody({ disableInputs, invalidCellIds }) {
-    // Find all HTML comment ranges to strip them from output
     const text = state.recipeText
-    const commentRanges = []
-    const commentRegex = /<!--[\s\S]*?-->/g
-    let commentMatch
-    while ((commentMatch = commentRegex.exec(text)) !== null) {
-      commentRanges.push({
-        start: commentMatch.index,
-        end: commentMatch.index + commentMatch[0].length
-      })
-    }
-
-    // Build the rendered text, skipping HTML comments entirely
+    const commentRanges = findCommentRanges(text)
+    // Build the rendered text
     let html = ''
     let lastIndex = 0
 
-    // Sort cells by start index (only visible cells)
-    const visibleCells = state.cells.filter(b => !b.inComment).sort((a, b) => a.startIndex - b.startIndex)
+    // Sort cells by start index
+    const visibleCells = state.cells.filter(c => !c.inComment).sort((a, b) => a.startIndex - b.startIndex)
 
     for (const cell of visibleCells) {
-      // Add text before this cell, but skip any HTML comments
-      let textStart = lastIndex
-      while (textStart < cell.startIndex) {
-        // Check if we're entering a comment
-        const nextCommentStart = commentRanges.find(r => r.start >= textStart && r.start < cell.startIndex)
-        if (nextCommentStart) {
-          // Add text before the comment
-          if (nextCommentStart.start > textStart) {
-            html += escapeHtml(text.substring(textStart, nextCommentStart.start))
-          }
-          // Skip the comment
-          textStart = nextCommentStart.end
-        } else {
-          // No more comments before the cell
-          html += escapeHtml(text.substring(textStart, cell.startIndex))
-          break
+      // Add text before this cell
+      if (cell.startIndex > lastIndex) {
+        for (const [s, e] of nonCommentSlices(lastIndex, cell.startIndex, commentRanges)) {
+          html += escapeHtml(text.substring(s, e))
         }
       }
 
@@ -665,21 +655,10 @@ function renderRecipe() {
       lastIndex = cell.endIndex
     }
 
-    // Add remaining text after last cell, skipping comments
-    let textStart = lastIndex
-    while (textStart < text.length) {
-      const nextComment = commentRanges.find(r => r.start >= textStart)
-      if (nextComment) {
-        // Add text before the comment
-        if (nextComment.start > textStart) {
-          html += escapeHtml(text.substring(textStart, nextComment.start))
-        }
-        // Skip the comment
-        textStart = nextComment.end
-      } else {
-        // No more comments
-        html += escapeHtml(text.substring(textStart))
-        break
+    // Add remaining text after last cell
+    if (lastIndex < text.length) {
+      for (const [s, e] of nonCommentSlices(lastIndex, text.length, commentRanges)) {
+        html += escapeHtml(text.substring(s, e))
       }
     }
 
@@ -1152,28 +1131,29 @@ function getScaledRecipeText() {
   let result = ''
   let lastIndex = 0
   const text = state.recipeText
+  const commentRanges = findCommentRanges(text)
   
-  const sortedCells = [...state.cells].sort((a, b) => a.startIndex - b.startIndex)
+  const sortedCells = state.cells.filter(c => !c.inComment).sort((a, b) => a.startIndex - b.startIndex)
   
   for (const cell of sortedCells) {
     // Add text before this cell
     if (cell.startIndex > lastIndex) {
-      result += text.substring(lastIndex, cell.startIndex)
+      for (const [s, e] of nonCommentSlices(lastIndex, cell.startIndex, commentRanges)) {
+        result += text.substring(s, e)
+      }
     }
     
-    // Add the computed value (or original for comments)
-    if (cell.inComment) {
-      result += cell.raw
-    } else {
-      result += formatNum(cell.cval)
-    }
+    // Add the computed value
+    result += formatNum(cell.cval)
     
     lastIndex = cell.endIndex
   }
   
   // Add remaining text
   if (lastIndex < text.length) {
-    result += text.substring(lastIndex)
+    for (const [s, e] of nonCommentSlices(lastIndex, text.length, commentRanges)) {
+      result += text.substring(s, e)
+    }
   }
   
   return result

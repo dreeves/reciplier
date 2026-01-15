@@ -113,7 +113,7 @@ Cook on a greased griddle at 350°F for about 2 minutes per side until golden.
 
 Makes {8x} pancakes, 120 calories each.
 
-Scaled by a factor of {x} <!-- prius: x:1 -->
+Scaled by a factor of {x}
 `,
 // -----------------------------------------------------------------------------
 breakaway: `\
