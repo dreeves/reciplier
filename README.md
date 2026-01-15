@@ -554,6 +554,11 @@ Mathematica syntax:
 Solve[{r == 0.5, pay == (1-}, {fmv, get, pay, r}]
 ```
 
+24. Implement inequalities and sliders per spec above.
+
+25. Implement the new colon syntax for initialization values spec'd below.
+
+
 ## New way to specify initially frozen cells and initial/default cvals
 
 [TODO: not yet implemented and a big refactor]

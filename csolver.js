@@ -27,12 +27,14 @@ function preval(expr) {
 
   // Implicit multiplication: number followed by letter (but not inside identifiers)
   // 2x -> 2*x, but b3h stays b3h
-  js = js.replace(/(?<![a-zA-Z_])(\d+\.?\d*)([a-zA-Z_])/g, '$1*$2')
+  js = js.replace(/(?<![a-zA-Z_])(\d+\.?\d*)\s*([a-zA-Z_])/g, '$1*$2')
+  //js = js.replace(/(?<![a-zA-Z_])(\d+\.?\d*)([a-zA-Z_])/g, '$1*$2') #SCHDEL
 
   // Math functions
   js = js.replace(/\b(sqrt|floor|ceil|round|min|max|sin|cos|tan|asin|acos|atan|log|exp|abs)\s*\(/g, 'Math.$1(')
 
   // Exponentiation: x^2 -> Math.pow(x,2)
+  // TODO: pretty sure we can just do "^" -> "**" for this
   for (let i = 0; i < 10; i++) {
     const before = js
     js = js.replace(/(\w+|\d+\.?\d*|\))\s*\^\s*(\w+|\d+\.?\d*|\([^()]*\))/g,
