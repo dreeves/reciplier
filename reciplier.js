@@ -28,6 +28,10 @@ function formatNum(num) {
   return s
 }
 
+function varsInExpr(expr) {
+  return new Set(varparse(expr))
+}
+
 // =============================================================================
 // Debug Logging for Failed Solves (Future Work Item 14)
 // =============================================================================
@@ -174,7 +178,7 @@ function parseCell(cell) {
       continue
     }
 
-    const vars = findVariables(part)
+    const vars = varsInExpr(part)
     if (vars.size === 0) {
       const r = vareval(part, {})
       if (!r.error && typeof r.value === 'number' && isFinite(r.value)) {
@@ -238,7 +242,7 @@ function buildSymbolTable(cells) {
     }
 
     for (const expr of cell.ceqn) {
-      for (const v of findVariables(expr)) {
+      for (const v of varsInExpr(expr)) {
         symbols[v] = true
       }
     }
@@ -251,7 +255,7 @@ function buildSymbolTable(cells) {
   const varToCell = new Map() // variable -> first cell that contains it
   for (const cell of cells) {
     for (const expr of cell.ceqn) {
-      for (const v of findVariables(expr)) {
+      for (const v of varsInExpr(expr)) {
         if (!varToCell.has(v)) varToCell.set(v, cell)
       }
     }
@@ -262,7 +266,7 @@ function buildSymbolTable(cells) {
     for (const cell of cells) {
       if (cell.id === firstCell.id) continue
       for (const expr of cell.ceqn) {
-        if (findVariables(expr).has(varName)) {
+        if (varsInExpr(expr).has(varName)) {
           referencedElsewhere = true
           break
         }
@@ -297,7 +301,7 @@ function buildInitialEquations(cells) {
     const parts = (c.urparts || c.urceqn || [])
     return parts.map(p => {
       if (typeof p !== 'string') return p
-      const vars = findVariables(p)
+      const vars = varsInExpr(p)
       if (vars.size !== 0) return p
       const r = vareval(p, {})
       if (r.error || typeof r.value !== 'number' || !isFinite(r.value)) return p
@@ -311,7 +315,7 @@ function buildInitialSeedValues(cells) {
   for (const cell of cells) {
     for (const expr of (cell.urparts || cell.urceqn || [])) {
       if (typeof expr !== 'string') continue
-      for (const v of findVariables(expr)) {
+      for (const v of varsInExpr(expr)) {
         if (values[v] === undefined) values[v] = 1
       }
     }
@@ -374,7 +378,7 @@ function buildInitialValues(cells) {
 
   for (const cell of cells) {
     for (const expr of cell.ceqn) {
-      for (const v of findVariables(expr)) {
+      for (const v of varsInExpr(expr)) {
         if (values[v] === undefined) values[v] = 1
       }
     }
@@ -398,15 +402,17 @@ function computeInitialValues(cells) {
   // Step 1: Solve the template as written (including constants).
   const eqns = buildInitialEquations(cells)
   const seedValues = buildInitialSeedValues(cells)
+  let result
   let values
   try {
-    values = solvem(eqns, seedValues).ass
+    result = solvem(eqns, seedValues)
+    values = result.ass
   } catch (e) {
     errors.push(String(e && e.message ? e.message : e))
     values = { ...seedValues }
   }
 
-  const sat = eqnsSatisfied(eqns, values)
+  const sat = result ? result.sat : false
   if (!sat) {
     logFailedSolve(eqns, seedValues, values)
     errors.push(...contradictionsForEqns(eqns, values))
@@ -445,7 +451,7 @@ function checkInitialContradictions(cells, values, emptyExprVars) {
 
       eqnParts.forEach(expr => {
         if (expr && expr.trim() !== '') {
-          findVariables(expr).forEach(v => varsInConstraint.add(v))
+          varsInExpr(expr).forEach(v => varsInConstraint.add(v))
         }
       })
 
@@ -852,16 +858,18 @@ function solveAndApply({
 
   const attemptedEqns = buildInteractiveEqns(editedCellId, editedValue)
   let eqns = attemptedEqns
-  let solved = solvem(eqns, seedValues).ass
-  const attemptedSat = eqnsSatisfied(eqns, solved)
+  let solveResult = solvem(eqns, seedValues)
+  let solved = solveResult.ass
+  const attemptedSat = solveResult.sat
   let sat = attemptedSat
   let didFallback = false
 
   if (!attemptedSat && allowFallbackWithoutEditedConstraint && editedCellId !== null) {
     eqns = buildInteractiveEqns(null, null)
     const fallbackSeed = fallbackSeedValues ? { ...fallbackSeedValues } : { ...state.values }
-    solved = solvem(eqns, fallbackSeed).ass
-    sat = eqnsSatisfied(eqns, solved)
+    solveResult = solvem(eqns, fallbackSeed)
+    solved = solveResult.ass
+    sat = solveResult.sat
     didFallback = true
   }
 

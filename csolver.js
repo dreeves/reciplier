@@ -362,6 +362,8 @@ function zidge(eqns, ass) {
 // solvemPrimary: The main algebraic/propagation-based solver
 // =============================================================================
 
+// TODO: dear god this is a disgusting monstrosity
+
 function solvemPrimary(eqns, vars) {
   const required = new Set()
   for (const eqn of eqns) {
@@ -382,12 +384,6 @@ function solvemPrimary(eqns, vars) {
   const values = { ...vars }
   const tol = 1e-6
   const absTol = 1e-12
-
-  // NOTE: `isSimpleVar` is redundant now that we have `isbarevar`.
-  // Safe to delete if nothing references it.
-  // function isSimpleVar(expr) {
-  //   return isbarevar(expr)
-  // }
 
   function evalExpr(expr) {
     if (typeof expr === 'number') return { value: expr, error: null }
@@ -1305,17 +1301,7 @@ function solvem(eqns, init) {
 
 // Make functions available globally if in browser context
 if (typeof window !== 'undefined') {
-  window.preval = preval
-  window.vareval = vareval
-  window.varparse = varparse
-  window.isconstant = isconstant
-  window.solveFor = solveFor
-  window.solvem = solvem
-  window.eqnsSatisfied = eqnsSatisfied
-  window.zidge = zidge
-  window.findVariables = findVariables
-  window.unixtime = unixtime
-  window.deoctalize = deoctalize
+  // Intentionally empty: non-module scripts already expose top-level functions.
 }
 
 // For Node.js module exports
@@ -1325,12 +1311,7 @@ if (typeof module !== 'undefined' && module.exports) {
     vareval,
     varparse,
     isconstant,
-    solveFor,
-    solvem,
-    eqnsSatisfied,
-    zidge,
-    findVariables,
-    unixtime,
-    deoctalize
+    isbarevar,
+    solvem
   }
 }

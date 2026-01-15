@@ -189,6 +189,10 @@ constraints.
 * `sat` is a boolean saying whether every entry in `zij` is zero, i.e., whether
 `ass` is a satisfying assignment.
 
+(PS: I might want to rename those fields to `bum`, `zij`, and `sol` for better
+greppability; `bum` being a more polite abbreviation for "assignment" than 
+`ass`.)
+
 If the variables are underconstrained `solvem` returns a satisfying assignment
 arbitrarily. In practice it may prefer positive values and smaller values.
 
@@ -225,6 +229,13 @@ that are constrained to be equal to each other and possibly to cval
 * `fix` is a boolean saying whether the cell is frozen
 * `urtext` is the exact string between the curly braces in the recipe template
 that defines the cell
+
+(PS: `fix` is not greppable and kind of pseudovernacular jargon where you have
+to disambiguate it in English, so I'm considering something cute like `icy`
+instead. But I could also change the terminology to something like "pegged"
+or "static" instead of "frozen". I don't think `peg` has the pseudovernacular
+jargon problem. Ok, I convinced myself. TODO: Change the terms in the spec from
+"frozen"/"freeze" to "pegged"/"peg".)
 
 Recall that the user can edit the template and thus change the urtext any time.
 Everything is reparsed from scratch when that happens.
@@ -509,54 +520,60 @@ can confirm if it's really true that there's no solution. For example:
 Solve[{c == 50, a == 3x, b == 4x, 25 == a^2 + b^2 == c^2}, {c, a, b, x}]
 (Done?)
 
-12. It's kind of buggy-seeming how choosing "Custom Template" doesn't change
-what's in the recipe template text area. PS: I fixed that, so now maybe we can
-just ditch the Blank one?
-
-13. Show a spinner or something while searching for a solution. (Not currently
+12. Show a spinner or something while searching for a solution. (Not currently
 necessary; could be in the future with fancier solvers.)
 
-14. Add more recipes from http://doc.dreev.es/recipes or even make Reciplier the
+13. Add more recipes from http://doc.dreev.es/recipes or even make Reciplier the
 master copy for those recipes.
 
-15. Insert the error banners directly below where the problem is, so that the
+14. Insert the error banners directly below where the problem is, so that the
 UI you're trying to interact with never shifts on you.
 
-16. See if this can subsume https://dreeves.github.io/loanwolf/
+15. See if this can subsume https://dreeves.github.io/loanwolf/
 
-17. Make error messages dismissable. That way if you, say, intentionally make an
+16. Make error messages dismissable. That way if you, say, intentionally make an
 unreferenced variable, maybe in order to have a slider for it, then you get the
 warning but don't have to employ the workaround of adding a dummy cell in an
 html comment in order to suppress the "unreferenced variable" banner.
 
-18. It shouldn't be hard to add a Gaussian elimination solver to the kitchen
+17. It shouldn't be hard to add a Gaussian elimination solver to the kitchen
 sink in csolver.js, why not.
 
-19. If x is defined implicitly, the slider should still work.
+18. If x is defined implicitly, the slider should still work.
 
-20. Refactor: Use only varparse, not findVariables.
+19. Refactor: Use only varparse, not findVariables or varsInExpr or anything
+else.
 
-21. The preval function should handle things like `2(a+b)`. And what about 
-`x(a+b)`? That ambiguous between multiplication and a function called `x`. Which
-is why Mathematica uses square brackets for function, which, maybe we want to
-just embrace that? In the meantime, numbers followed by parentheses should be
-treated as multiplication.
+20. The preval function should handle things like `2(a+b)`. And what about 
+`x(a+b)`? That's ambiguous between multiplication and a function named `x`.
+Which is why Mathematica uses square brackets for function, which, maybe we want
+to just embrace that? In the meantime, numbers followed by parentheses should be
+treated as multiplication, I think.
 
-22. While we're at it, supporting "23%" to mean 0.23 might be handy. Or maybe we
-want the percent sign to mean mod.
+21. While we're at it, supporting "23%" to mean 0.23 might be handy. Or maybe we
+want the percent sign to mean mod. TBD.
 
-23. When the solver fails and we generate a qual, the version in Mathematica
-syntax is buggy. Eg:
+22. When the solver fails and we generate a qual, the version in Mathematica
+syntax is buggy. Oh, wait, maybe both the JavaScript and Mathematica syntax are
+buggy. Example:
 ```
 solvem([["r",0.5],["100*(1-r)"],["100r"],["fmv"],["pay","(1-"],["get"]], {"r":1,"fmv":1,"pay":1,"get":1})
 Solver returned: {"r":0.5,"fmv":1,"pay":1,"get":1}
 Mathematica syntax:
 Solve[{r == 0.5, pay == (1-}, {fmv, get, pay, r}]
 ```
+I need to find replicata for this. Maybe in pyzza?
 
-24. Implement inequalities and sliders per spec above.
+23. Implement inequalities and sliders per spec above.
 
-25. Implement the new colon syntax for initialization values spec'd below.
+24. Implement the new colon syntax for initialization values spec'd below.
+
+25. Refactor: Put all the parsing and eval code in its own file (matheval.js or
+mparser.js or something). But have to think about where custom functions live,
+like unixtime() that we're making available to the eval environment. Suppose the
+math parsing and eval library provides varparse and vareval and isconstant and
+isbarevar. Then custom functions could also live there. I'm not sure whether all
+that can be a black box from csolver's perspective. Possibly not.
 
 
 ## New way to specify initially frozen cells and initial/default cvals
@@ -615,16 +632,21 @@ the fields, the post-colon expression is irrelevant. Again, post-colon
 expressions are only used to get initial numbers to populate the fields, i.e.,
 the initial cvals.
 
-Review:
+Review of this new world order:
+
 * Order never matters for equations.
-* All equations are explicit constraints, at least initially.
-* The user can override that by unfreezing a cell. At that point any constant 
-  expression is removed from the cell's ceqn.
+* Any cell whose urtext sets it equal to a constant is initially frozen.
+* So all equations are explicit constraints, at least initially.
+* The user can remove an "equals a constant" constraint by unfreezing the cell.
+* (As before, a cell keeps all the non-constant expressions from its urtext in
+  in ceqn. The constant, if there is one, is in cval. Then iff the fix field of
+  the cell is true, cval is included in the constraint equation that's sent
+  to solvem.)
 * Any cell can optionally specify an initial value, using a colon followed by an
   expression as the last part of the cell's urtext.
-* This makes the distinction nice and clear between constraints and 
-  initial/default cell assignments.
 
+Note how this makes the distinction nice and clear between constraints and 
+initial/default cell assignments.
 
 What about {0 < x < 9 : 5} vs {0 < x : 5 < 9}? Parsing is a bit messier if we
 allow both so we pick the former. Parsing a cell's urtext means first getting
@@ -632,12 +654,11 @@ the expression after the colon for use as the cval, if present. Then remove the
 colon and everything to the right of it and get the bounds, if present. Remove
 those and, finally, split on "=" to parse the ceqn.
 
-It's an error to have more than one colon in a cell and if a colon appears then
-no equal signs or inequality signs can appear anywhere to the right of it. The
-error texts are:
-* "Only one colon allowed in cell {urtext}"
-* "Initialization value after a colon must be last in cell {urtext}"
-* "Only one expression allowed after colon as initialization value in {urtext}"
+It's an error to have more than one colon in a cell and if this is a colon then
+no equal signs or inequality signs can appear to the right of it. The errorcopy
+is as follows:
+* "Cell {urtext} has multiple colons"
+* "Cell {urtext} has more than one expression after the colon"
 
 
 SCRATCH AREA: ------------------------------------------------------------------
