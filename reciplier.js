@@ -842,6 +842,7 @@ function solveAndApply({
   let sat = attemptedSat
   let didFallback = false
 
+  /* */
   if (!attemptedSat && allowFallbackWithoutEditedConstraint && editedCellId !== null) {
     eqns = buildInteractiveEqns(null, null)
     const fallbackSeed = fallbackSeedValues ? { ...fallbackSeedValues } : { ...state.values }
@@ -850,6 +851,7 @@ function solveAndApply({
     sat = solveResult.sat
     didFallback = true
   }
+  /* */
 
   const bannerEqns = didFallback ? attemptedEqns : eqns
   // When fallback succeeds and value snaps back, clear banner. Only show banner

@@ -269,6 +269,10 @@ expression in the urtext is a constant.
 That's it. Now when the user edits a cell, all other nonfrozen cells are free to
 change.
 
+Key invariant: When the user is editing a cell, they are directly editing the
+cval. See "Always Be Solving" below.
+
+
 ### Freezing and unfreezing cells
 
 Any cell at any time may be marked as frozen (`fix` set to true). Conceptually
@@ -278,15 +282,17 @@ non-destructively append cval to ceqn when calling solvem.
 
 Again, if the first expression in a cell's urtext is a constant, that cell
 starts frozen. This is what causes {6.28 = tau} to yield a field in the UI
-that's initially frozen while {tau = 6.28} doesn't.
+that's initially frozen while {tau = 6.28} doesn't. [TODO: this will be 
+changing]
 
 For example, if a cell in the template is defined as `{x = 3y = z}` then
-it will ceqn set to [`x`, `3y`, `z`], and cval set to null. A cell `{x = y = 1}`
-will have ceqn set to [`x`, `y`] and cval set to 1. A plain `{v}` will have a
-cval of null and ceqn [`v`].
+its ceqn will be set to [`x`, `3y`, `z`], and its cval set to null. A cell 
+`{x = y = 1}` will have a ceqn of [`x`, `y`] and cval of 1. A plain `{v}` will
+have a cval of null and ceqn [`v`].
 
-Every cell has a corresponding field in the UI and cval is always the current
-value in that field. That stays true keystroke by keystroke as a cell is edited.
+Every cell has a corresponding field in the UI and, again, cval is always the
+current value in that field. That stays true keystroke by keystroke as a cell is
+edited.
 
 ### Always Be Solving
 
@@ -299,8 +305,12 @@ instead of the initial 6. Cell c's ceqn is [`x`, `3y`]. As soon as the edit
 happens, we call `solvem([..., ['x', '3y', 12], ...], {x: null, y: null})`.
 The 12 is included because the user is editing the field for cell c.
 
-If the solver finds a solution, all the cells insta-update. If not, put up a
-banner saying "No solution found". If any cells besides c are frozen (c's frozen
+If the solver finds a solution, all the cells' cvals insta-update to it, by
+calling vareval for each cell with the first expression in ceqn and the
+assignment from the solver. The solution will necessarily match the cval of 12
+that the user entered in cell c since that value was included as a constraint.
+If the solver doesn't find a solution, insert a banner saying "No solution
+found" and don't update any cvals. If any cells besides c are frozen (c's frozen
 status doesn't matter since we're editing it) then the banner says "No solution
 found (try unfreezing cells)". The banner is shown live, while the user is
 typing, i.e., it's recomputed on every keystroke.
@@ -578,6 +588,10 @@ that can be a black box from csolver's perspective. Possibly not.
 26. Make the error banners stack a little tighter when there's more than one of
 them. Actually maybe it's as simple as nixing the extra vertical whitespace that
 gets inserted below each error banner.
+
+27. Bike Tour Burritos doesn't properly infer an earlier or later start time
+when the user bumps the average speed down or up.
+
 
 ## New way to specify initially frozen cells and initial/default cvals
 
