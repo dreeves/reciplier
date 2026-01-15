@@ -97,14 +97,11 @@ const RESERVED_WORDS = new Set(['sqrt', 'floor', 'ceil', 'round', 'min', 'max',
   'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'exp', 'abs',
   'unixtime'])
 
-function findVariables(expr) {
+function varparse(expr) {
   if (typeof expr !== 'string' || expr.trim() === '') return new Set()
   const matches = expr.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || []
-  return new Set(matches.filter(v => !RESERVED_WORDS.has(v)))
-}
-
-function varparse(expr) {
-  return [...findVariables(expr)].sort()
+  const vars = matches.filter(v => !RESERVED_WORDS.has(v))
+  return new Set(vars.sort())
 }
 
 function isbarevar(expr) {
@@ -373,7 +370,7 @@ function solvemPrimary(eqns, vars) {
       const t = term.trim()
       if (t === '') continue
       if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(t)) required.add(t)
-      for (const v of findVariables(t)) required.add(v)
+      for (const v of varparse(t)) required.add(v)
     }
   }
   const missing = [...required].filter(v => !Object.prototype.hasOwnProperty.call(vars, v))
@@ -412,7 +409,7 @@ function solvemPrimary(eqns, vars) {
       const t = term.trim()
       if (t === '') continue
       if (i === 0 && isbarevar(t)) continue
-      for (const v of findVariables(t)) {
+      for (const v of varparse(t)) {
         usesAsInput.set(v, (usesAsInput.get(v) || 0) + 1)
       }
     }
@@ -506,7 +503,7 @@ function solvemPrimary(eqns, vars) {
       if (typeof rhs !== 'string' || isbarevar(rhs)) continue
       if (!isKnown(lhs)) continue
 
-      const rhsVars = findVariables(rhs)
+      const rhsVars = varparse(rhs)
       if (rhsVars.size === 0) continue
       if (![...rhsVars].every(v => (trustworthy.has(v) || stableDerived.has(v)))) continue
 
@@ -545,7 +542,7 @@ function solvemPrimary(eqns, vars) {
     let bestStableScore = -1
     for (const expr of eqn) {
       if (typeof expr !== 'string' || isbarevar(expr)) continue
-      const vars = findVariables(expr)
+      const vars = varparse(expr)
       if (vars.size === 0) continue
       if (![...vars].every(v => isStable(v))) continue
       const hasNonSingletonStable = [...vars].some(v => trustworthy.has(v) || stableDerived.has(v) || solvedFromStableThisPass.has(v))
@@ -642,7 +639,7 @@ function solvemPrimary(eqns, vars) {
         }
 
         // Complex expression
-        const exprVars = findVariables(expr)
+        const exprVars = varparse(expr)
         const unknowns = [...exprVars].filter(v => !isKnown(v) && !constrained.has(v) && !solvedThisPass.has(v))
 
         if (unknowns.length === 1) {
@@ -804,8 +801,8 @@ function solvemPrimary(eqns, vars) {
     if (typeof e1 !== 'string' || typeof e2 !== 'string') continue
     if (isbarevar(e1) || isbarevar(e2)) continue
 
-    const vars1 = findVariables(e1)
-    const vars2 = findVariables(e2)
+    const vars1 = varparse(e1)
+    const vars2 = varparse(e2)
     if (vars1.size !== 1 || vars2.size !== 1) continue
 
     const v1 = [...vars1][0]
@@ -870,7 +867,7 @@ function solvemPrimary(eqns, vars) {
           copies.push([e1, e2])
         }
         if (isbarevar(e1) && typeof e2 === 'string' && !isbarevar(e2)) {
-          const vars = findVariables(e2)
+          const vars = varparse(e2)
           if (vars.size === 1) {
             const root = [...vars][0]
             if (!constrained.has(root) && !constrained.has(e1)) {
@@ -879,7 +876,7 @@ function solvemPrimary(eqns, vars) {
           }
         }
         if (isbarevar(e2) && typeof e1 === 'string' && !isbarevar(e1)) {
-          const vars = findVariables(e1)
+          const vars = varparse(e1)
           if (vars.size === 1) {
             const root = [...vars][0]
             if (!constrained.has(root) && !constrained.has(e2)) {
@@ -929,7 +926,7 @@ function solvemPrimary(eqns, vars) {
             if (typeof e === 'number') { bestVal = e; bestScore = 2; break }
             const r = vareval(e, testValues)
             if (r.error || !isFinite(r.value)) continue
-            const vars = findVariables(e)
+            const vars = varparse(e)
             const constrainedOnly = [...vars].every(v => constrained.has(v))
             const score = constrainedOnly ? 1 : 0
             if (score > bestScore) { bestScore = score; bestVal = r.value }
@@ -978,7 +975,7 @@ function solvemPrimary(eqns, vars) {
             if (typeof e === 'number') { bestVal = e; bestScore = 2; break }
             const r = vareval(e, testHi)
             if (r.error || !isFinite(r.value)) continue
-            const vars = findVariables(e)
+            const vars = varparse(e)
             const constrainedOnly = [...vars].every(v => constrained.has(v))
             const score = constrainedOnly ? 1 : 0
             if (score > bestScore) { bestScore = score; bestVal = r.value }

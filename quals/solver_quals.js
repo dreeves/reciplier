@@ -261,7 +261,7 @@ function runAllSolverQuals(ctx) {
   check('vareval: unixtime next day', vareval('unixtime(1970,1,2)', {}).value, 86400)
   check('vareval: complex expression', vareval('a^2 + b^2', {a: 3, b: 4}).value, 25)
 
-  check('varparse: unixtime not a variable', varparse('unixtime(y,m,d)').includes('unixtime'), false)
+  check('varparse: unixtime not a variable', varparse('unixtime(y,m,d)').has('unixtime'), false)
 
   console.log('\n=== preval quals ===')
   check('toJS: implicit mult', preval('2x'), '2*x')

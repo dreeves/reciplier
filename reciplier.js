@@ -28,10 +28,6 @@ function formatNum(num) {
   return s
 }
 
-function varsInExpr(expr) {
-  return new Set(varparse(expr))
-}
-
 // =============================================================================
 // Debug Logging for Failed Solves (Future Work Item 14)
 // =============================================================================
@@ -130,7 +126,8 @@ function nonCommentSlices(start, end, commentRanges) {
 }
 
 // Extract all {...} cells from text, noting which are inside HTML comments
-// TODO: no, we shouldn't care whether anything's in an html comment
+// TODO: no, we shouldn't care whether anything's in an html comment when 
+// extracting cells. only the rendering cares about that.
 function extractCells(text) {
   const cells = []
   let cellId = 0
@@ -140,6 +137,8 @@ function extractCells(text) {
   const cellRegex = /\{([^{}]*)\}/g
   let match
   while ((match = cellRegex.exec(text)) !== null) {
+    // TODO: what's the difference between raw and urtext?
+    // TODO: cells shouldn't care if they're defined inside a comment, probably
     cells.push({
       id: `cell_${cellId++}`,
       raw: match[0],
@@ -178,7 +177,7 @@ function parseCell(cell) {
       continue
     }
 
-    const vars = varsInExpr(part)
+    const vars = varparse(part)
     if (vars.size === 0) {
       const r = vareval(part, {})
       if (!r.error && typeof r.value === 'number' && isFinite(r.value)) {
@@ -204,6 +203,7 @@ function parseCell(cell) {
 
   const ceqn = nonConstParts
 
+  // TODO: pretty sure we don't need most of this:
   return {
     ...cell,
     cval,
@@ -242,7 +242,7 @@ function buildSymbolTable(cells) {
     }
 
     for (const expr of cell.ceqn) {
-      for (const v of varsInExpr(expr)) {
+      for (const v of varparse(expr)) {
         symbols[v] = true
       }
     }
@@ -255,7 +255,7 @@ function buildSymbolTable(cells) {
   const varToCell = new Map() // variable -> first cell that contains it
   for (const cell of cells) {
     for (const expr of cell.ceqn) {
-      for (const v of varsInExpr(expr)) {
+      for (const v of varparse(expr)) {
         if (!varToCell.has(v)) varToCell.set(v, cell)
       }
     }
@@ -266,7 +266,7 @@ function buildSymbolTable(cells) {
     for (const cell of cells) {
       if (cell.id === firstCell.id) continue
       for (const expr of cell.ceqn) {
-        if (varsInExpr(expr).has(varName)) {
+        if (varparse(expr).has(varName)) {
           referencedElsewhere = true
           break
         }
@@ -301,7 +301,7 @@ function buildInitialEquations(cells) {
     const parts = (c.urparts || c.urceqn || [])
     return parts.map(p => {
       if (typeof p !== 'string') return p
-      const vars = varsInExpr(p)
+      const vars = varparse(p)
       if (vars.size !== 0) return p
       const r = vareval(p, {})
       if (r.error || typeof r.value !== 'number' || !isFinite(r.value)) return p
@@ -315,7 +315,7 @@ function buildInitialSeedValues(cells) {
   for (const cell of cells) {
     for (const expr of (cell.urparts || cell.urceqn || [])) {
       if (typeof expr !== 'string') continue
-      for (const v of varsInExpr(expr)) {
+      for (const v of varparse(expr)) {
         if (values[v] === undefined) values[v] = 1
       }
     }
@@ -378,7 +378,7 @@ function buildInitialValues(cells) {
 
   for (const cell of cells) {
     for (const expr of cell.ceqn) {
-      for (const v of varsInExpr(expr)) {
+      for (const v of varparse(expr)) {
         if (values[v] === undefined) values[v] = 1
       }
     }
@@ -451,7 +451,7 @@ function checkInitialContradictions(cells, values, emptyExprVars) {
 
       eqnParts.forEach(expr => {
         if (expr && expr.trim() !== '') {
-          varsInExpr(expr).forEach(v => varsInConstraint.add(v))
+          varparse(expr).forEach(v => varsInConstraint.add(v))
         }
       })
 
@@ -936,24 +936,6 @@ function solveAndApply({
 
 function buildInteractiveEqns(editedCellId = null, editedValue = null) {
   return state.cells.map(c => {
-    // For cells in comments, use the full equation (they can't be edited)
-    // TODO: This is wrong-headed. We do not want a special case for an equation
-    // being in a comment, for Christ's sake. Egregious anti-magic violation.
-    // But this may point to a design problem. See README FOR MORE THOUGHTS.
-    /* 
-    if (c.inComment && c.hasConstraint && c.hasNumber) {
-      const parts = (c.urparts || c.urceqn || [])
-      return parts.map(p => {
-        if (typeof p !== 'string') return p
-        const vars = findVariables(p)
-        if (vars.size !== 0) return p
-        const r = vareval(p, {})
-        if (r.error || typeof r.value !== 'number' || !isFinite(r.value)) return p
-        return r.value
-      })
-    }
-    */
-
     const eqn = [...c.ceqn]
 
     if (editedCellId !== null && c.id === editedCellId) {
