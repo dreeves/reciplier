@@ -320,10 +320,12 @@ function buildInitialSeedValues(cells) {
   return values
 }
 
-function contradictionsForEqns(eqns, values) {
+function contradictionsForEqns(eqns, values, zij) {
   const errors = []
 
-  for (const eqn of eqns) {
+  for (let i = 0; i < eqns.length; i++) {
+    const eqn = eqns[i]
+    if (zij[i] === 0) continue
     const results = eqn.map(expr => {
       if (expr === null || expr === undefined) return null
       const s = String(expr)
@@ -407,12 +409,12 @@ function computeInitialValues(cells) {
   } catch (e) {
     errors.push(String(e && e.message ? e.message : e))
     values = { ...seedValues }
+    result = { ass: values, zij: new Array(eqns.length).fill(NaN), sat: false }
   }
 
-  const sat = result ? result.sat : false
-  if (!sat) {
+  if (!result.sat) {
     logFailedSolve(eqns, seedValues, values)
-    errors.push(...contradictionsForEqns(eqns, values))
+    errors.push(...contradictionsForEqns(eqns, values, result.zij))
   }
 
   return { values, errors, emptyExprVars: new Set() }
@@ -526,6 +528,8 @@ let state = {
   cells: [],
   symbols: {},
   values: {},
+  lastEqns: null,
+  lastZij: null,
   fixedCellIds: new Set(),
   userEditedVars: new Set(),  // Track variables the user has directly edited
   errors: [],
@@ -551,6 +555,8 @@ function parseRecipe() {
     state.cells = []
     state.symbols = {}
     state.values = {}
+    state.lastEqns = null
+    state.lastZij = null
     state.userEditedVars = new Set()
     state.errors = []
     state.solveBanner = ''
@@ -584,6 +590,8 @@ function parseRecipe() {
   state.cells = cells
   state.symbols = symbols
   state.values = values
+  state.lastEqns = null
+  state.lastZij = null
   state.errors = allErrors
   // Per README future-work item 8: cells defined with bare numbers start frozen
   // state.fixedCellIds = new Set(cells.filter(c => c.fix).map(c => c.id))
@@ -616,14 +624,7 @@ function renderRecipe() {
   
   const criticalErrors = state.errors
 
-  const violatedCellIds = getViolatedCellIds(state.cells, state.values)
-  const invalidCellIds = new Set(violatedCellIds)
-  if (state.solveBanner) {
-    const eqns = buildInteractiveEqns(null, null)
-    for (const id of getUnsatisfiedCellIds(eqns, state.values)) 
-      invalidCellIds.add(id)
-  }
-  for (const id of state.invalidInputCellIds) invalidCellIds.add(id)
+  const invalidCellIds = collectInvalidCellIds(state.lastEqns, state.lastZij)
 
   function renderRecipeBody({ disableInputs, invalidCellIds }) {
     const text = state.recipeText
@@ -724,11 +725,11 @@ function escapeHtml(text) {
 // Event Handlers
 // =============================================================================
 
-function updateSolveBannerInDom() {
-  const banner = $('solveBanner')
+function updateBannerInDom(bannerId, message) {
+  const banner = $(bannerId)
   if (!banner) return
 
-  if (!state.solveBanner) {
+  if (!message) {
     banner.hidden = true
     const msg = banner.querySelector('.error-message')
     if (msg) msg.textContent = ''
@@ -737,23 +738,15 @@ function updateSolveBannerInDom() {
 
   banner.hidden = false
   const msg = banner.querySelector('.error-message')
-  if (msg) msg.textContent = `⚠️ ${state.solveBanner}`
+  if (msg) msg.textContent = `⚠️ ${message}`
+}
+
+function updateSolveBannerInDom() {
+  updateBannerInDom('solveBanner', state.solveBanner)
 }
 
 function updateInvalidExplainBannerInDom() {
-  const banner = $('invalidExplainBanner')
-  if (!banner) return
-
-  if (!state.invalidExplainBanner) {
-    banner.hidden = true
-    const msg = banner.querySelector('.error-message')
-    if (msg) msg.textContent = ''
-    return
-  }
-
-  banner.hidden = false
-  const msg = banner.querySelector('.error-message')
-  if (msg) msg.textContent = `⚠️ ${state.invalidExplainBanner}`
+  updateBannerInDom('invalidExplainBanner', state.invalidExplainBanner)
 }
 
 function setInvalidExplainBannerFromInvalidity(invalidCellIds) {
@@ -828,6 +821,7 @@ function setSolveBannerFromSatisfaction(sat) {
     : 'No solution found'
 }
 
+// Orchestrate solve + state/DOM updates for edits, freezes, and fallbacks.
 function solveAndApply({
   editedCellId = null,
   editedValue = null,
@@ -844,6 +838,7 @@ function solveAndApply({
   let solveResult = solvem(eqns, seedValues)
   let solved = solveResult.ass
   const attemptedSat = solveResult.sat
+  const attemptedZij = solveResult.zij
   let sat = attemptedSat
   let didFallback = false
 
@@ -860,6 +855,7 @@ function solveAndApply({
   // When fallback succeeds and value snaps back, clear banner. Only show banner
   // for attempted failure when preserving the invalid edit (derived expression).
   const bannerSat = (didFallback && preserveEditedCvalOnFallback) ? attemptedSat : sat
+  const bannerZij = didFallback ? attemptedZij : solveResult.zij
 
   if (!bannerSat) {
     logFailedSolve(bannerEqns, seedValues, solved)
@@ -869,6 +865,8 @@ function solveAndApply({
   updateSolveBannerInDom()
 
   state.values = solved
+  state.lastEqns = bannerEqns
+  state.lastZij = bannerZij
 
   const preserveEdited = editedCellId !== null && (!didFallback || preserveEditedCvalOnFallback)
   if (preserveEdited) {
@@ -879,12 +877,7 @@ function solveAndApply({
   const skipRecomputeCellId = preserveEdited ? editedCellId : null
   recomputeCellCvals(state.cells, state.values, state.fixedCellIds, skipRecomputeCellId)
 
-  const violatedCellIds = getViolatedCellIds(state.cells, state.values)
-  const invalidCellIds = new Set(violatedCellIds)
-  if (state.solveBanner) {
-    for (const id of getUnsatisfiedCellIds(bannerEqns, state.values)) invalidCellIds.add(id)
-  }
-  for (const id of state.invalidInputCellIds) invalidCellIds.add(id)
+  const invalidCellIds = collectInvalidCellIds(bannerEqns, bannerZij)
 
   setInvalidExplainBannerFromInvalidity(invalidCellIds)
   updateInvalidExplainBannerInDom()
@@ -931,35 +924,47 @@ function buildInteractiveEqns(editedCellId = null, editedValue = null) {
   })
 }
 
-function getUnsatisfiedCellIds(eqns, values) {
+function getUnsatisfiedCellIds(eqns, zij) {
   const unsatisfied = new Set()
-  const tol = 1e-6
+  if (!Array.isArray(zij)) return unsatisfied
 
-  for (let i = 0; i < eqns.length; i++) {
-    const eqn = eqns[i]
-    if (!eqn || eqn.length < 2) continue
-
-    const results = eqn.map(term => {
-      if (typeof term === 'number') return { value: term, error: null }
-      return vareval(String(term), values)
-    })
-
-    if (results.some(r => r.error || typeof r.value !== 'number' || !isFinite(r.value))) continue
-
-    const first = results[0].value
-    const tolerance = Math.abs(first) * tol + tol
-    const ok = results.every(r => Math.abs(r.value - first) < tolerance)
-    if (!ok) {
-      const cell = state.cells[i]
-      if (cell && cell.id) unsatisfied.add(cell.id)
-    }
+  const limit = Math.min(eqns.length, zij.length)
+  for (let i = 0; i < limit; i++) {
+    const residual = zij[i]
+    if (Number.isFinite(residual) && residual === 0) continue
+    const cell = state.cells[i]
+    if (cell && cell.id) unsatisfied.add(cell.id)
   }
 
   return unsatisfied
 }
 
+// Combine per-cell violations, solver residuals, and invalid input markers.
+function collectInvalidCellIds(eqns, zij) {
+  const invalidCellIds = new Set(getViolatedCellIds(state.cells, state.values))
+
+  if (state.solveBanner && eqns && zij) {
+    for (const id of getUnsatisfiedCellIds(eqns, zij)) invalidCellIds.add(id)
+  }
+  for (const id of state.invalidInputCellIds) invalidCellIds.add(id)
+
+  return invalidCellIds
+}
+
 // TODO: ugh, hundreds of occurrences of "value", many but not all of which
 // should be "cval"
+
+function markInvalidInput(input, cellId, message) {
+  input.classList.add('invalid')
+  state.invalidInputCellIds.add(cellId)
+  state.invalidExplainBanner = message
+  updateInvalidExplainBannerInDom()
+  repositionNonCriticalBannersAfterLastInvalidBr()
+}
+
+function clearInvalidInput(cellId) {
+  state.invalidInputCellIds.delete(cellId)
+}
 
 function handleFieldInput(e) {
   const input = e.target
@@ -968,15 +973,11 @@ function handleFieldInput(e) {
 
   // Invalid number format - just mark invalid, don't change state
   if (newValue === null || !isFinite(newValue)) {
-    input.classList.add('invalid')
-    state.invalidInputCellIds.add(cellId)
-    state.invalidExplainBanner = `Syntax error: only numbers allowed`
-    updateInvalidExplainBannerInDom()
-    repositionNonCriticalBannersAfterLastInvalidBr()
+    markInvalidInput(input, cellId, `Syntax error: only numbers allowed`)
     return
   }
 
-  state.invalidInputCellIds.delete(cellId)
+  clearInvalidInput(cellId)
 
   input.onblur = handleFieldBlur
 
@@ -988,7 +989,6 @@ function handleFieldInput(e) {
     state.valuesBeforeEdit = { ...state.values }
   }
 
-  const isBareIdentifier = (s) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(String(s || '').trim())
   const isDerivedExpressionCell =
     Array.isArray(cell?.ceqn) &&
     cell.ceqn.length === 1 &&
@@ -1018,15 +1018,12 @@ function handleFieldBlur(e) {
 
   const blurredValue = toNum(e.target.value)
   if (blurredValue === null || !isFinite(blurredValue)) {
-    e.target.classList.add('invalid')
-    state.invalidInputCellIds.add(blurredCellId)
     state.invalidExplainBanner = `Syntax error` // unDRY warning
-    updateInvalidExplainBannerInDom()
-    repositionNonCriticalBannersAfterLastInvalidBr()
+    markInvalidInput(e.target, blurredCellId, state.invalidExplainBanner)
     return
   }
 
-  state.invalidInputCellIds.delete(blurredCellId)
+  clearInvalidInput(blurredCellId)
 
   const blurredCell = state.cells.find(c => c.id === blurredCellId)
   if (!blurredCell) return

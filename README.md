@@ -576,7 +576,8 @@ isbarevar. Then custom functions could also live there. I'm not sure whether all
 that can be a black box from csolver's perspective. Possibly not.
 
 26. Make the error banners stack a little tighter when there's more than one of
-them.
+them. Actually maybe it's as simple as nixing the extra vertical whitespace that
+gets inserted below each error banner.
 
 ## New way to specify initially frozen cells and initial/default cvals
 
@@ -713,3 +714,13 @@ Then eat it.
 Sanity check unscaled: {a}^2 + {b}^2 = {a^2} + {b^2} = {a^2 + b^2 = c^2}
 Sanity check scaled:   {A}^2 + {B}^2 = {A^2} + {B^2} = {A^2 + B^2 = C^2}
 ```
+
+The following call to solvem:
+
+solvem([["2x"],["3x"],["d",18.2383],["w"],["h"],["z"],["A"],["x"],["tau",6.28],["d1",9],["r1","d1 / 2"],["r","d/2"],["d","2r"],["w^2 + h^2","z^2"],["A","x*1/2*tau*r1^2","1/2*tau*r^2","w*h"]], {"x":4.106625693690123,"d":18.23833,"w":128.853787372502,"h":2.0264813325076596,"z":128.86972160608155,"A":261.11979473328654,"tau":6.28,"d1":9,"r1":4.5,"r":9.119165})
+
+returns 
+
+ass = {x: 4.106625693690123, d: 18.2383, w: 128.85357542252515, h: 2.0264779991739617, z: 128.86950962989468, A: 261.11893570865, tau: 6.28, d1: 9, r1: 4.499992598006505, r: 9.11915}
+zij = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2.7394753846919868e-11, 0, 0, 1.3234889800848443e-23, 6.462348535570529e-27]
+sat=false
