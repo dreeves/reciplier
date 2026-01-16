@@ -320,7 +320,7 @@ function buildInitialSeedValues(cells) {
   return values
 }
 
-function contradictionsForEqns(eqns, values, zij) {
+function contradictionsForEqns(eqns, ass, zij) {
   const errors = []
 
   for (let i = 0; i < eqns.length; i++) {
@@ -330,7 +330,7 @@ function contradictionsForEqns(eqns, values, zij) {
       if (expr === null || expr === undefined) return null
       const s = String(expr)
       if (!s.trim()) return null
-      const r = vareval(s, values)
+      const r = vareval(s, ass)
       return r.error ? null : r.value
     })
 
@@ -353,7 +353,7 @@ function contradictionsForEqns(eqns, values, zij) {
   return errors
 }
 
-function recomputeCellCvals(cells, values, fixedCellIds, pinnedCellId = null) {
+function recomputeCellCvals(cells, ass, fixedCellIds, pinnedCellId = null) {
   for (const cell of cells) {
     if (cell.id === pinnedCellId) continue
     if (fixedCellIds && fixedCellIds.has(cell.id) && typeof cell.cval === 'number' && isFinite(cell.cval)) {
@@ -362,36 +362,13 @@ function recomputeCellCvals(cells, values, fixedCellIds, pinnedCellId = null) {
     if (!cell.ceqn || cell.ceqn.length === 0) continue
 
     const results = cell.ceqn.map(expr => {
-      const r = vareval(expr, values)
+      const r = vareval(expr, ass)
       return r.error ? null : r.value
     }).filter(v => typeof v === 'number' && isFinite(v))
 
     if (results.length === 0) continue
     cell.cval = results.reduce((a, b) => a + b, 0) / results.length
   }
-}
-
-// Build initial values for solvem() from cells
-function buildInitialValues(cells) {
-  const values = {}
-
-  for (const cell of cells) {
-    for (const expr of cell.ceqn) {
-      for (const v of varparse(expr)) {
-        if (values[v] === undefined) values[v] = 1
-      }
-    }
-  }
-
-  for (const cell of cells) {
-    if (cell.cval === null) continue
-    if (cell.ceqn.length !== 1) continue
-    const t = cell.ceqn[0].trim()
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(t)) continue
-    values[t] = cell.cval
-  }
-
-  return values
 }
 
 // Compute initial values for all variables using solvem()
@@ -402,94 +379,32 @@ function computeInitialValues(cells) {
   const eqns = buildInitialEquations(cells)
   const seedValues = buildInitialSeedValues(cells)
   let result
-  let values
+  let ass
   try {
     result = solvem(eqns, seedValues)
-    values = result.ass
+    ass = result.ass
   } catch (e) {
     errors.push(String(e && e.message ? e.message : e))
-    values = { ...seedValues }
-    result = { ass: values, zij: new Array(eqns.length).fill(NaN), sat: false }
+    ass = { ...seedValues }
+    result = { ass, zij: new Array(eqns.length).fill(NaN), sat: false }
   }
 
   if (!result.sat) {
-    logFailedSolve(eqns, seedValues, values)
-    errors.push(...contradictionsForEqns(eqns, values, result.zij))
+    logFailedSolve(eqns, seedValues, ass)
+    errors.push(...contradictionsForEqns(eqns, ass, result.zij))
   }
 
-  return { values, errors, emptyExprVars: new Set() }
+  const solve = { ass, eqns, zij: result.zij, sat: result.sat }
+  return { solve, errors }
 }
 
 // =============================================================================
 // Constraint Solver
 // =============================================================================
 
-// TODO: all constraint solver code should be in csolver.js
-// Check if initial values contradict any constraints (fail loudly per Anti-Postel)
-// Skip checking constraints that involve variables with empty expressions (those need solving)
-function checkInitialContradictions(cells, values, emptyExprVars) {
-  const errors = []
-
-  for (const cell of cells) {
-    // Only check cells that actually have constraints
-    if (cell.hasConstraint) {
-      // Check if this constraint involves any variable that needs to be computed
-      const varsInConstraint = new Set()
-      const eqnParts = [...cell.ceqn]
-
-      const isAssignmentSeed =
-        cell.hasConstraint &&
-        cell.hasNumber &&
-        !cell.startsFrozen &&
-        cell.ceqn.length === 1 &&
-        isbarevar(cell.ceqn[0])
-
-      if (!isAssignmentSeed && cell.hasConstraint && cell.hasNumber) {
-        eqnParts.push(String(cell.cval))
-      }
-
-      eqnParts.forEach(expr => {
-        if (expr && expr.trim() !== '') {
-          varparse(expr).forEach(v => varsInConstraint.add(v))
-        }
-      })
-
-      // Skip if any variable in this constraint has an empty expression (needs solving)
-      const involvesEmptyVar = [...varsInConstraint].some(v => emptyExprVars.has(v))
-      if (involvesEmptyVar) continue
-
-      // This is a constraint - all expressions in ceqn should evaluate equal
-      const results = eqnParts.map(expr => {
-        if (!expr || expr.trim() === '') return null
-        const r = vareval(expr, values)
-        return r.error ? null : r.value
-      })
-
-      // Skip if any expression couldn't be evaluated
-      if (results.some(r => r === null)) continue
-
-      // Check if all results are approximately equal
-      const first = results[0]
-      // Tolerance must be >= display precision (4 decimal places) to avoid
-      // showing contradictions like "1.4023 ≠ 1.4023"
-      const tolerance = Math.abs(first) * 1e-4 + 1e-4
-      for (let i = 1; i < results.length; i++) {
-        if (Math.abs(results[i] - first) > tolerance) {
-          const exprStr = eqnParts.join(' = ')
-          const valuesStr = results.map(r => formatNum(r)).join(' ≠ ')
-          errors.push(`Contradiction: {${exprStr}} evaluates to ${valuesStr}`)
-          break
-        }
-      }
-    }
-  }
-
-  return errors
-}
-
 // Check if a cell's cval matches all expressions in its ceqn
 // Per spec: "cell's field is shown in red if cval differs from any of the expressions in ceqn"
-function isCellViolated(cell, values) {
+function isCellViolated(cell, ass) {
   const cval = cell.cval
   if (typeof cval !== 'number' || !isFinite(cval)) return true
 
@@ -499,7 +414,7 @@ function isCellViolated(cell, values) {
   for (const expr of cell.ceqn) {
     if (!expr || expr.trim() === '') continue
 
-    const result = vareval(expr, values)
+    const result = vareval(expr, ass)
     if (result.error) return true
 
     if (Math.abs(result.value - cval) > tolerance) return true
@@ -509,10 +424,10 @@ function isCellViolated(cell, values) {
 }
 
 // Get set of cell IDs that are violated (for UI highlighting)
-function getViolatedCellIds(cells, values) {
+function getViolatedCellIds(cells, ass) {
   const violatedIds = new Set()
   for (const cell of cells) {
-    if (isCellViolated(cell, values)) {
+    if (isCellViolated(cell, ass)) {
       violatedIds.add(cell.id)
     }
   }
@@ -526,19 +441,12 @@ function getViolatedCellIds(cells, values) {
 let state = {
   recipeText: '',
   cells: [],
-  symbols: {},
-  values: {},
-  lastEqns: null,
-  lastZij: null,
+  solve: { ass: {}, eqns: null, zij: null, sat: true },
   fixedCellIds: new Set(),
-  userEditedVars: new Set(),  // Track variables the user has directly edited
   errors: [],
   solveBanner: '',
   invalidExplainBanner: '',
   invalidInputCellIds: new Set(),
-  currentRecipeKey: '',
-  currentEditCellId: null,
-  valuesBeforeEdit: null,
 }
 
 // =============================================================================
@@ -548,16 +456,9 @@ let state = {
 function parseRecipe() {
   const text = state.recipeText
 
-  state.currentEditCellId = null
-  state.valuesBeforeEdit = null
-  
   if (!text.trim()) { // does this mean the whole reciplate is the empty string?
     state.cells = []
-    state.symbols = {}
-    state.values = {}
-    state.lastEqns = null
-    state.lastZij = null
-    state.userEditedVars = new Set()
+    state.solve = { ass: {}, eqns: null, zij: null, sat: true }
     state.errors = []
     state.solveBanner = ''
     state.invalidExplainBanner = ''
@@ -568,9 +469,6 @@ function parseRecipe() {
     return
   }
 
-  // Clear user edits when recipe changes
-  state.userEditedVars = new Set()
-
   // Check for syntax errors (nested/unbalanced braces)
   const syntaxErrors = checkBraceSyntax(text)
 
@@ -579,24 +477,21 @@ function parseRecipe() {
   cells = cells.map(parseCell)
 
   // Build symbol table
-  const { symbols, errors: symbolErrors } = buildSymbolTable(cells)
+  const { errors: symbolErrors } = buildSymbolTable(cells)
   
   // Compute initial values (includes template satisfiability check)
-  const { values, errors: valueErrors } = computeInitialValues(cells)
+  const { solve, errors: valueErrors } = computeInitialValues(cells)
 
   const allErrors = [...syntaxErrors, ...symbolErrors, ...valueErrors]
   
   // Update state
   state.cells = cells
-  state.symbols = symbols
-  state.values = values
-  state.lastEqns = null
-  state.lastZij = null
+  state.solve = solve
   state.errors = allErrors
   // Per README future-work item 8: cells defined with bare numbers start frozen
   // state.fixedCellIds = new Set(cells.filter(c => c.fix).map(c => c.id))
   state.fixedCellIds = new Set(cells.filter(c => c.startsFrozen).map(c => c.id))
-  recomputeCellCvals(cells, values, state.fixedCellIds)
+  recomputeCellCvals(cells, solve.ass, state.fixedCellIds)
   state.solveBanner = ''
   state.invalidExplainBanner = ''
   state.invalidInputCellIds = new Set()
@@ -614,7 +509,6 @@ function updateRecipeDropdown() {
       break
     }
   }
-  state.currentRecipeKey = matchingKey
   $('recipeSelect').value = matchingKey
 }
 
@@ -624,7 +518,7 @@ function renderRecipe() {
   
   const criticalErrors = state.errors
 
-  const invalidCellIds = collectInvalidCellIds(state.lastEqns, state.lastZij)
+  const invalidCellIds = collectInvalidCellIds(state.solve.eqns, state.solve.zij)
 
   function renderRecipeBody({ disableInputs, invalidCellIds }) {
     const text = state.recipeText
@@ -821,65 +715,41 @@ function setSolveBannerFromSatisfaction(sat) {
     : 'No solution found'
 }
 
-// Orchestrate solve + state/DOM updates for edits, freezes, and fallbacks.
 function solveAndApply({
   editedCellId = null,
   editedValue = null,
   editedFieldEl = null,
   seedOverrides = null,
-  allowFallbackWithoutEditedConstraint = false,
-  preserveEditedCvalOnFallback = false,
-  fallbackSeedValues = null,
 } = {}) {
-  const seedValues = { ...state.values, ...(seedOverrides || {}) }
+  const seedAss = { ...state.solve.ass, ...(seedOverrides || {}) }
 
-  const attemptedEqns = buildInteractiveEqns(editedCellId, editedValue)
-  let eqns = attemptedEqns
-  let solveResult = solvem(eqns, seedValues)
-  let solved = solveResult.ass
-  const attemptedSat = solveResult.sat
-  const attemptedZij = solveResult.zij
-  let sat = attemptedSat
-  let didFallback = false
+  const eqns = buildInteractiveEqns(editedCellId, editedValue)
+  const solveResult = solvem(eqns, seedAss)
+  const solvedAss = solveResult.ass
+  const sat = solveResult.sat
+  const zij = solveResult.zij
 
-  /* */
-  if (!attemptedSat && allowFallbackWithoutEditedConstraint && editedCellId !== null) {
-    eqns = buildInteractiveEqns(null, null)
-    const fallbackSeed = fallbackSeedValues ? { ...fallbackSeedValues } : { ...state.values }
-    solveResult = solvem(eqns, fallbackSeed)
-    solved = solveResult.ass
-    sat = solveResult.sat
-    didFallback = true
-  }
-  /* */
-
-  const bannerEqns = didFallback ? attemptedEqns : eqns
-  // When fallback succeeds and value snaps back, clear banner. Only show banner
-  // for attempted failure when preserving the invalid edit (derived expression).
-  const bannerSat = (didFallback && preserveEditedCvalOnFallback) ? attemptedSat : sat
-  const bannerZij = didFallback ? attemptedZij : solveResult.zij
-
-  if (!bannerSat) {
-    logFailedSolve(bannerEqns, seedValues, solved)
+  if (!sat) {
+    logFailedSolve(eqns, seedAss, solvedAss)
   }
 
-  setSolveBannerFromSatisfaction(bannerSat)
+  setSolveBannerFromSatisfaction(sat)
   updateSolveBannerInDom()
 
-  state.values = solved
-  state.lastEqns = bannerEqns
-  state.lastZij = bannerZij
+  state.solve = { ass: solvedAss, eqns, zij, sat }
 
-  const preserveEdited = editedCellId !== null && (!didFallback || preserveEditedCvalOnFallback)
+  const preserveEdited = editedCellId !== null
   if (preserveEdited) {
     const editedCell = state.cells.find(c => c.id === editedCellId)
     if (editedCell) editedCell.cval = editedValue
   }
 
   const skipRecomputeCellId = preserveEdited ? editedCellId : null
-  recomputeCellCvals(state.cells, state.values, state.fixedCellIds, skipRecomputeCellId)
+  if (sat) {
+    recomputeCellCvals(state.cells, state.solve.ass, state.fixedCellIds, skipRecomputeCellId)
+  }
 
-  const invalidCellIds = collectInvalidCellIds(bannerEqns, bannerZij)
+  const invalidCellIds = collectInvalidCellIds(eqns, zij)
 
   setInvalidExplainBannerFromInvalidity(invalidCellIds)
   updateInvalidExplainBannerInDom()
@@ -909,7 +779,7 @@ function solveAndApply({
   repositionNonCriticalBannersAfterLastInvalidBr()
 
   updateSliderDisplay()
-  return { eqns: bannerEqns, solved, sat: bannerSat, invalidCellIds }
+  return { eqns, solved: solvedAss, sat, invalidCellIds }
 }
 
 function buildInteractiveEqns(editedCellId = null, editedValue = null) {
@@ -943,7 +813,7 @@ function getUnsatisfiedCellIds(eqns, zij) {
 
 // Combine per-cell violations, solver residuals, and invalid input markers.
 function collectInvalidCellIds(eqns, zij) {
-  const invalidCellIds = new Set(getViolatedCellIds(state.cells, state.values))
+  const invalidCellIds = new Set(getViolatedCellIds(state.cells, state.solve.ass))
 
   if (state.solveBanner && eqns && zij) {
     for (const id of getUnsatisfiedCellIds(eqns, zij)) invalidCellIds.add(id)
@@ -981,74 +851,15 @@ function handleFieldInput(e) {
 
   clearInvalidInput(cellId)
 
-  input.onblur = handleFieldBlur
-
   const cell = state.cells.find(c => c.id === cellId)
   if (!cell) return
-
-  if (state.currentEditCellId !== cellId) {
-    state.currentEditCellId = cellId
-    state.valuesBeforeEdit = { ...state.values }
-  }
-
-  const isDerivedExpressionCell =
-    Array.isArray(cell?.ceqn) &&
-    cell.ceqn.length === 1 &&
-    !isbarevar(String(cell.ceqn[0] || ''))
-
-  const allowFallbackWithoutEditedConstraint = isDerivedExpressionCell
-  const preserveEditedCvalOnFallback = isDerivedExpressionCell
+  cell.cval = newValue
 
   solveAndApply({
     editedCellId: cellId,
     editedValue: newValue,
     editedFieldEl: input,
-    allowFallbackWithoutEditedConstraint,
-    preserveEditedCvalOnFallback,
   })
-}
-
-function handleFieldBlur(e) {
-  const blurredCellId = e.target.dataset.cellId
-
-  e.target.onblur = null
-
-  const didEditThisField = state.currentEditCellId === blurredCellId
-  if (!didEditThisField) {
-    return
-  }
-
-  const blurredValue = toNum(e.target.value)
-  if (blurredValue === null || !isFinite(blurredValue)) {
-    state.invalidExplainBanner = `Syntax error` // unDRY warning
-    markInvalidInput(e.target, blurredCellId, state.invalidExplainBanner)
-    return
-  }
-
-  clearInvalidInput(blurredCellId)
-
-  const blurredCell = state.cells.find(c => c.id === blurredCellId)
-  if (!blurredCell) return
-
-  const isBareIdentifier = (s) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(String(s || '').trim())
-  const isDerivedExpressionCell =
-    Array.isArray(blurredCell?.ceqn) &&
-    blurredCell.ceqn.length === 1 &&
-    !isBareIdentifier(blurredCell.ceqn[0])
-
-  const fallbackSeedValues = state.valuesBeforeEdit ? { ...state.valuesBeforeEdit } : null
-  state.currentEditCellId = null
-
-  solveAndApply({
-    editedCellId: blurredCellId,
-    editedValue: blurredValue,
-    allowFallbackWithoutEditedConstraint: true,
-    preserveEditedCvalOnFallback: isDerivedExpressionCell,
-    editedFieldEl: isDerivedExpressionCell ? e.target : null,
-    fallbackSeedValues,
-  })
-
-  state.valuesBeforeEdit = null
 }
 
 function handleFieldKeypress(e) {
@@ -1082,7 +893,6 @@ function handleFieldDoubleClick(e) {
 
 function handleRecipeChange() {
   const selectedKey = $('recipeSelect').value
-  state.currentRecipeKey = selectedKey
   if (reciplates.hasOwnProperty(selectedKey)) {
     state.recipeText = reciplates[selectedKey]
     $('recipeTextarea').value = state.recipeText
@@ -1163,14 +973,20 @@ function showNotification(message) {
 // Scaling Slider
 // =============================================================================
 
+function findCellWithBareVar(varName) {
+  return state.cells.find(c =>
+    Array.isArray(c.ceqn) && c.ceqn.some(expr => isbarevar(expr) && expr.trim() === varName)
+  )
+}
+
 function updateSliderDisplay() {
   const slider = $('scalingSlider')
   const display = $('scalingDisplay')
   
   // Check if x variable exists in the current recipe
-  const hasX = state.symbols && state.symbols.x !== undefined
+  const xCell = findCellWithBareVar('x')
   
-  if (!hasX) {
+  if (!xCell) {
     // Gray out the slider if no x variable
     slider.disabled = true
     slider.classList.add('disabled')
@@ -1184,7 +1000,7 @@ function updateSliderDisplay() {
   slider.classList.remove('disabled')
   display.classList.remove('disabled')
 
-  const x = state.values.x
+  const x = xCell.cval
   if (typeof x !== 'number' || !isFinite(x)) {
     slider.disabled = true
     slider.classList.add('disabled')
@@ -1208,7 +1024,7 @@ function handleSliderChange(e) {
   const newX = toNum(e.target.value)
   if (newX === null || newX <= 0) return
 
-  const xCell = state.cells.find(c => c.ceqn.some(expr => expr.trim() === 'x'))
+  const xCell = findCellWithBareVar('x')
   if (!xCell) return
 
   solveAndApply({ editedCellId: xCell.id, editedValue: newX, seedOverrides: { x: newX } })
