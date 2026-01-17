@@ -317,8 +317,6 @@ typing, i.e., it's recomputed on every keystroke.
 
 ## Inequalities 
 
-[TODO: implement this section]
-
 If a cell includes any inequalities then all of the following criteria must be
 met:
 
@@ -332,16 +330,12 @@ met:
 * Either inf < sup or, if inf = sup, then both inequalities in the urtext are
   nonstrict. So you can have `3 <= x <= 3` but not `3 < x <= 3`.
 
-If any of those are not met, we show this error banner:
-
-"Inequalities must start and end with a constant"
+If any of those are not met, we show a corresponding error banner:
+* "Inequalities must start and end with a constant"
+* "Inequalities must be possible to satisfy"
 
 
 ## Sliders
-
-[TODO: Implement this section. In the current status quo we have a single 
-slider, hard-coded for whatever variable is called "x". Egregious anti-magic
-violation!]
 
 For every variable which appears as a bare variable (see `isbarevar` in the 
 Constraint Solver section) in a cell, we create a slider for that variable. Each

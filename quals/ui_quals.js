@@ -408,6 +408,11 @@ async function main() {
     assert.ok(Math.abs(tMin - 32) < 1e-6, `temp min ${tMin}`)
     assert.ok(Math.abs(tMax - 212) < 1e-6, `temp max ${tMax}`)
 
+    const legacySlider = await page.$('#scalingSlider')
+    assert.equal(legacySlider, null)
+    const legacyDisplay = await page.$('#scalingDisplay')
+    assert.equal(legacyDisplay, null)
+
     // Qual: slider line excerpt is ellipsized for long lines
     const longLine = 'This is a very long line intended to overflow the slider line display in the UI and should be truncated {x = 1} with ellipses to keep it on screen.'
     await page.$eval('#recipeTextarea', (el, v) => {
