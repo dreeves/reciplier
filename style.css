@@ -327,3 +327,61 @@ a:hover {
 }
 
 .relative { position: relative; }
+
+.slider-card {
+  position: relative;
+  padding: 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  background-color: #f9fafb;
+  margin-bottom: 0.75rem;
+}
+
+.slider-label {
+  font-size: 0.875rem;
+  color: #374151;
+  margin-bottom: 0.5rem;
+}
+
+.slider-var {
+  font-weight: 600;
+  margin-right: 0.25rem;
+}
+
+.slider-line {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+               "Liberation Mono", "Courier New", monospace;
+  white-space: nowrap;
+}
+
+.slider-highlight {
+  background-color: #fef3c7;
+  color: #92400e;
+  padding: 0 0.125rem;
+  border-radius: 0.25rem;
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+}
+
+.slider-close {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  border: 1px solid #d1d5db;
+  background-color: #ffffff;
+  color: #374151;
+  font-weight: 600;
+  line-height: 1.1rem;
+  text-align: center;
+  padding: 0;
+}
+
+.slider-close:hover {
+  background-color: #f3f4f6;
+}

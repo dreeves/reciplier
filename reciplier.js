@@ -153,16 +153,58 @@ function extractCells(text) {
   return cells
 }
 
+function evalConstantExpression(expr) {
+  const trimmed = String(expr).trim()
+  const numeric = toNum(trimmed)
+
+  const vars = varparse(trimmed)
+
+  const shouldEval = numeric === null && vars.size === 0
+  const r = shouldEval ? vareval(trimmed, {}) : { error: true, value: null }
+  const evalOk = !r.error && typeof r.value === 'number' && isFinite(r.value)
+  return numeric !== null ? numeric : (evalOk ? r.value : null)
+}
+
+function parseInequalities(content) {
+  const trimmed = content.trim()
+  const attempted = /[<>]/.test(trimmed)
+  const match = attempted ? trimmed.match(/^(.+?)\s*(<=|<)\s*(.+?)\s*(<=|<)\s*(.+?)$/) : null
+  const infRaw = match ? match[1].trim() : ''
+  const infOp = match ? match[2] : ''
+  const middleRaw = match ? match[3].trim() : trimmed
+  const supOp = match ? match[4] : ''
+  const supRaw = match ? match[5].trim() : ''
+  const hasRight = attempted && />/.test(trimmed)
+  const leftoverAngles = /[<>]/.test(infRaw + middleRaw + supRaw)
+  const infVal = evalConstantExpression(infRaw)
+  const supVal = evalConstantExpression(supRaw)
+  const boundsOk = typeof infVal === 'number' && isFinite(infVal) &&
+    typeof supVal === 'number' && isFinite(supVal)
+  const infStrict = infOp === '<'
+  const supStrict = supOp === '<'
+  const equalBounds = boundsOk && Math.abs(infVal - supVal) < 1e-12
+  const ordered = boundsOk && (infVal < supVal || (equalBounds && !infStrict && !supStrict))
+  const invalid = attempted && (hasRight || !match || leftoverAngles || !ordered)
+
+  return {
+    attempted,
+    core: match ? middleRaw : trimmed,
+    bounds: (!attempted || invalid) ? null : { inf: infVal, sup: supVal, infStrict, supStrict },
+    error: invalid ? 'ineq' : null
+  }
+}
+
 // Parse a single cell's content into cval and ceqn
 // Per spec: ceqn is a list of non-constant expressions split on "=".
 // cval is the constant if there is one, null otherwise.
 function parseCell(cell) {
   const content = cell.content.trim()
-  const exprPart = content
+  const inequality = parseInequalities(content)
+  const exprPart = inequality.error ? '' : inequality.core
 
   // Split by = to get constraint expressions (but be careful with == or !=)
   // We want to split on single = that's not part of == or !=
-  const parts = exprPart.split(/(?<![=!<>])=(?!=)/).map(e => e.trim()).filter(e => e !== '')
+  let parts = exprPart.split(/(?<![=!<>])=(?!=)/).map(e => e.trim()).filter(e => e !== '')
 
   // Separate bare numbers from expressions
   // Per spec: bare numbers go to cval field, not ceqn
@@ -170,36 +212,28 @@ function parseCell(cell) {
   const nonConstParts = []
   const partIsConst = []
   for (const part of parts) {
-    const asNum = toNum(part)
-    if (asNum !== null) {
-      bareNumbers.push(asNum)
-      partIsConst.push(true)
-      continue
-    }
-
-    const vars = varparse(part)
-    if (vars.size === 0) {
-      const r = vareval(part, {})
-      if (!r.error && typeof r.value === 'number' && isFinite(r.value)) {
-        bareNumbers.push(r.value)
-        partIsConst.push(true)
-        continue
-      }
-    }
-
-    nonConstParts.push(part)
-    partIsConst.push(false)
+    const constVal = evalConstantExpression(part)
+    const isConst = constVal !== null
+    isConst ? bareNumbers.push(constVal) : nonConstParts.push(part)
+    partIsConst.push(isConst)
   }
 
-  const startsFrozen = parts.length > 0 && partIsConst[0] === true
+  const bareVars = parts.filter(part => isbarevar(part))
+  const ineq = inequality.bounds && bareVars.length
+    ? { ...inequality.bounds, varName: bareVars[0] }
+    : null
+  const ineqError = Boolean(inequality.error || (inequality.bounds && bareVars.length === 0))
+  const activeParts = ineqError ? [] : parts
+
+  const startsFrozen = activeParts.length > 0 && partIsConst[0] === true
 
   // Error flag if multiple bare numbers (spec case 7)
-  const multipleNumbers = bareNumbers.length > 1
+  const multipleNumbers = !ineqError && bareNumbers.length > 1
 
   // cval is the bare number (if exactly one), otherwise null
-  const cval = bareNumbers.length === 1 ? bareNumbers[0] : null
+  const cval = !ineqError && bareNumbers.length === 1 ? bareNumbers[0] : null
 
-  const ceqn = nonConstParts
+  const ceqn = ineqError ? [] : nonConstParts
 
   // TODO: pretty sure we don't need most of this:
   return {
@@ -207,11 +241,13 @@ function parseCell(cell) {
     cval,
     startsFrozen,
     ceqn,
-    urceqn: parts,
-    urparts: parts,
-    hasConstraint: parts.length >= 2,
+    urceqn: activeParts,
+    urparts: activeParts,
+    ineq: ineqError ? null : ineq,
+    ineqError: !!ineqError,
+    hasConstraint: !ineqError && activeParts.length >= 2,
     multipleNumbers,  // error flag
-    hasNumber: bareNumbers.length === 1
+    hasNumber: !ineqError && bareNumbers.length === 1
   }
 }
 
@@ -225,23 +261,32 @@ function parseCell(cell) {
 function buildSymbolTable(cells) {
   const symbols = {}
   const errors = []
+  const varInfo = new Map()
 
   // First pass: collect variables and check for errors
+  cells.some(c => c.ineqError) && errors.push('Inequalities must start and end with a constant')
+
   for (const cell of cells) {
     // Error case 7: multiple bare numbers in a cell
-    if (cell.multipleNumbers) {
-      errors.push(`Cell ${cell.raw} has more than one numerical value`)
-    }
+    cell.multipleNumbers && errors.push(`Cell ${cell.raw} has more than one numerical value`)
 
-    if (cell.ceqn.length === 0 && cell.cval !== null) {
+    cell.ceqn.length === 0 && cell.cval !== null &&
       errors.push(`Cell ${cell.raw} is a bare number ` +
                   `which doesn't make sense to put in a cell`)
-    }
 
+    const cellVars = new Set()
     for (const expr of cell.ceqn) {
       for (const v of varparse(expr)) {
         symbols[v] = true
+        cellVars.add(v)
       }
+    }
+
+    for (const v of cellVars) {
+      const existing = varInfo.get(v)
+      const entry = existing || { count: 0, firstCell: cell }
+      entry.count += 1
+      varInfo.set(v, entry)
     }
   }
 
@@ -249,30 +294,8 @@ function buildSymbolTable(cells) {
   // Per README: "A variable in a cell isn't referenced by any other cell."
   // For each variable in each cell, check if it appears in at least one OTHER cell.
   // Cells in HTML comments count as references (that's the documented workaround).
-  const varToCell = new Map() // variable -> first cell that contains it
-  for (const cell of cells) {
-    for (const expr of cell.ceqn) {
-      for (const v of varparse(expr)) {
-        if (!varToCell.has(v)) varToCell.set(v, cell)
-      }
-    }
-  }
-
-  for (const [varName, firstCell] of varToCell) {
-    let referencedElsewhere = false
-    for (const cell of cells) {
-      if (cell.id === firstCell.id) continue
-      for (const expr of cell.ceqn) {
-        if (varparse(expr).has(varName)) {
-          referencedElsewhere = true
-          break
-        }
-      }
-      if (referencedElsewhere) break
-    }
-    if (!referencedElsewhere) {
-      errors.push(`Variable ${varName} in ${firstCell.raw} not referenced in any other cell`)
-    }
+  for (const [varName, info] of varInfo) {
+    info.count === 1 && errors.push(`Variable ${varName} in ${info.firstCell.raw} not referenced in any other cell`)
   }
 
   return { symbols, errors }
@@ -318,6 +341,67 @@ function buildInitialSeedValues(cells) {
     }
   }
   return values
+}
+
+function combineBounds(cells) {
+  const combined = new Map()
+
+  for (const cell of cells.filter(c => c.ineq)) {
+    const { varName, inf, sup, infStrict, supStrict } = cell.ineq
+    const entry = combined.get(varName) || { inf: null, sup: null, infStrict: false, supStrict: false }
+
+    if (typeof inf === 'number' && isFinite(inf)) {
+      if (entry.inf === null || inf > entry.inf) {
+        entry.inf = inf
+        entry.infStrict = infStrict
+      } else if (Math.abs(inf - entry.inf) < 1e-12) {
+        entry.infStrict = entry.infStrict || infStrict
+      }
+    }
+
+    if (typeof sup === 'number' && isFinite(sup)) {
+      if (entry.sup === null || sup < entry.sup) {
+        entry.sup = sup
+        entry.supStrict = supStrict
+      } else if (Math.abs(sup - entry.sup) < 1e-12) {
+        entry.supStrict = entry.supStrict || supStrict
+      }
+    }
+
+    combined.set(varName, entry)
+  }
+
+  return combined
+}
+
+function strictEpsilon(infVal, supVal) {
+  const hasInf = typeof infVal === 'number' && isFinite(infVal)
+  const hasSup = typeof supVal === 'number' && isFinite(supVal)
+  const scale = Math.max(Math.abs(hasInf ? infVal : 0), Math.abs(hasSup ? supVal : 0), 1)
+  let eps = scale * 1e-9 + 1e-9
+  if (hasInf && hasSup) {
+    const span = Math.abs(supVal - infVal)
+    if (span > 0) eps = Math.min(eps, span / 1000)
+  }
+  return eps
+}
+
+function getEffectiveBounds(cells) {
+  const combined = combineBounds(cells)
+  const inf = {}
+  const sup = {}
+
+  for (const [varName, entry] of combined) {
+    const eps = strictEpsilon(entry.inf, entry.sup)
+    if (typeof entry.inf === 'number' && isFinite(entry.inf)) {
+      inf[varName] = entry.inf + (entry.infStrict ? eps : 0)
+    }
+    if (typeof entry.sup === 'number' && isFinite(entry.sup)) {
+      sup[varName] = entry.sup - (entry.supStrict ? eps : 0)
+    }
+  }
+
+  return { inf, sup, combined }
 }
 
 function contradictionsForEqns(eqns, ass, zij) {
@@ -372,16 +456,17 @@ function recomputeCellCvals(cells, ass, fixedCellIds, pinnedCellId = null) {
 }
 
 // Compute initial values for all variables using solvem()
-function computeInitialValues(cells) {
+function computeInitialValues(cells, bounds) {
   const errors = []
 
   // Step 1: Solve the template as written (including constants).
   const eqns = buildInitialEquations(cells)
   const seedValues = buildInitialSeedValues(cells)
+  const { inf, sup } = bounds
   let result
   let ass
   try {
-    result = solvem(eqns, seedValues)
+    result = solvem(eqns, seedValues, inf, sup)
     ass = result.ass
   } catch (e) {
     errors.push(String(e && e.message ? e.message : e))
@@ -410,6 +495,19 @@ function isCellViolated(cell, ass) {
 
   const tol = 1e-6  // Matches solver tolerance for practical floating-point comparisons
   const tolerance = Math.abs(cval) * tol + tol
+
+  if (cell.ineq) {
+    const boundTol = Math.abs(cval) * 1e-9 + 1e-9
+    const { inf, sup, infStrict, supStrict } = cell.ineq
+    if (typeof inf === 'number' && isFinite(inf)) {
+      const lowerOk = infStrict ? (cval > inf + boundTol) : (cval + boundTol >= inf)
+      if (!lowerOk) return true
+    }
+    if (typeof sup === 'number' && isFinite(sup)) {
+      const upperOk = supStrict ? (cval < sup - boundTol) : (cval - boundTol <= sup)
+      if (!upperOk) return true
+    }
+  }
 
   for (const expr of cell.ceqn) {
     if (!expr || expr.trim() === '') continue
@@ -447,6 +545,9 @@ let state = {
   solveBanner: '',
   invalidExplainBanner: '',
   invalidInputCellIds: new Set(),
+  hiddenSliders: new Set(),
+  activeSlider: null,
+  bounds: { inf: {}, sup: {}, combined: new Map() },
 }
 
 // =============================================================================
@@ -463,8 +564,12 @@ function parseRecipe() {
     state.solveBanner = ''
     state.invalidExplainBanner = ''
     state.invalidInputCellIds = new Set()
+    state.activeSlider = null
+    state.bounds = { inf: {}, sup: {}, combined: new Map() }
     $('recipeOutput').style.display = 'none'
     $('copySection').style.display = 'none'
+    const sliderPanel = $('sliderPanel')
+    if (sliderPanel) sliderPanel.style.display = 'none'
     updateRecipeDropdown()
     return
   }
@@ -480,13 +585,16 @@ function parseRecipe() {
   const { errors: symbolErrors } = buildSymbolTable(cells)
   
   // Compute initial values (includes template satisfiability check)
-  const { solve, errors: valueErrors } = computeInitialValues(cells)
+  const bounds = getEffectiveBounds(cells)
+  const { solve, errors: valueErrors } = computeInitialValues(cells, bounds)
 
   const allErrors = [...syntaxErrors, ...symbolErrors, ...valueErrors]
   
   // Update state
   state.cells = cells
   state.solve = solve
+  state.bounds = bounds
+  state.activeSlider = null
   state.errors = allErrors
   // Per README future-work item 8: cells defined with bare numbers start frozen
   // state.fixedCellIds = new Set(cells.filter(c => c.fix).map(c => c.id))
@@ -621,18 +729,10 @@ function escapeHtml(text) {
 
 function updateBannerInDom(bannerId, message) {
   const banner = $(bannerId)
-  if (!banner) return
-
-  if (!message) {
-    banner.hidden = true
-    const msg = banner.querySelector('.error-message')
-    if (msg) msg.textContent = ''
-    return
-  }
-
-  banner.hidden = false
-  const msg = banner.querySelector('.error-message')
-  if (msg) msg.textContent = `⚠️ ${message}`
+  const msg = banner && banner.querySelector('.error-message')
+  const hidden = !message
+  banner && (banner.hidden = hidden)
+  msg && (msg.textContent = hidden ? '' : `⚠️ ${message}`)
 }
 
 function updateSolveBannerInDom() {
@@ -644,47 +744,31 @@ function updateInvalidExplainBannerInDom() {
 }
 
 function setInvalidExplainBannerFromInvalidity(invalidCellIds) {
-  if ((state.errors || []).length > 0) {
-    state.invalidExplainBanner = ''
-    return
-  }
-
-  if (state.solveBanner) {
-    state.invalidExplainBanner = ''
-    return
-  }
-
-  if (state.invalidInputCellIds && state.invalidInputCellIds.size > 0) {
-    const lastInvalidInputId = [...state.invalidInputCellIds][state.invalidInputCellIds.size - 1]
-    const cell = state.cells.find(c => c.id === lastInvalidInputId)
-    const label = cell && Array.isArray(cell.ceqn) && cell.ceqn.length > 0
-      ? String(cell.ceqn[0] || '').trim()
-      : ''
-    const shownLabel = label || '?'
-    state.invalidExplainBanner = `ERROR1753: ${shownLabel}`
-    return
-  }
-
-  if (!invalidCellIds || invalidCellIds.size === 0) {
-    state.invalidExplainBanner = ''
-    return
-  }
-
-  const lastInvalidId = [...invalidCellIds][invalidCellIds.size - 1]
-  const lastInvalidCell = state.cells.find(c => c.id === lastInvalidId)
-  state.invalidExplainBanner = 
-    `Syntax error in template: {${lastInvalidCell.urtext}}`
+  const hasErrors = (state.errors || []).length > 0
+  const hasSolveBanner = !!state.solveBanner
+  const invalidInputId = state.invalidInputCellIds?.size
+    ? [...state.invalidInputCellIds][state.invalidInputCellIds.size - 1]
+    : null
+  const invalidInputCell = invalidInputId ? state.cells.find(c => c.id === invalidInputId) : null
+  const label = invalidInputCell?.ceqn?.length
+    ? String(invalidInputCell.ceqn[0] || '').trim()
+    : ''
+  const shownLabel = label || '?'
+  const invalidInputMessage = invalidInputId ? `ERROR1753: ${shownLabel}` : ''
+  const invalidCellId = invalidCellIds?.size
+    ? [...invalidCellIds][invalidCellIds.size - 1]
+    : null
+  const invalidCell = invalidCellId ? state.cells.find(c => c.id === invalidCellId) : null
+  const syntaxMessage = invalidCell ? `Syntax error in template: {${invalidCell.urtext}}` : ''
+  state.invalidExplainBanner = (hasErrors || hasSolveBanner)
+    ? ''
+    : (invalidInputId ? invalidInputMessage : (invalidCellId ? syntaxMessage : ''))
 }
 
 function repositionNonCriticalBannersAfterLastInvalidBr() {
-  const output = $('recipeOutput')
-  if (!output) return
-
-  const rendered = output.querySelector('.recipe-rendered')
-  if (!rendered) return
-
-  const banners = $('nonCriticalBanners')
-  if (!banners) return
+  const rendered = $('recipeOutput')?.querySelector('.recipe-rendered')
+  const banners = rendered && $('nonCriticalBanners')
+  if (!rendered || !banners) return
 
   const invalidFields = rendered.querySelectorAll('input.recipe-field.invalid')
   const lastInvalid = invalidFields.length ? invalidFields[invalidFields.length - 1] : null
@@ -704,15 +788,10 @@ function repositionNonCriticalBannersAfterLastInvalidBr() {
 }
 
 function setSolveBannerFromSatisfaction(sat) {
-  if (sat) {
-    state.solveBanner = ''
-    return
-  }
-
   const anyFrozen = state.fixedCellIds.size > 0
-  state.solveBanner = anyFrozen
-    ? 'No solution found (try unfreezing cells)'
-    : 'No solution found'
+  state.solveBanner = sat
+    ? ''
+    : (anyFrozen ? 'No solution found (try unfreezing cells)' : 'No solution found')
 }
 
 function solveAndApply({
@@ -724,7 +803,8 @@ function solveAndApply({
   const seedAss = { ...state.solve.ass, ...(seedOverrides || {}) }
 
   const eqns = buildInteractiveEqns(editedCellId, editedValue)
-  const solveResult = solvem(eqns, seedAss)
+  const { inf, sup } = state.bounds
+  const solveResult = solvem(eqns, seedAss, inf, sup)
   const solvedAss = solveResult.ass
   const sat = solveResult.sat
   const zij = solveResult.zij
@@ -815,9 +895,8 @@ function getUnsatisfiedCellIds(eqns, zij) {
 function collectInvalidCellIds(eqns, zij) {
   const invalidCellIds = new Set(getViolatedCellIds(state.cells, state.solve.ass))
 
-  if (state.solveBanner && eqns && zij) {
-    for (const id of getUnsatisfiedCellIds(eqns, zij)) invalidCellIds.add(id)
-  }
+  const unsatisfied = state.solveBanner && eqns && zij ? getUnsatisfiedCellIds(eqns, zij) : null
+  unsatisfied && unsatisfied.forEach(id => invalidCellIds.add(id))
   for (const id of state.invalidInputCellIds) invalidCellIds.add(id)
 
   return invalidCellIds
@@ -892,6 +971,7 @@ function handleFieldDoubleClick(e) {
 }
 
 function handleRecipeChange() {
+  state.hiddenSliders = new Set()
   const selectedKey = $('recipeSelect').value
   if (reciplates.hasOwnProperty(selectedKey)) {
     state.recipeText = reciplates[selectedKey]
@@ -973,62 +1053,281 @@ function showNotification(message) {
 // Scaling Slider
 // =============================================================================
 
-function findCellWithBareVar(varName) {
-  return state.cells.find(c =>
-    Array.isArray(c.ceqn) && c.ceqn.some(expr => isbarevar(expr) && expr.trim() === varName)
-  )
+function pickSliderCells(cells) {
+  const sorted = [...cells].sort((a, b) => a.startIndex - b.startIndex)
+  const selections = new Map()
+
+  for (const cell of sorted) {
+    const bareVars = (cell.ceqn || []).filter(expr => isbarevar(expr))
+    for (const varName of bareVars) {
+      const existing = selections.get(varName)
+      if (!existing || (!existing.cell.ineq && cell.ineq)) {
+        selections.set(varName, { varName, cell })
+      }
+    }
+  }
+
+  return [...selections.values()].sort((a, b) => a.cell.startIndex - b.cell.startIndex)
+}
+
+function sliderBoundsForCell(cell) {
+  if (cell.ineq) {
+    const { inf, sup, infStrict, supStrict } = cell.ineq
+    const eps = strictEpsilon(inf, sup)
+    return {
+      min: inf + (infStrict ? eps : 0),
+      max: sup - (supStrict ? eps : 0),
+      minLabel: inf,
+      maxLabel: sup
+    }
+  }
+
+  const value = cell.cval
+  if (typeof value === 'number' && isFinite(value)) {
+    const a = value / 10
+    const b = value * 10
+    return {
+      min: Math.min(a, b),
+      max: Math.max(a, b),
+      minLabel: Math.min(a, b),
+      maxLabel: Math.max(a, b)
+    }
+  }
+
+  return { min: 0, max: 1, minLabel: 0, maxLabel: 1 }
+}
+
+function sliderLineForCell(cell, highlightCellId) {
+  const text = state.recipeText
+  const lineStart = text.lastIndexOf('\n', cell.startIndex - 1) + 1
+  const lineEndRaw = text.indexOf('\n', cell.startIndex)
+  const lineEnd = lineEndRaw === -1 ? text.length : lineEndRaw
+
+  const cellsInLine = state.cells
+    .filter(c => c.startIndex >= lineStart && c.startIndex < lineEnd)
+    .sort((a, b) => a.startIndex - b.startIndex)
+
+  let result = ''
+  let pos = lineStart
+  let highlightStart = null
+  let highlightEnd = null
+
+  for (const c of cellsInLine) {
+    if (c.startIndex > pos) {
+      result += text.substring(pos, c.startIndex)
+    }
+    const valueStr = formatNum(c.cval)
+    if (c.id === highlightCellId) {
+      highlightStart = result.length
+      highlightEnd = highlightStart + valueStr.length
+    }
+    result += valueStr
+    pos = c.endIndex
+  }
+
+  if (pos < lineEnd) {
+    result += text.substring(pos, lineEnd)
+  }
+
+  return { text: result, highlightStart, highlightEnd }
+}
+
+function sliderLineHtml(lineText, highlightStart, highlightEnd, maxChars = 50) {
+  if (!lineText) return ''
+  const len = lineText.length
+  let start = 0
+  let end = len
+  let prefix = false
+  let suffix = false
+
+  const hasHighlight = typeof highlightStart === 'number' && typeof highlightEnd === 'number'
+  if (len > maxChars) {
+    const coreMax = maxChars - 6
+    if (hasHighlight) {
+      const center = Math.floor((highlightStart + highlightEnd) / 2)
+      start = Math.max(0, center - Math.floor(coreMax / 2))
+      end = Math.min(len, start + coreMax)
+      start = Math.max(0, end - coreMax)
+    } else {
+      end = Math.min(len, maxChars - 3)
+    }
+    prefix = start > 0
+    suffix = end < len
+    const ellipses = (prefix ? 3 : 0) + (suffix ? 3 : 0)
+    const maxCore = Math.max(1, maxChars - ellipses)
+    if (end - start > maxCore) {
+      end = start + maxCore
+      suffix = end < len
+    }
+  }
+
+  const slice = lineText.slice(start, end)
+  let hStart = hasHighlight ? highlightStart - start : null
+  let hEnd = hasHighlight ? highlightEnd - start : null
+  if (hStart !== null && (hStart < 0 || hEnd > slice.length)) {
+    hStart = null
+    hEnd = null
+  }
+
+  const prefixText = prefix ? '...' : ''
+  const suffixText = suffix ? '...' : ''
+
+  if (hStart === null) {
+    return `${prefixText}${escapeHtml(slice)}${suffixText}`
+  }
+
+  const before = escapeHtml(slice.slice(0, hStart))
+  const highlighted = escapeHtml(slice.slice(hStart, hEnd))
+  const after = escapeHtml(slice.slice(hEnd))
+  return `${prefixText}${before}<span class="slider-highlight">${highlighted}</span>${after}${suffixText}`
+}
+
+function buildSliderDefs(cells) {
+  const defs = []
+  for (const { varName, cell } of pickSliderCells(cells)) {
+    const activeBounds = state.activeSlider && state.activeSlider.varName === varName
+      ? state.activeSlider.bounds
+      : null
+    const bounds = activeBounds || sliderBoundsForCell(cell)
+    const min = bounds.min
+    const max = bounds.max
+    const value = (typeof cell.cval === 'number' && isFinite(cell.cval)) ? cell.cval : min
+    const clamped = Math.min(max, Math.max(min, value))
+    const lineInfo = sliderLineForCell(cell, cell.id)
+    defs.push({
+      varName,
+      cellId: cell.id,
+      value: clamped,
+      min,
+      max,
+      minLabel: bounds.minLabel,
+      maxLabel: bounds.maxLabel,
+      lineHtml: sliderLineHtml(lineInfo.text, lineInfo.highlightStart, lineInfo.highlightEnd),
+    })
+  }
+  return defs
+}
+
+function renderSliderPanel(panel, defs) {
+  panel.innerHTML = defs.map(def => {
+    const minLabel = formatNum(def.minLabel)
+    const maxLabel = formatNum(def.maxLabel)
+    const nearOne = Math.abs(def.value - 1) < 0.005
+    return `
+      <div class="slider-card" data-var-name="${escapeHtml(def.varName)}">
+        <button type="button" class="slider-close" data-var-name="${escapeHtml(def.varName)}" aria-label="Claudere">x</button>
+        <div class="slider-label">
+          <span class="slider-var">${escapeHtml(def.varName)}:</span>
+          <span class="slider-line">${def.lineHtml}</span>
+        </div>
+        <div class="slider-row">
+          <span class="text-xs mr-2" data-role="min">${minLabel}</span>
+          <input
+            type="range"
+            class="slider-input${nearOne ? ' at-one-x' : ''}"
+            min="${def.min}"
+            max="${def.max}"
+            step="0.01"
+            value="${def.value}"
+            data-cell-id="${def.cellId}"
+            data-var-name="${escapeHtml(def.varName)}"
+          />
+          <span class="text-xs ml-2" data-role="max">${maxLabel}</span>
+        </div>
+      </div>
+    `
+  }).join('')
+}
+
+function syncSliderPanel(panel, defs) {
+  for (const def of defs) {
+    const card = panel.querySelector(`.slider-card[data-var-name="${def.varName}"]`)
+    const input = card.querySelector('input.slider-input')
+    const minLabel = card.querySelector('[data-role="min"]')
+    const maxLabel = card.querySelector('[data-role="max"]')
+    const line = card.querySelector('.slider-line')
+
+    input.min = String(def.min)
+    input.max = String(def.max)
+    input.value = String(def.value)
+    input.classList.toggle('at-one-x', Math.abs(def.value - 1) < 0.005)
+    minLabel.textContent = formatNum(def.minLabel)
+    maxLabel.textContent = formatNum(def.maxLabel)
+    line.innerHTML = def.lineHtml
+  }
 }
 
 function updateSliderDisplay() {
-  const slider = $('scalingSlider')
-  const display = $('scalingDisplay')
-  
-  // Check if x variable exists in the current recipe
-  const xCell = findCellWithBareVar('x')
-  
-  if (!xCell) {
-    // Gray out the slider if no x variable
-    slider.disabled = true
-    slider.classList.add('disabled')
-    display.textContent = 'n/a'
-    display.classList.add('disabled')
-    return
-  }
-  
-  // Enable slider
-  slider.disabled = false
-  slider.classList.remove('disabled')
-  display.classList.remove('disabled')
-
-  const x = xCell.cval
-  if (typeof x !== 'number' || !isFinite(x)) {
-    slider.disabled = true
-    slider.classList.add('disabled')
-    display.textContent = '?'
-    display.classList.add('disabled')
+  const panel = $('sliderPanel')
+  const defs = buildSliderDefs(state.cells).filter(def => !state.hiddenSliders.has(def.varName))
+  if (defs.length === 0) {
+    panel.innerHTML = ''
+    panel.style.display = 'none'
     return
   }
 
-  display.textContent = formatNum(x) //+ 'x'
-  slider.value = Math.min(10, Math.max(0.1, x))
-  
-  // Green thumb when at 1x (TODO: be smarter about the tolerance here)
-  if (Math.abs(x - 1) < 0.005) {
-    slider.classList.add('at-one-x')
-  } else {
-    slider.classList.remove('at-one-x')
+  panel.style.display = 'block'
+  if (state.activeSlider) {
+    syncSliderPanel(panel, defs)
+    return
+  }
+
+  renderSliderPanel(panel, defs)
+}
+
+function handleSliderPointerDown(e) {
+  const target = e.target
+  if (!target.classList || !target.classList.contains('slider-input')) return
+
+  const card = target.closest('.slider-card')
+  const minLabel = card.querySelector('[data-role="min"]')
+  const maxLabel = card.querySelector('[data-role="max"]')
+  const min = Number(target.min)
+  const max = Number(target.max)
+  const minLabelValue = toNum(minLabel.textContent) ?? min
+  const maxLabelValue = toNum(maxLabel.textContent) ?? max
+
+  state.activeSlider = {
+    varName: target.dataset.varName,
+    bounds: {
+      min,
+      max,
+      minLabel: minLabelValue,
+      maxLabel: maxLabelValue,
+    },
   }
 }
 
-function handleSliderChange(e) {
-  const newX = toNum(e.target.value)
-  if (newX === null || newX <= 0) return
+function handleSliderPointerUp() {
+  state.activeSlider = null
+}
 
-  const xCell = findCellWithBareVar('x')
-  if (!xCell) return
+function handleSliderInput(e) {
+  const target = e.target
+  if (!target.classList || !target.classList.contains('slider-input')) return
+  const cellId = target.dataset.cellId
+  const varName = target.dataset.varName
+  const newValue = toNum(target.value)
+  if (newValue === null || !isFinite(newValue)) return
 
-  solveAndApply({ editedCellId: xCell.id, editedValue: newX, seedOverrides: { x: newX } })
-  renderRecipe()
+  const cell = state.cells.find(c => c.id === cellId)
+  if (!cell) return
+
+  cell.cval = newValue
+  solveAndApply({
+    editedCellId: cellId,
+    editedValue: newValue,
+    seedOverrides: varName ? { [varName]: newValue } : null,
+  })
+}
+
+function handleSliderClose(e) {
+  const target = e.target
+  if (!target.classList || !target.classList.contains('slider-close')) return
+  const varName = target.dataset.varName
+  if (!varName) return
+  state.hiddenSliders.add(varName)
+  updateSliderDisplay()
 }
 
 // =============================================================================
@@ -1049,7 +1348,14 @@ function init() {
   $('recipeTextarea').addEventListener('input',  handleTextareaInput)
   $('recipeSelect')  .addEventListener('change', handleRecipeChange)
   $('copyButton')    .addEventListener('click',  handleCopyToClipboard)
-  $('scalingSlider') .addEventListener('input',  handleSliderChange)
+  const sliderPanel = $('sliderPanel')
+  if (sliderPanel) {
+    sliderPanel.addEventListener('input', handleSliderInput)
+    sliderPanel.addEventListener('click', handleSliderClose)
+    sliderPanel.addEventListener('pointerdown', handleSliderPointerDown)
+    document.addEventListener('pointerup', handleSliderPointerUp)
+    document.addEventListener('pointercancel', handleSliderPointerUp)
+  }
 
   const helpButton = $('helpButton')
   const helpPopover = $('helpPopover')

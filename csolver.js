@@ -116,9 +116,11 @@ function isconstant(expr) {
 // solveFor: Solve for a single variable to make expr equal target
 // =============================================================================
 
-function solveFor(expr, varName, target, values) {
+function solveFor(expr, varName, target, values, inf = null, sup = null) {
   const test = { ...values }
   const tol = Math.abs(target) * 1e-9 + 1e-9
+  const hasInf = typeof inf === 'number' && isFinite(inf)
+  const hasSup = typeof sup === 'number' && isFinite(sup)
 
   function evalAt(x) {
     test[varName] = x
@@ -127,8 +129,19 @@ function solveFor(expr, varName, target, values) {
     return r.value
   }
 
+  function withinBounds(x) {
+    return (!hasInf || x >= inf) && (!hasSup || x <= sup)
+  }
+
+  function adjustBracket(loCandidate, hiCandidate) {
+    const lo = hasInf ? Math.max(loCandidate, inf) : loCandidate
+    const hi = hasSup ? Math.min(hiCandidate, sup) : hiCandidate
+    return (hasInf && hasSup && lo > hi) ? null : [lo, hi]
+  }
+
   function tryGuess(guess) {
     if (!isFinite(guess)) return null
+    if (!withinBounds(guess)) return null
     test[varName] = guess
     const r = vareval(expr, test)
     if (!r.error && isFinite(r.value) && Math.abs(r.value - target) < tol) {
@@ -166,7 +179,11 @@ function solveFor(expr, varName, target, values) {
   let hi = null
 
   function tryBracket(loCandidate, hiCandidate) {
-    if (loCandidate < 0 && hiCandidate > 0) {
+    const adjusted = adjustBracket(loCandidate, hiCandidate)
+    if (!adjusted) return false
+    loCandidate = adjusted[0]
+    hiCandidate = adjusted[1]
+    if (loCandidate < 0 && hiCandidate > 0 && withinBounds(0)) {
       const z = evalAt(0)
       if (z === null) return false
     }
@@ -209,6 +226,7 @@ function solveFor(expr, varName, target, values) {
         let bestHi = null
         for (const dir of [-1, 1]) {
           const x1 = x0 + dir * scale
+          if (!withinBounds(x1)) continue
           const y1 = evalAt(x1)
           if (y1 === null) continue
           const f1 = y1 - target
@@ -297,6 +315,7 @@ function solveFor(expr, varName, target, values) {
   }
 
   const finalVal = (lo + hi) / 2
+  if (!withinBounds(finalVal)) return null
   const finalValRes = evalAt(finalVal)
   if (finalValRes === null || Math.abs(finalValRes - target) > Math.abs(target) * 0.01 + 0.01) {
     return null
@@ -331,6 +350,22 @@ function eqnsSatisfied(eqns, values, tol = 1e-6) {
   return true
 }
 
+function boundsSatisfied(values, inf = {}, sup = {}) {
+  const lowerOk = Object.entries(inf || {}).every(([name, lower]) => {
+    const isBound = typeof lower === 'number' && isFinite(lower)
+    const val = values[name]
+    const valOk = typeof val === 'number' && isFinite(val)
+    return !isBound || (valOk && val >= lower)
+  })
+  const upperOk = Object.entries(sup || {}).every(([name, upper]) => {
+    const isBound = typeof upper === 'number' && isFinite(upper)
+    const val = values[name]
+    const valOk = typeof val === 'number' && isFinite(val)
+    return !isBound || (valOk && val <= upper)
+  })
+  return lowerOk && upperOk
+}
+
 // =============================================================================
 // zidge: Compute sum-of-squared-residuals for each equation
 // =============================================================================
@@ -355,7 +390,7 @@ function zidge(eqns, ass) {
 
 // TODO: dear god this is a disgusting monstrosity
 
-function solvemPrimary(eqns, vars) {
+function solvemPrimary(eqns, vars, inf = {}, sup = {}) {
   const required = new Set()
   for (const eqn of eqns) {
     for (const term of eqn) {
@@ -637,7 +672,7 @@ function solvemPrimary(eqns, vars) {
         const unknowns = [...exprVars].filter(v => !isKnown(v) && !constrained.has(v) && !solvedThisPass.has(v))
 
         if (unknowns.length === 1) {
-          const solvedVal = solveFor(expr, unknowns[0], target, values)
+          const solvedVal = solveFor(expr, unknowns[0], target, values, inf[unknowns[0]], sup[unknowns[0]])
           if (solvedVal !== null) {
             values[unknowns[0]] = solvedVal
             changed = true
@@ -750,7 +785,7 @@ function solvemPrimary(eqns, vars) {
           let bestChange = Infinity
           for (const v of exprVars) {
             if (constrained.has(v) || solvedThisPass.has(v) || trustworthy.has(v)) continue
-            const solvedVal = solveFor(expr, v, target, values)
+            const solvedVal = solveFor(expr, v, target, values, inf[v], sup[v])
             if (solvedVal !== null) {
               const change = Math.abs(solvedVal - values[v])
               if (change < bestChange) {
@@ -843,7 +878,7 @@ function solvemPrimary(eqns, vars) {
 
     // Fallback to solveFor if no positive root found
     if (solvedVal === null) {
-      solvedVal = solveFor(diffExpr, v, 0, values)
+      solvedVal = solveFor(diffExpr, v, 0, values, inf[v], sup[v])
     }
     if (solvedVal !== null) {
       values[v] = solvedVal
@@ -1238,11 +1273,24 @@ function solvemGradient(eqns, initialVars) {
 // Per README future work item 13: Try as many solvers as we can. If any return
 // a satisfying assignment, Bob's your uncle.
 
-function solvem(eqns, init) {
+function solvem(eqns, init, infimum = {}, supremum = {}) {
   // Try primary solver first
-  let ass = solvemPrimary(eqns, init)
+  const boundedInit = { ...init }
+  for (const [name, val] of Object.entries(boundedInit)) {
+    const isNum = typeof val === 'number' && isFinite(val)
+    const lower = infimum[name]
+    const upper = supremum[name]
+    const lowerOk = typeof lower === 'number' && isFinite(lower)
+    const upperOk = typeof upper === 'number' && isFinite(upper)
+    const minBound = lowerOk ? lower : val
+    const maxBound = upperOk ? upper : val
+    const clamped = Math.min(maxBound, Math.max(minBound, val))
+    boundedInit[name] = isNum ? clamped : val
+  }
+
+  let ass = solvemPrimary(eqns, boundedInit, infimum, supremum)
   let zij = zidge(eqns, ass)
-  let sat = eqnsSatisfied(eqns, ass)
+  let sat = eqnsSatisfied(eqns, ass) && boundsSatisfied(ass, infimum, supremum)
 
   // If satisfied, return immediately
   if (sat) {
@@ -1255,8 +1303,8 @@ function solvem(eqns, init) {
 
   // Try gradient descent solver as fallback
   try {
-    const gradientAss = solvemGradient(eqns, init)
-    const gradientSat = eqnsSatisfied(eqns, gradientAss)
+    const gradientAss = solvemGradient(eqns, boundedInit)
+    const gradientSat = eqnsSatisfied(eqns, gradientAss) && boundsSatisfied(gradientAss, infimum, supremum)
 
     if (gradientSat) {
       return {

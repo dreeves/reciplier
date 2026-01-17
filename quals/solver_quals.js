@@ -178,6 +178,22 @@ function runSolvemQuals(solvemImpl, label) {
       vars: { x: 0, y: 0, sum: 0 },
       expected: { sum: 10 },
     },
+    {
+      name: 'bounds clamp negative seed',
+      eqns: [['x']],
+      vars: { x: 100 },
+      inf: { x: -10 },
+      sup: { x: -1 },
+      expected: { x: -1 },
+    },
+    {
+      name: 'bounds pick negative root',
+      eqns: [['x^2', 9]],
+      vars: { x: 1 },
+      inf: { x: -10 },
+      sup: { x: -1 },
+      expected: { x: -3 },
+    },
   ]
 
   const failures = []
@@ -185,7 +201,7 @@ function runSolvemQuals(solvemImpl, label) {
   for (const tc of cases) {
     let res
     try {
-      const result = solvemImpl(tc.eqns, tc.vars)
+      const result = solvemImpl(tc.eqns, tc.vars, tc.inf || {}, tc.sup || {})
       // solvem now returns {ass, zij, sat}, extract ass for backward compatibility
       res = result.ass || result
     } catch (e) {
@@ -330,6 +346,18 @@ function runAllSolverQuals(ctx) {
   check('solvem: simple equation',
     solvem([['x', 5]], {x: 1}).ass,
     {x: 5})
+
+  check('solvem: bounds clamp seed',
+    solvem([['x']], {x: 100}, {x: -10}, {x: -1}).ass,
+    {x: -1})
+
+  check('solvem: bounds pick negative root',
+    solvem([['x^2', 9]], {x: 1}, {x: -10}, {x: -1}).ass,
+    {x: -3})
+
+  check('solvem: bounds unsatisfied',
+    solvem([['x', 5]], {x: 1}, {x: 0}, {x: 4}).sat,
+    false)
 
   check('solvem: derived value',
     solvem([['x', 2], ['y', '3x']], {x: 1, y: 1}).ass,

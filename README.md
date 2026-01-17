@@ -339,8 +339,9 @@ If any of those are not met, we show this error banner:
 
 ## Sliders
 
-[TODO: Implement this section. Originally we had a single slider, hard-coded for
-whatever variable was called "x".]
+[TODO: Implement this section. In the current status quo we have a single 
+slider, hard-coded for whatever variable is called "x". Egregious anti-magic
+violation!]
 
 For every variable which appears as a bare variable (see `isbarevar` in the 
 Constraint Solver section) in a cell, we create a slider for that variable. Each
@@ -356,6 +357,18 @@ the template where the variable occurs, with all values filled in, and with the
 value for the slider variable highlighted. If the line is too long, replace the
 beginning and/or end of it with ellipses so it fits nicely
 
+PS: Wait, I just realized we can kill an if-statement: make a slider for every
+variable across all cells.
+
+PPS: More anti-magic advice: A slider for a variable foo is no different in any
+way than if the reciplate had a cell {foo}. The only difference is at the UI
+level -- a slider rather than a numeric field.
+
+PPPS: Which has me thinking, maybe we should insert sliders in the rendered 
+template just like we do with numeric fields. A cell specified with curly braces
+is rendered inline as a numeric field and a cell specified like... hmmm...
+`{~ a = b ~}` (?) means render it as a slider. Ok, let's not let scope creep get
+out of control though. Ignore this PPPS for now.
 
 ## Use Cases Beyond Recipes
 
@@ -591,6 +604,10 @@ gets inserted below each error banner.
 
 27. Bike Tour Burritos doesn't properly infer an earlier or later start time
 when the user bumps the average speed down or up.
+
+28. Latest half-baked idea: Specify all rendering directives at the end of the
+cell's urtext, separated by colons:
+{0 < x < 100 : init=50 : uitype=slider : editable=false}
 
 
 ## New way to specify initially frozen cells and initial/default cvals

@@ -19,6 +19,7 @@ sugarcalc: "Sugar Calculator aka Junkfoodifier Jambalaya",
 converter: "Unit Converter Cobbler",
 auction:   "Decision Auction Au Gratin",
 test:      "Just Testing Do Not Eat",
+ineqtest:  "Claude's Inequality Test Kitchen",
 custom:    "Custom Template",
 };
 
@@ -254,6 +255,20 @@ Scaled by a factor of x where x/2 is {x/2 = 8} for some reason.
 Frozen: {5 = a}
 Computed: {b+0} <!-- Nothing should change if this is {b} vs {b+0} -->
 Constraint: {10 = a + b}
+`,
+// -----------------------------------------------------------------------------
+ineqtest: `\
+Scale factor with bounds: {0.5 <= x <= 10}
+Percentage slider: {0 < p <= 100}
+Temperature in Fahrenheit: {32 <= temp <= 212}
+
+From x: {y = 2x}
+From p: {z = 2p}
+From temp: {c = temp - 32}
+
+Total adds them all: {total = y + z + c}
+Doubled total: {2*total}
+Sanity check: {x} + {p} + {temp} = {x + p + temp}
 `,
 // -----------------------------------------------------------------------------
 custom: `\
