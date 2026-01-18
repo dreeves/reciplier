@@ -270,7 +270,7 @@ async function main() {
     await page.select('#recipeSelect', 'simeq')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    const xDefHandle = await findFieldByTitleSubstring(page, 'x = 6')
+    let xDefHandle = await findFieldByTitleSubstring(page, 'x : 6')
     const xDefIsNull = await xDefHandle.evaluate(el => el === null)
     assert.equal(xDefIsNull, false)
 
@@ -484,7 +484,15 @@ async function main() {
     await page.select('#recipeSelect', 'dial')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    const dialFreezeTitles = ['vini = 73', 'vfin = 70', 'y0 = 2025', 'm0 = 12', 'd0 = 25']
+    const dialFrozenTitles = ['vini = 73', 'y0 = 2025', 'm0 = 12', 'd0 = 25']
+    for (const t of dialFrozenTitles) {
+      const h = await findFieldByTitleSubstring(page, t)
+      const isNull = await h.evaluate(el => el === null)
+      assert.equal(isNull, false)
+      await h.dispose()
+    }
+
+    const dialFreezeTitles = ['vfin : 70']
     for (const t of dialFreezeTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
@@ -493,7 +501,7 @@ async function main() {
       await h.dispose()
     }
 
-    const dialDayHandle = await findFieldByTitleSubstring(page, 'd = 25')
+    const dialDayHandle = await findFieldByTitleSubstring(page, 'd : 25')
     const dialDayIsNull = await dialDayHandle.evaluate(el => el === null)
     assert.equal(dialDayIsNull, false)
     const dialDayBefore = await getHandleValue(dialDayHandle)
@@ -523,7 +531,15 @@ async function main() {
     await page.waitForSelector('#recipeOutput', { visible: true })
 
     // Freeze vini, vfin, and tini (the start TIME field, not the start DATE fields)
-    const dialBug1bFreezeTitles = ['vini = 73', 'vfin = 70', 'tini = unixtime']
+    const dialBug1bFrozenTitles = ['vini = 73']
+    for (const t of dialBug1bFrozenTitles) {
+      const h = await findFieldByTitleSubstring(page, t)
+      const isNull = await h.evaluate(el => el === null)
+      assert.equal(isNull, false, `dial bug1b: couldn't find field with title containing "${t}"`)
+      await h.dispose()
+    }
+
+    const dialBug1bFreezeTitles = ['vfin : 70', 'tini = unixtime']
     for (const t of dialBug1bFreezeTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
@@ -546,9 +562,9 @@ async function main() {
     assert.equal(dialBug1bBanner, '', 'dial bug1b: expected no solveBanner but got: ' + dialBug1bBanner)
 
     // The end date should be 2025-12-28 (3 days after start at rate of -1 kg/day to lose 3kg)
-    const dialBug1bYHandle = await findFieldByTitleSubstring(page, 'y = ')
-    const dialBug1bMHandle = await findFieldByTitleSubstring(page, 'm = ')
-    const dialBug1bDHandle = await findFieldByTitleSubstring(page, 'd = ')
+    const dialBug1bYHandle = await findFieldByTitleSubstring(page, 'y : ')
+    const dialBug1bMHandle = await findFieldByTitleSubstring(page, 'm : ')
+    const dialBug1bDHandle = await findFieldByTitleSubstring(page, 'd : ')
     const dialBug1bY = await getHandleValue(dialBug1bYHandle)
     const dialBug1bM = await getHandleValue(dialBug1bMHandle)
     const dialBug1bD = await getHandleValue(dialBug1bDHandle)
@@ -568,7 +584,15 @@ async function main() {
     await page.waitForSelector('#recipeOutput', { visible: true })
 
     // Freeze vini, vfin, and tini (start TIME field)
-    const dialSoftFreezeTitles = ['vini = 73', 'vfin = 70', 'tini = unixtime']
+    const dialSoftFrozenTitles = ['vini = 73']
+    for (const t of dialSoftFrozenTitles) {
+      const h = await findFieldByTitleSubstring(page, t)
+      const isNull = await h.evaluate(el => el === null)
+      assert.equal(isNull, false, `dial soft fallback: couldn't find field with title containing "${t}"`)
+      await h.dispose()
+    }
+
+    const dialSoftFreezeTitles = ['vfin : 70', 'tini = unixtime']
     for (const t of dialSoftFreezeTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
@@ -604,7 +628,15 @@ async function main() {
     await page.waitForSelector('#recipeOutput', { visible: true })
 
     // Freeze vini, vfin, and tini (start TIME field)
-    const dialRateZeroFreezeTitles = ['vini = 73', 'vfin = 70', 'tini = unixtime']
+    const dialRateZeroFrozenTitles = ['vini = 73']
+    for (const t of dialRateZeroFrozenTitles) {
+      const h = await findFieldByTitleSubstring(page, t)
+      const isNull = await h.evaluate(el => el === null)
+      assert.equal(isNull, false, `dial rate=0: couldn't find field with title containing "${t}"`)
+      await h.dispose()
+    }
+
+    const dialRateZeroFreezeTitles = ['vfin : 70', 'tini = unixtime']
     for (const t of dialRateZeroFreezeTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
@@ -920,6 +952,16 @@ async function main() {
     })
     await page.waitForSelector('#recipeOutput', { visible: true })
 
+    const biketourBreakFreezeTitles = ['b1*60 : 26', 'b2*60 : 37']
+    for (const t of biketourBreakFreezeTitles) {
+      const h = await findFieldByTitleSubstring(page, t)
+      const isNull = await h.evaluate(el => el === null)
+      assert.equal(isNull, false)
+      await h.click({ clickCount: 2 })
+      await h.dispose()
+      await waitForNextFrame(page)
+    }
+
     const biketourAvgSpeedHandle = await findFieldByTitleSubstring(page, 'd/t')
     const biketourRidingTimeHandle = await findFieldByTitleSubstring(page, 't = w-b')
     assert.ok(biketourAvgSpeedHandle)
@@ -1128,7 +1170,7 @@ async function main() {
     assert.equal(bValHidden, '10')
 
     // Qual: constant at end is default, not frozen (during typing)
-    const defaultNotFrozen = '{x = 1} {y = 2x}'
+    const defaultNotFrozen = '{x : 1} {y = 2x}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
@@ -1138,6 +1180,19 @@ async function main() {
     await new Promise(r => setTimeout(r, 50))
     const xAfterTyping = await getInputValue(page, 'input.recipe-field[data-label="x"]')
     assert.equal(xAfterTyping, '5')
+
+    const initFromExpr = '{x : 2y} {6 = y+1} {x+0} {y}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, initFromExpr)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const initErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.equal((initErrors || []).length, 0)
+    const initX = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    const initY = await getInputValue(page, 'input.recipe-field[data-label="y"]')
+    assert.equal(initX, '10')
+    assert.equal(initY, '5')
 
     // Qual: constant at front starts frozen
     const startsFrozen = '{1 = x} {y = 2x}'
@@ -1154,6 +1209,19 @@ async function main() {
     const frozenBannerText = await page.$eval('#solveBanner', el => el.textContent || '')
     assert.equal(frozenBannerVisible, true)
     assert.ok(/No solution found \(try unfreezing cells\)/i.test(frozenBannerText))
+
+    const endsFrozen = '{x = 1} {y = 2x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, endsFrozen)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="y"]', '10')
+    await new Promise(r => setTimeout(r, 100))
+    const xEndFrozen = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.equal(xEndFrozen, '1')
+    const endFrozenBannerText = await page.$eval('#solveBanner', el => el.textContent || '')
+    assert.ok(/No solution found \(try unfreezing cells\)/i.test(endFrozenBannerText))
 
     // Qual: bare constant is an error
     const bareConstant = '{5}'
@@ -1174,6 +1242,33 @@ async function main() {
     await page.waitForSelector('#recipeOutput', { visible: true })
     const multiErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
     assert.ok((multiErrors || []).some(e => /more than one numerical value/i.test(e)))
+
+    const multiColonTemplate = '{x:1:2} {x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, multiColonTemplate)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const multiColonErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.ok((multiColonErrors || []).some(e => /plures colonos/i.test(e)))
+
+    const colonRhsTemplate = '{x : 1 = 2} {x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, colonRhsTemplate)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const colonRhsErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.ok((colonRhsErrors || []).some(e => /plus quam unam expressionem post colonem/i.test(e)))
+
+    const initConflictTemplate = '{x = 1 : 2} {x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, initConflictTemplate)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const initConflictErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.ok((initConflictErrors || []).some(e => /Initial value for \{x = 1 : 2\} incompatible with constraints/i.test(e)))
 
     // Qual: nested braces syntax error
     const nestedBraces = 'Test {a{b}c}'

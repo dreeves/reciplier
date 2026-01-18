@@ -780,11 +780,12 @@ function solvemPrimary(eqns, vars, inf = {}, sup = {}) {
           }
 
           // Generic: try each variable
+          const allowTrustworthy = eqnHasLiteral
           let bestVar = null
           let bestVal = null
           let bestChange = Infinity
           for (const v of exprVars) {
-            if (constrained.has(v) || solvedThisPass.has(v) || trustworthy.has(v)) continue
+            if (constrained.has(v) || solvedThisPass.has(v) || (trustworthy.has(v) && !allowTrustworthy)) continue
             const solvedVal = solveFor(expr, v, target, values, inf[v], sup[v])
             if (solvedVal !== null) {
               const change = Math.abs(solvedVal - values[v])

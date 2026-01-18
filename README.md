@@ -364,6 +364,92 @@ is rendered inline as a numeric field and a cell specified like... hmmm...
 `{~ a = b ~}` (?) means render it as a slider. Ok, let's not let scope creep get
 out of control though. Ignore this PPPS for now.
 
+## New way to specify initially frozen cells and initial/default cvals
+
+TODO: Editing pass for spec above to drop the stuff about starting with a
+constant and to say that any cell with an equals-a-constant constraint starts
+frozen at that constant.
+
+(Historical note: In a previous version of Reciplier we used colons to label
+cells by associating each cell with a specific variable. That turned out to be a
+bad idea and is now ancient history. Later we tried the convention that if a
+cell's urtext started with a constant, the corresponding field would start
+frozen, so you could do {6.28 = tau} instead of {tau = 6.28} if you didn't want
+tau inferred based on other cells. That was also a bad idea. It was too easy to
+forget that having a cell like {x+y=0} was not actually a constraint unless you
+froze the cell, either in the UI or by writing it as {0=x+y} in the reciplate.
+Especially if you put a cell like that in an html comment, since then you'd
+naturally think of it as purely a constraint because it didn't show up in the UI
+at all. Claude misguidedly tried fixing this by having a special case for cells
+in html comments, which was an egregious anti-magic violation.)
+
+We use colon syntax for specifying an expression to use as the initial/default
+cval for a cell.
+
+For example, {x: 1} means x is initially unfrozen and not unconstrained, whereas
+{x = 1} means the cell _is_ initially frozen, just by virtue of having a
+constant expression in the list of expressions that are set equal to each other.
+The user can still edit it and, orthogonally, still unfreeze it. Cells like 
+{a+b = 0} are no different. The constant 0 means the cell is initially frozen.
+You can instead specify it as {a+b : 0} and it will start unfrozen. Either way
+the field for the cell will start with a 0 in it. 
+
+If you do something like {x = 1 : 2} that's an error:
+"Initial value for cell {x = 1 : 2} incompatible with constraints"
+But that's fully general. Maybe you have {x : 3} and also have other cells that
+imply x=2. Then you'd get that same error.
+
+The expression after the colon doesn't even need to be a constant. The only
+difference is that if it is a constant, it will be used in the initial call to
+solvem to find a valid assignment of all the variables. If it's a variable
+expression it won't be. But the assignment that comes back from solvem is used
+to then eval the post-colon expression. We run solvem _again_ with those values
+as constraints and give the above error if that's not a valid assignment. Like
+if there are cells {x : 2y} and {6 = y+1} then we make a call to solvem with the
+equations x (an "equation" with just one side, which doesn't do anything but we
+send it anyway to avoid the if-statement) and 6 = y+1 and with x and y
+initialized to null. We get back a valid assignment like x=1, y=5. Using that
+assignment we can eval (with vareval) the post-colon expression for the {x : 2y}
+cell, yielding 10. So on the follow-on call to solvem we send x = 2y and 6 = y+1
+as the equations and with x = 10 and y = 5 as the initial assignments. This 
+echoes back x = 10 and y = 5 as a valid assignment and we're done. Again, the
+failure to echo back the assignment on the second solvem call yields the above
+error about incompatible initial values. 
+
+From that point on, when reciplate is rendered and the user is editing values in
+the fields, the post-colon expression is irrelevant. Again, post-colon
+expressions are only used to get initial numbers to populate the fields, i.e.,
+the initial cvals.
+
+Review of this new world order:
+
+* Order never matters for equations.
+* Any cell whose urtext sets it equal to a constant is initially frozen.
+* So all equations are explicit constraints, at least initially.
+* The user can remove an "equals a constant" constraint by unfreezing the cell.
+* (As before, a cell keeps all the non-constant expressions from its urtext in
+  in ceqn. The constant, if there is one, is in cval. Then iff the fix field of
+  the cell is true, cval is included in the constraint equation that's sent
+  to solvem.)
+* Any cell can optionally specify an initial value, using a colon followed by an
+  expression as the last part of the cell's urtext.
+
+Note how this makes the distinction nice and clear between constraints and 
+initial/default cell assignments.
+
+What about {0 < x < 9 : 5} vs {0 < x : 5 < 9}? Parsing is a bit messier if we
+allow both so we pick the former. Parsing a cell's urtext means first getting
+the expression after the colon for use as the cval, if present. Then remove the
+colon and everything to the right of it and get the bounds, if present. Remove
+those and, finally, split on "=" to parse the ceqn.
+
+It's an error to have more than one colon in a cell and if this is a colon then
+no equal signs or inequality signs can appear to the right of it. The errorcopy
+is as follows:
+* "Cell {urtext} has multiple colons"
+* "Cell {urtext} has more than one expression after the colon"
+
+
 ## Use Cases Beyond Recipes
 
 Consider this, which does exactly what you'd expect:
@@ -421,7 +507,7 @@ fun and potentially super useful tool when watching a bike race:
 
 ```
 The riders in the break have a {m=1}:{s=30}s gap with {d=20}km to go.
-So if the break does {vb=40}km/h ({0.621371vb}mph) then the peloton needs to do
+So if the break does {vb:40}km/h ({0.621371vb}mph) then the peloton needs to do
 {vp = pd/t}km/h ({0.621371vp}mph) to catch them at the line.
 
 Scratchpad:
@@ -431,6 +517,8 @@ Scratchpad:
 * Peloton's distance to the line: {pd = d+gd}
 ```
 
+TODO: Update to match reciplates.js version.
+
 It's like making a spreadsheet and doing what-if analysis. We've put that and 
 some of the other examples from this document in the dropdown of recipes.
 
@@ -438,17 +526,19 @@ Here's a related one for making sure we finish a family bike tour on time:
 
 ```
 Distance:        {d=66} miles
-Start time:      {h=6}:{m=45}am             <!-- {s = h+m/60} hours  -->
+Start time:      {h:6}:{m:45}am             <!-- {s = h+m/60} hours  -->
 End time:        {H=13}:{M=00} (24H format) <!-- {e = H+M/60} hours  -->
 Wall clock time: {w = e-s} hours = {floor(w)}h{(w-floor(w))*60} minutes
 Rest stop 1:     {b1} hours = {b1*60 = 26} minutes
 Rest stop 2:     {b2} hours = {b2*60 = 37} minutes
-Rest stop 3:     {b3=0} hours = {b3*60} minutes
+Rest stop 3:     {b3} hours = {b3*60 =  0} minutes
 Total breaks:    {b = b1+b2+b3} hours
 Riding time:     {t = w-b} hours = {floor(t)}h{(t-floor(t))*60}m
 Avg speed:       {v = d/t} mph
 Unadjusted spd:  {u = d/w} mph
 ```
+
+TODO: Update to match reciplates.js version.
 
 (This was originally
 [a spreadsheet](https://docs.google.com/spreadsheets/d/1LQUDFSLpxtOojcSSLMFWPyRS70eCP59TQHppnu14Px0/edit?gid=0#gid=0)
@@ -599,94 +689,56 @@ gets inserted below each error banner.
 27. Bike Tour Burritos doesn't properly infer an earlier or later start time
 when the user bumps the average speed down or up.
 
-28. Latest half-baked idea: Specify all rendering directives at the end of the
-cell's urtext, separated by colons:
-{0 < x < 100 : init=50 : uitype=slider : editable=false}
+28. The length of the excerpts shown for the sliders should depend on the
+display width. Also it should show as rendered, eg, it shouldn't show html
+comments.
 
+29. Latest half-baked idea: 
 
-## New way to specify initially frozen cells and initial/default cvals
+Every cell is a JSON object:
+  {eq: "x = 2y", min: 0, max: 99, ini: 50, elm: 'field', ...}
+As syntactic sugar you can omit "eq" like so:
+  {x = 2y, min: 0, max: 99, ini: 50, elm: "slider", ...}
+And you can omit "ini" like so:
+  {x = 2y : 50, min: 0, max: 99, elm: "slider", ...}
+And you can specify the min/max like so:
+  {0 < x = 2y < 99 : 50, elm: "slider", ...}
 
-[TODO: not yet implemented and a big refactor]
+Interestingly, we don't ever need to specify in the reciplate whether a cell is
+frozen/pegged or not. Consider all possible combinations:
+  {x = y, peg: true} -- Error: pegged field needs initial value.
+  {x = y : 1, peg: true} -- Same as {x = y = 1}.
+  {x = y, peg: false} -- Same as {x = y}.
+  {x = y = 7, peg: true} -- Same as {x = y = 7}.
+  {x = y = 7, peg: false} -- Error: constant in equation implies pegged.
 
-Background: It was too easy to forget that having a cell like {x+y=0} is not
-actually a constraint unless you freeze the cell, either in the UI or by writing
-it as {0=x+y} in the reciplate. Especially if you put a cell like that in an
-html comment, since then you think of it as purely a constraint because it
-doesn't show up in the UI at all. Claude misguidedly tried fixing this by having
-a special case for cells in html comments, which is an egregious anti-magic
-violation. 
+So for the original use case of a recipe, you'd do this:
+Mix {2x} eggs and {3x} cups of flour.
+Scaling factor: {x : 1}
+{.1 <= x <= 10, elm: 'slider'}
 
-We want to drop the confusing convention of flipping the order of an equation to
-mean that a cell starts frozen. That itself is kind of an anti-magic violation.
-Or a POLA violation since you expect equations to be symmetric. 
+Man, I'm torn. Having a simple syntax for cells is super slick. We could even
+say that specifying a cell with bounds makes it render as a slider.
 
-Instead we introduce colon syntax (in a previous version of Reciplier we used 
-colons to label cells by associating each cell with a specific variable, but
-that was wrong-headed and now ancient history) for specifying an expression to
-use as the initial/default cval for a cell.
+Maybe elegance and simplicity matter more here than full generality of
+constraint-solving. So jettison use cases like specifying bounds without
+creating a slider. Or use the workaround of creating a slider but commenting it
+out so it doesn't actually appear.
 
-For example, {x: 1} means x is initially unfrozen and not unconstrained, whereas
-{x = 1} means the cell _is_ initially frozen, just by virtue of having a
-constant expression in the list of expressions that are set equal to each other.
-The user can still edit it and, orthogonally, still unfreeze it. Cells like 
-{a+b = 0} are no different. The constant 0 means the cell is initially frozen.
-You can instead specify it as {a+b : 0} and it will start unfrozen. Either way
-the field for the cell will start with a 0 in it. 
+There's something I'm still missing. The conflation of specifying constraints
+with specifying cells/fields/sliders is messy. I almost want to revisit the old
+idea that a cell is associated with a particular variable. Like totally separate
+from the rendered reciplate you can specify any list of constraints and
+definitions and variables. Then the reciplate lays out text with expressions 
+interspersed -- no equations. A simple recipe just has a variable x, with
+initial value of 1. The reciplate just inserts expressions involving x.
 
-If you do something like {x = 1 : 2} that's an error:
-"Initial value for cell {x = 1 : 2} incompatible with constraints"
-But that's fully general. Maybe you have {x : 3} and also have other cells that
-imply x=2. Then you'd get that same error.
+But then what's the syntax or new UI for constraints vs expressions?
 
-The expression after the colon doesn't even need to be a constant. The only
-difference is that if it is a constant, it will be used in the initial call to
-solvem to find a valid assignment of all the variables. If it's a variable
-expression it won't be. But the assignment that comes back from solvem is used
-to then eval the post-colon expression. We run solvem _again_ with those values
-as constraints and give the above error if that's not a valid assignment. Like
-if there are cells {x : 2y} and {6 = y+1} then we make a call to solvem with the
-equations x (an "equation" with just one side, which doesn't do anything but we
-send it anyway to avoid the if-statement) and 6 = y+1 and with x and y
-initialized to null. We get back a valid assignment like x=1, y=5. Using that
-assignment we can eval (with vareval) the post-colon expression for the {x : 2y}
-cell, yielding 10. So on the follow-on call to solvem we send x = 2y and 6 = y+1
-as the equations and with x = 10 and y = 5 as the initial assignments. This 
-echoes back x = 10 and y = 5 as a valid assignment and we're done. Again, the
-failure to echo back the assignment on the second solvem call yields the above
-error about incompatible initial values. 
+And, actually, the whole beauty is that you can change the value of expressions
+and Reciplier figures out what everything has to equal to make that true. So
+never mind, I think. 
 
-From that point on, when reciplate is rendered and the user is editing values in
-the fields, the post-colon expression is irrelevant. Again, post-colon
-expressions are only used to get initial numbers to populate the fields, i.e.,
-the initial cvals.
-
-Review of this new world order:
-
-* Order never matters for equations.
-* Any cell whose urtext sets it equal to a constant is initially frozen.
-* So all equations are explicit constraints, at least initially.
-* The user can remove an "equals a constant" constraint by unfreezing the cell.
-* (As before, a cell keeps all the non-constant expressions from its urtext in
-  in ceqn. The constant, if there is one, is in cval. Then iff the fix field of
-  the cell is true, cval is included in the constraint equation that's sent
-  to solvem.)
-* Any cell can optionally specify an initial value, using a colon followed by an
-  expression as the last part of the cell's urtext.
-
-Note how this makes the distinction nice and clear between constraints and 
-initial/default cell assignments.
-
-What about {0 < x < 9 : 5} vs {0 < x : 5 < 9}? Parsing is a bit messier if we
-allow both so we pick the former. Parsing a cell's urtext means first getting
-the expression after the colon for use as the cval, if present. Then remove the
-colon and everything to the right of it and get the bounds, if present. Remove
-those and, finally, split on "=" to parse the ceqn.
-
-It's an error to have more than one colon in a cell and if this is a colon then
-no equal signs or inequality signs can appear to the right of it. The errorcopy
-is as follows:
-* "Cell {urtext} has multiple colons"
-* "Cell {urtext} has more than one expression after the colon"
 
 
 SCRATCH AREA: ------------------------------------------------------------------
@@ -697,7 +749,7 @@ Brainstorming ways to indicate an initially frozen field:
 * double square brackets: [[tau = 6.28]]
 * symbol in all caps: {TAU = 6.28}
 * colon-equals: {tau := 6.28}
-* cell has a constant as one of the sides of the equation
+* cell has a constant as one of the sides of the equation [GOING WITH THIS]
 
 
 Bug report 1:
