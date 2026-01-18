@@ -1268,7 +1268,8 @@ async function main() {
     }, initConflictTemplate)
     await page.waitForSelector('#recipeOutput', { visible: true })
     const initConflictErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
-    assert.ok((initConflictErrors || []).some(e => /Initial value for \{x = 1 : 2\} incompatible with constraints/i.test(e)))
+    // previously: Initial value for \{x = 1 : 2\} incompatible with constraints
+    assert.ok((initConflictErrors || []).some(e => /Inconsistent initial values/i.test(e)))
 
     // Qual: nested braces syntax error
     const nestedBraces = 'Test {a{b}c}'

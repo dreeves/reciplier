@@ -13,11 +13,15 @@ function toNum(x) {
   if (!numeric) return null
 
   const n = Number(s)
-  return isFinite(n) ? n : null
+  return isFiniteNumber(n) ? n : null
+}
+
+function isFiniteNumber(value) {
+  return typeof value === 'number' && isFinite(value)
 }
 
 function formatNum(num) {
-  if (typeof num !== 'number' || !isFinite(num)) return '?'
+  if (!isFiniteNumber(num)) return '?'
   // Snap to nearest integer if within 0.0001 (handles solver precision issues)
   if (Math.abs(num - Math.round(num)) < 0.0001) {
     num = Math.round(num)
@@ -161,7 +165,7 @@ function evalConstantExpression(expr) {
 
   const shouldEval = numeric === null && vars.size === 0
   const r = shouldEval ? vareval(trimmed, {}) : { error: true, value: null }
-  const evalOk = !r.error && typeof r.value === 'number' && isFinite(r.value)
+  const evalOk = !r.error && isFiniteNumber(r.value)
   return numeric !== null ? numeric : (evalOk ? r.value : null)
 }
 
@@ -178,8 +182,7 @@ function parseInequalities(content) {
   const leftoverAngles = /[<>]/.test(infRaw + middleRaw + supRaw)
   const infVal = evalConstantExpression(infRaw)
   const supVal = evalConstantExpression(supRaw)
-  const boundsOk = typeof infVal === 'number' && isFinite(infVal) &&
-    typeof supVal === 'number' && isFinite(supVal)
+  const boundsOk = isFiniteNumber(infVal) && isFiniteNumber(supVal)
   const infStrict = infOp === '<'
   const supStrict = supOp === '<'
   const equalBounds = boundsOk && Math.abs(infVal - supVal) < 1e-12
@@ -281,8 +284,10 @@ function buildSymbolTable(cells) {
   for (const cell of cells) {
     // Error case 7: multiple bare numbers in a cell
     cell.multipleNumbers && errors.push(`Cell ${cell.raw} has more than one numerical value`)
-    cell.colonError === 'multi' && errors.push(`Cella ${cell.raw} plures colonos habet`)
-    cell.colonError === 'rhs' && errors.push(`Cella ${cell.raw} plus quam unam expressionem post colonem habet`)
+    cell.colonError === 'multi' && errors.push(
+      `Cella ${cell.raw} plures colonos habet`)
+    cell.colonError === 'rhs' && errors.push(
+      `Cella ${cell.raw} plus quam unam expressionem post colonem habet`)
 
     cell.ceqn.length === 0 && cell.cval !== null &&
       errors.push(`Cell ${cell.raw} is a bare number ` +
@@ -330,18 +335,27 @@ function buildEquations(cells) {
   return eqns
 }
 
+function hasInitExpr(cell) {
+  return cell.initExpr !== null && cell.initExpr !== undefined
+}
+
+function cellPartsForInit(cell, includeInit) {
+  const parts = [...(cell.urparts || cell.urceqn || [])]
+  if (includeInit && hasInitExpr(cell)) {
+    parts.push(cell.initExpr)
+  }
+  return parts
+}
+
 function buildInitialEquations(cells, includeInit = false) {
   return cells.map(c => {
-    const parts = [...(c.urparts || c.urceqn || [])]
-    if (includeInit && c.initExpr !== null && c.initExpr !== undefined) {
-      parts.push(c.initExpr)
-    }
+    const parts = cellPartsForInit(c, includeInit)
     return parts.map(p => {
       if (typeof p !== 'string') return p
       const vars = varparse(p)
       if (vars.size !== 0) return p
       const r = vareval(p, {})
-      if (r.error || typeof r.value !== 'number' || !isFinite(r.value)) return p
+      if (r.error || !isFiniteNumber(r.value)) return p
       return r.value
     })
   })
@@ -350,10 +364,7 @@ function buildInitialEquations(cells, includeInit = false) {
 function buildInitialSeedValues(cells, includeInit = false) {
   const values = {}
   for (const cell of cells) {
-    const parts = [...(cell.urparts || cell.urceqn || [])]
-    if (includeInit && cell.initExpr !== null && cell.initExpr !== undefined) {
-      parts.push(cell.initExpr)
-    }
+    const parts = cellPartsForInit(cell, includeInit)
     for (const expr of parts) {
       if (typeof expr !== 'string') continue
       for (const v of varparse(expr)) {
@@ -371,7 +382,7 @@ function combineBounds(cells) {
     const { varName, inf, sup, infStrict, supStrict } = cell.ineq
     const entry = combined.get(varName) || { inf: null, sup: null, infStrict: false, supStrict: false }
 
-    if (typeof inf === 'number' && isFinite(inf)) {
+    if (isFiniteNumber(inf)) {
       if (entry.inf === null || inf > entry.inf) {
         entry.inf = inf
         entry.infStrict = infStrict
@@ -380,7 +391,7 @@ function combineBounds(cells) {
       }
     }
 
-    if (typeof sup === 'number' && isFinite(sup)) {
+    if (isFiniteNumber(sup)) {
       if (entry.sup === null || sup < entry.sup) {
         entry.sup = sup
         entry.supStrict = supStrict
@@ -396,8 +407,8 @@ function combineBounds(cells) {
 }
 
 function strictEpsilon(infVal, supVal) {
-  const hasInf = typeof infVal === 'number' && isFinite(infVal)
-  const hasSup = typeof supVal === 'number' && isFinite(supVal)
+  const hasInf = isFiniteNumber(infVal)
+  const hasSup = isFiniteNumber(supVal)
   const scale = Math.max(Math.abs(hasInf ? infVal : 0), Math.abs(hasSup ? supVal : 0), 1)
   let eps = scale * 1e-9 + 1e-9
   if (hasInf && hasSup) {
@@ -414,10 +425,10 @@ function getEffectiveBounds(cells) {
 
   for (const [varName, entry] of combined) {
     const eps = strictEpsilon(entry.inf, entry.sup)
-    if (typeof entry.inf === 'number' && isFinite(entry.inf)) {
+    if (isFiniteNumber(entry.inf)) {
       inf[varName] = entry.inf + (entry.infStrict ? eps : 0)
     }
-    if (typeof entry.sup === 'number' && isFinite(entry.sup)) {
+    if (isFiniteNumber(entry.sup)) {
       sup[varName] = entry.sup - (entry.supStrict ? eps : 0)
     }
   }
@@ -461,7 +472,7 @@ function contradictionsForEqns(eqns, ass, zij) {
 function recomputeCellCvals(cells, ass, fixedCellIds, pinnedCellId = null) {
   for (const cell of cells) {
     if (cell.id === pinnedCellId) continue
-    if (fixedCellIds && fixedCellIds.has(cell.id) && typeof cell.cval === 'number' && isFinite(cell.cval)) {
+    if (fixedCellIds && fixedCellIds.has(cell.id) && isFiniteNumber(cell.cval)) {
       continue
     }
     if (!cell.ceqn || cell.ceqn.length === 0) continue
@@ -469,7 +480,7 @@ function recomputeCellCvals(cells, ass, fixedCellIds, pinnedCellId = null) {
     const results = cell.ceqn.map(expr => {
       const r = vareval(expr, ass)
       return r.error ? null : r.value
-    }).filter(v => typeof v === 'number' && isFinite(v))
+    }).filter(isFiniteNumber)
 
     if (results.length === 0) continue
     cell.cval = results.reduce((a, b) => a + b, 0) / results.length
@@ -502,20 +513,20 @@ function computeInitialValues(cells, bounds) {
 
   let solve = { ass: baseAss, eqns: baseEqns, zij: baseResult.zij, sat: baseResult.sat }
 
-  const initCells = cells.filter(c => c.initExpr !== null && c.initExpr !== undefined)
+  const initCells = cells.filter(hasInitExpr)
   if (initCells.length) {
     const constInitValues = cells.map(c => {
-      if (c.initExpr === null || c.initExpr === undefined) return null
+      if (!hasInitExpr(c)) return null
       const constVal = evalConstantExpression(c.initExpr)
       return constVal === null ? null : constVal
     })
-    const hasConstInit = constInitValues.some(v => typeof v === 'number' && isFinite(v))
+    const hasConstInit = constInitValues.some(isFiniteNumber)
     let seedAss = baseAss
 
     if (hasConstInit) {
       const constEqns = baseEqns.map((eqn, i) => {
         const initVal = constInitValues[i]
-        return (typeof initVal === 'number' && isFinite(initVal)) ? [...eqn, initVal] : eqn
+        return isFiniteNumber(initVal) ? [...eqn, initVal] : eqn
       })
       let constResult
       let constAss
@@ -531,18 +542,18 @@ function computeInitialValues(cells, bounds) {
 
     const invalidInitCells = []
     const initValues = cells.map((c, i) => {
-      if (c.initExpr === null || c.initExpr === undefined) return null
+      if (!hasInitExpr(c)) return null
       const constVal = constInitValues[i]
-      if (typeof constVal === 'number' && isFinite(constVal)) return constVal
+      if (isFiniteNumber(constVal)) return constVal
       const r = vareval(c.initExpr, seedAss)
-      const valOk = !r.error && typeof r.value === 'number' && isFinite(r.value)
+      const valOk = !r.error && isFiniteNumber(r.value)
       if (!valOk) invalidInitCells.push(c)
       return valOk ? r.value : null
     })
 
     const initEqns = baseEqns.map((eqn, i) => {
       const initVal = initValues[i]
-      return (typeof initVal === 'number' && isFinite(initVal)) ? [...eqn, initVal] : eqn
+      return isFiniteNumber(initVal) ? [...eqn, initVal] : eqn
     })
     const initSeedValues = baseSeedValues
     let initResult
@@ -567,9 +578,8 @@ function computeInitialValues(cells, bounds) {
       if (!initResult.sat) {
         logFailedSolve(initEqns, initSeedValues, initAss)
       }
-      for (const cell of initCells) {
-        errors.push(`Initial value for ${cell.raw} incompatible with constraints`)
-      }
+      errors.push(...invalidInitCells.map(cell => `Initial value for ${cell.raw} incompatible with constraints`))
+      errors.push('Inconsistent initial values')
     }
   } else if (!baseResult.sat) {
     logFailedSolve(baseEqns, baseSeedValues, baseAss)
@@ -587,7 +597,7 @@ function computeInitialValues(cells, bounds) {
 // Per spec: "cell's field is shown in red if cval differs from any of the expressions in ceqn"
 function isCellViolated(cell, ass) {
   const cval = cell.cval
-  if (typeof cval !== 'number' || !isFinite(cval)) return true
+  if (!isFiniteNumber(cval)) return true
 
   const tol = 1e-6  // Matches solver tolerance for practical floating-point comparisons
   const tolerance = Math.abs(cval) * tol + tol
@@ -595,11 +605,11 @@ function isCellViolated(cell, ass) {
   if (cell.ineq) {
     const boundTol = Math.abs(cval) * 1e-9 + 1e-9
     const { inf, sup, infStrict, supStrict } = cell.ineq
-    if (typeof inf === 'number' && isFinite(inf)) {
+    if (isFiniteNumber(inf)) {
       const lowerOk = infStrict ? (cval > inf + boundTol) : (cval + boundTol >= inf)
       if (!lowerOk) return true
     }
-    if (typeof sup === 'number' && isFinite(sup)) {
+    if (isFiniteNumber(sup)) {
       const upperOk = supStrict ? (cval < sup - boundTol) : (cval - boundTol <= sup)
       if (!upperOk) return true
     }
@@ -1019,7 +1029,7 @@ function handleFieldInput(e) {
   const newValue = toNum(input.value)
 
   // Invalid number format - just mark invalid, don't change state
-  if (newValue === null || !isFinite(newValue)) {
+  if (!isFiniteNumber(newValue)) {
     markInvalidInput(input, cellId, `Syntax error: only numbers allowed`)
     return
   }
@@ -1182,7 +1192,7 @@ function sliderBoundsForCell(cell) {
   }
 
   const value = cell.cval
-  if (typeof value === 'number' && isFinite(value)) {
+  if (isFiniteNumber(value)) {
     const a = value / 10
     const b = value * 10
     const bounds = {
@@ -1294,7 +1304,7 @@ function buildSliderDefs(cells) {
     const bounds = activeBounds || sliderBoundsForCell(cell)
     const min = bounds.min
     const max = bounds.max
-    const value = (typeof cell.cval === 'number' && isFinite(cell.cval)) ? cell.cval : min
+    const value = isFiniteNumber(cell.cval) ? cell.cval : min
     const clamped = Math.min(max, Math.max(min, value))
     const lineInfo = sliderLineForCell(cell, cell.id)
     defs.push({
@@ -1411,7 +1421,7 @@ function handleSliderInput(e) {
   const cellId = target.dataset.cellId
   const varName = target.dataset.varName
   const newValue = toNum(target.value)
-  if (newValue === null || !isFinite(newValue)) return
+  if (!isFiniteNumber(newValue)) return
 
   const cell = state.cells.find(c => c.id === cellId)
   if (!cell) return
