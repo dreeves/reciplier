@@ -23,8 +23,8 @@ Each expression in curly braces is called a cell. Reciplier renders each cell,
 by default, as a numeric field in the UI and you can edit any of them at will,
 causing the others to change accordingly to keep all the constraints satisfied,
 like how the number of wheels of cheese is always 3 times whatever x is. Or edit
-the field for wheels of cheese to 18 and the number of eggs will automatically change to
-12 and x to 6. (See the next section on the math syntax Reciplier supports.)
+the field for wheels of cheese to 18 and the number of eggs will automatically
+change to 12 and x to 6.
 
 Also you can edit the recipe template and Reciplier reparses it and updates the 
 fields and the rest of the UI keystroke by keystroke as you edit. The template
@@ -48,11 +48,11 @@ Mix {2x} eggs and {3x} wheels of cheese in a {d}-inch diameter pan.
 Or a {w}x{h}-inch rectangular pan (with a {z}-inch diagonal) is fine.
 Or any pan as long as its area is {A} square inches. Heat at 350 degrees.
 
-This recipe is scaled by a factor of {x = 1}.
+This recipe is scaled by a factor of {x : 1}.
 
 Constraints, constants, and sanity checks:
-* The true circle constant is {6.28 = tau}
-* The original pan diameter at 1x scale is {9 = d1} (radius {r1 = d1 / 2})
+* The true circle constant is {tau = 6.28}
+* The original pan diameter at 1x scale is {d1 = 9} (radius {r1 = d1 / 2})
 * Scaled radius is {r = d/2} and scaled diameter is {d = 2r}
 * The squared diagonal of the rectangular pan is {w^2 + h^2 = z^2}
 * The area again is {A = x*1/2*tau*r1^2 = 1/2*tau*r^2 = w*h}
@@ -117,7 +117,7 @@ But for normal recipes, just put braces and x's on every number that should
 scale linearly. For example, a "12" in the recipe becomes "{12x}" to show that
 what was originally a 12 is now a 12 multiplied by the scale factor, x. And then
 remember to include "{x = 1}" somewhere in the template. That's what generates
-a slider for scaling the recipe.
+a slider for scaling the recipe. TODO: no longer.
 
 As always with Reciplier, changing any field causes the rest to insta-update.
 

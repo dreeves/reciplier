@@ -652,7 +652,6 @@ let state = {
   invalidExplainBanner: '',
   invalidInputCellIds: new Set(),
   hiddenSliders: new Set(),
-  activeSlider: null,
   bounds: { inf: {}, sup: {}, combined: new Map() },
 }
 
@@ -670,7 +669,6 @@ function parseRecipe() {
     state.solveBanner = ''
     state.invalidExplainBanner = ''
     state.invalidInputCellIds = new Set()
-    state.activeSlider = null
     state.bounds = { inf: {}, sup: {}, combined: new Map() }
     $('recipeOutput').style.display = 'none'
     $('copySection').style.display = 'none'
@@ -700,7 +698,6 @@ function parseRecipe() {
   state.cells = cells
   state.solve = solve
   state.bounds = bounds
-  state.activeSlider = null
   state.errors = allErrors
   // Per README future-work item 8: cells defined with bare numbers start frozen
   // state.fixedCellIds = new Set(cells.filter(c => c.fix).map(c => c.id))
@@ -1298,10 +1295,7 @@ function sliderLineHtml(lineText, highlightStart, highlightEnd, maxChars = 50) {
 function buildSliderDefs(cells) {
   const defs = []
   for (const { varName, cell } of pickSliderCells(cells)) {
-    const activeBounds = state.activeSlider && state.activeSlider.varName === varName
-      ? state.activeSlider.bounds
-      : null
-    const bounds = activeBounds || sliderBoundsForCell(cell)
+    const bounds = sliderBoundsForCell(cell)
     const min = bounds.min
     const max = bounds.max
     const value = isFiniteNumber(cell.cval) ? cell.cval : min
@@ -1376,43 +1370,19 @@ function updateSliderDisplay() {
   if (defs.length === 0) {
     panel.innerHTML = ''
     panel.style.display = 'none'
+    delete panel.dataset.sliderSignature
     return
   }
 
   panel.style.display = 'block'
-  if (state.activeSlider) {
-    syncSliderPanel(panel, defs)
+  const signature = defs.map(def => def.varName).join('|')
+  const prevSignature = panel.dataset.sliderSignature || ''
+  if (prevSignature !== signature) {
+    panel.dataset.sliderSignature = signature
+    renderSliderPanel(panel, defs)
     return
   }
-
-  renderSliderPanel(panel, defs)
-}
-
-function handleSliderPointerDown(e) {
-  const target = e.target
-  if (!target.classList || !target.classList.contains('slider-input')) return
-
-  const card = target.closest('.slider-card')
-  const minLabel = card.querySelector('[data-role="min"]')
-  const maxLabel = card.querySelector('[data-role="max"]')
-  const min = Number(target.min)
-  const max = Number(target.max)
-  const minLabelValue = toNum(minLabel.textContent) ?? min
-  const maxLabelValue = toNum(maxLabel.textContent) ?? max
-
-  state.activeSlider = {
-    varName: target.dataset.varName,
-    bounds: {
-      min,
-      max,
-      minLabel: minLabelValue,
-      maxLabel: maxLabelValue,
-    },
-  }
-}
-
-function handleSliderPointerUp() {
-  state.activeSlider = null
+  syncSliderPanel(panel, defs)
 }
 
 function handleSliderInput(e) {
@@ -1465,9 +1435,6 @@ function init() {
   if (sliderPanel) {
     sliderPanel.addEventListener('input', handleSliderInput)
     sliderPanel.addEventListener('click', handleSliderClose)
-    sliderPanel.addEventListener('pointerdown', handleSliderPointerDown)
-    document.addEventListener('pointerup', handleSliderPointerUp)
-    document.addEventListener('pointercancel', handleSliderPointerUp)
   }
 
   const helpButton = $('helpButton')
