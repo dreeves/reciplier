@@ -167,6 +167,22 @@ async function main() {
       assert.ok(stateSummary.cellCount > 0, `recipe ${key}: cellCount`)
     }
 
+    // Qual: underdetermined a drives x/y without errors
+    const aDriven = '{x = a}\n{y = a*2}\n{x+y}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, aDriven)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const aDrivenErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.ok(!aDrivenErrors || aDrivenErrors.length === 0)
+    const aDrivenX = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    const aDrivenY = await getInputValue(page, 'input.recipe-field[data-label="y"]')
+    const aDrivenSum = await getInputValue(page, 'input.recipe-field[data-label="x+y"]')
+    assert.equal(aDrivenX, '1')
+    assert.equal(aDrivenY, '2')
+    assert.equal(aDrivenSum, '3')
+
     // Qual: Cheese Wheels tau constant should not drift to 0
     await page.waitForSelector('#recipeSelect', { visible: true })
     await page.select('#recipeSelect', 'cheesepan')

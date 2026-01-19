@@ -5,9 +5,9 @@
 Hosted at [reciplier.dreev.es](https://reciplier.dreev.es).
 Background at [AGI Friday](https://agifriday.substack.com/p/reciplier).
 
-It turns out this is way more general than recipes and is kind of halfway to a 
-spreadsheet. Much better than a spreadsheet in some ways. It also subsume's my
-old "calculator calculator" app that I called Sheeq.
+It turns out this is way more general than recipes and is kind of halfway to a
+spreadsheet. Better than a spreadsheet in some ways. It also subsume's my old
+"calculator calculator" app that I called Sheeq.
 
 # Functional Spec for Generalized Reciplier
 
@@ -16,14 +16,14 @@ The most basic Reciplier use case starts with a recipe template like so:
 ```
 Mix {2x} eggs and {3x} wheels of cheese. Then eat it.
 
-This recipe is scaled by {x = 1}.
+This recipe is scaled by {x : 1}.
 ```
 
-Each expression in curly braces is called a cell. Reciplier renders each cell as
-a numeric field in the UI and you can edit any of them at will, causing the
-others to change accordingly to keep all the constraints satisfied, like how the
-number of wheels of cheese is always 3 times whatever x is. Or edit the field
-for wheels of cheese to 18 and the number of eggs will automatically change to
+Each expression in curly braces is called a cell. Reciplier renders each cell,
+by default, as a numeric field in the UI and you can edit any of them at will,
+causing the others to change accordingly to keep all the constraints satisfied,
+like how the number of wheels of cheese is always 3 times whatever x is. Or edit
+the field for wheels of cheese to 18 and the number of eggs will automatically change to
 12 and x to 6. (See the next section on the math syntax Reciplier supports.)
 
 Also you can edit the recipe template and Reciplier reparses it and updates the 

@@ -363,6 +363,13 @@ function runAllSolverQuals(ctx) {
     solvem([['x', 2], ['y', '3x']], {x: 1, y: 1}).ass,
     {x: 2, y: 6})
 
+  ;(() => {
+    const eqns = [['x', 'a'], ['y', 'a*2'], ['x+y']]
+    const rep = solvem(eqns, {x: 1, y: 1, a: 1})
+    check('solvem: underdetermined a drives x/y (sat)', rep.sat, true)
+    check('solvem: underdetermined a drives x/y (assignment)', rep.ass, {a: 1, x: 1, y: 2})
+  })()
+
   check('solvem: simultaneous equations',
     solvem([['2x+3y', 33], ['5x-4y', 2]], {x: 6, y: 0}).ass,
     {x: 6, y: 7})

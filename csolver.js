@@ -432,6 +432,7 @@ function solvemPrimary(eqns, vars, inf = {}, sup = {}) {
 
   const usesAsInput = new Map()
   for (const eqn of eqns) {
+    if (eqn.length < 2) continue
     for (let i = 0; i < eqn.length; i++) {
       const term = eqn[i]
       if (typeof term !== 'string') continue
