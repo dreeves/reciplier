@@ -1,3 +1,38 @@
+function $(id) { return document.getElementById(id) }
+
+function escapeHtml(text) {
+  const div = document.createElement('div')
+  div.textContent = text
+  return div.innerHTML
+}
+
+function findCommentRanges(text) {
+  const ranges = []
+  const commentRegex = /<!--[\s\S]*?-->/g
+  let match
+  while ((match = commentRegex.exec(text)) !== null) {
+    ranges.push({
+      start: match.index,
+      end: match.index + match[0].length
+    })
+  }
+  return ranges
+}
+
+function nonCommentSlices(start, end, commentRanges) {
+  const slices = []
+  let pos = start
+  for (const { start: cStart, end: cEnd } of commentRanges) {
+    if (cEnd <= pos) continue
+    if (cStart >= end) break
+    if (cStart > pos) slices.push([pos, Math.min(cStart, end)])
+    pos = Math.min(cEnd, end)
+    if (pos >= end) break
+  }
+  if (pos < end) slices.push([pos, end])
+  return slices
+}
+
 function getScaledRecipeText() {
   let result = ''
   let lastIndex = 0

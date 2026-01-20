@@ -40,33 +40,6 @@ function checkBraceSyntax(text) {
   return errors
 }
 
-function findCommentRanges(text) {
-  const ranges = []
-  const commentRegex = /<!--[\s\S]*?-->/g
-  let match
-  while ((match = commentRegex.exec(text)) !== null) {
-    ranges.push({
-      start: match.index,
-      end: match.index + match[0].length
-    })
-  }
-  return ranges
-}
-
-function nonCommentSlices(start, end, commentRanges) {
-  const slices = []
-  let pos = start
-  for (const { start: cStart, end: cEnd } of commentRanges) {
-    if (cEnd <= pos) continue
-    if (cStart >= end) break
-    if (cStart > pos) slices.push([pos, Math.min(cStart, end)])
-    pos = Math.min(cEnd, end)
-    if (pos >= end) break
-  }
-  if (pos < end) slices.push([pos, end])
-  return slices
-}
-
 // Extract all {...} cells from text, noting which are inside HTML comments
 // TODO: no, we shouldn't care whether anything's in an html comment when 
 // extracting cells. only the rendering cares about that.

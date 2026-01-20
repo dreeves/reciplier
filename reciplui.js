@@ -1,11 +1,3 @@
-function $(id) { return document.getElementById(id) }
-
-function escapeHtml(text) {
-  const div = document.createElement('div')
-  div.textContent = text
-  return div.innerHTML
-}
-
 // =============================================================================
 // Main Parse and Render Functions
 // =============================================================================
