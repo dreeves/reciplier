@@ -18,8 +18,11 @@
 
 [Note to self: the master copy of the above rules lives in Beeminder's Beebrain repo]
 
+Codex can't seem to execute "npm run quals" unless it "escalates permissions" which it seems to be very shy about doing. But, Codex, it's fine. I don't understand what's going on there but just do what you have to do to run quals.
+
 ---
 Humans above, robots below
 ---
+
 
 # Scratchpad / Implementation Plan

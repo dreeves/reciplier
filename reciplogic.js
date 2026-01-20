@@ -1,0 +1,606 @@
+// =============================================================================
+// Utility Functions
+// =============================================================================
+
+function toNum(x) { 
+  if (typeof x !== 'string') return null
+  const s = x.trim()
+  if (s === '') return null
+
+  const numeric = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(s)
+  if (!numeric) return null
+
+  const n = Number(s)
+  return isFiniteNumber(n) ? n : null
+}
+
+function isFiniteNumber(value) {
+  return typeof value === 'number' && isFinite(value)
+}
+
+function formatNum(num) {
+  if (!isFiniteNumber(num)) return '?'
+  // Snap to nearest integer if within 0.0001 (handles solver precision issues)
+  if (Math.abs(num - Math.round(num)) < 0.0001) {
+    num = Math.round(num)
+  }
+  // Show up to 4 decimal places, trim trailing zeros
+  let s = num.toFixed(4).replace(/\.?0+$/, '')
+  if (s === '-0') s = '0'
+  return s
+}
+
+// =============================================================================
+// Debug Logging for Failed Solves (Future Work Item 14)
+// =============================================================================
+
+// Log a failed solve to console in qual format and Mathematica syntax
+function logFailedSolve(eqns, seedValues, solvedValues) {
+  // Format as qual test case
+  const eqnsStr = JSON.stringify(eqns)
+  const seedStr = JSON.stringify(seedValues)
+  const solvedStr = JSON.stringify(solvedValues)
+  console.log(`// Failed solve - qual format:`)
+  console.log(`solvem(${eqnsStr}, ${seedStr})`)
+  console.log(`// Solver returned: ${solvedStr}`)
+
+  // Format as Mathematica syntax
+  // Each equation [a, b, c] becomes constraints a == b, b == c
+  const constraints = []
+  for (const eqn of eqns) {
+    for (let i = 0; i < eqn.length - 1; i++) {
+      const left = String(eqn[i]).replace(/\*/g, ' ').replace(/\^/g, '^')
+      const right = String(eqn[i + 1]).replace(/\*/g, ' ').replace(/\^/g, '^')
+      constraints.push(`${left} == ${right}`)
+    }
+  }
+  const vars = Object.keys(seedValues).sort()
+  console.log(`// Mathematica syntax:`)
+  console.log(`Solve[{${constraints.join(', ')}}, {${vars.join(', ')}}]`)
+}
+
+// =============================================================================
+// Symbol Table and Validation
+// =============================================================================
+
+// findVariables is now provided by csolver.js
+
+// Build symbol table from parsed cells
+function buildSymbolTable(cells) {
+  const symbols = {}
+  const errors = []
+  const varInfo = new Map()
+
+  // First pass: collect variables and check for errors
+  cells.some(c => c.ineqError) && errors.push('Inequalities must start and end with a constant')
+
+  for (const cell of cells) {
+    // Error case 7: multiple bare numbers in a cell
+    cell.multipleNumbers && errors.push(`Cell ${cell.raw} has more than one numerical value`)
+    cell.colonError === 'multi' && errors.push(`Cella ${cell.raw} plures colonos habet`)
+    cell.colonError === 'rhs' && errors.push(`Cella ${cell.raw} plus quam unam expressionem post colonem habet`)
+
+    cell.ceqn.length === 0 && cell.cval !== null &&
+      errors.push(`Cell ${cell.raw} is a bare number ` +
+                  `which doesn't make sense to put in a cell`)
+
+    const cellVars = new Set()
+    for (const expr of cell.ceqn) {
+      for (const v of varparse(expr)) {
+        symbols[v] = true
+        cellVars.add(v)
+      }
+    }
+
+    for (const v of cellVars) {
+      const existing = varInfo.get(v)
+      const entry = existing || { count: 0, firstCell: cell }
+      entry.count += 1
+      varInfo.set(v, entry)
+    }
+  }
+
+  // Check for unreferenced variables (Error Case 4)
+  // Per README: "A variable in a cell isn't referenced by any other cell."
+  // For each variable in each cell, check if it appears in at least one OTHER cell.
+  // Cells in HTML comments count as references (that's the documented workaround).
+  for (const [varName, info] of varInfo) {
+    info.count === 1 && errors.push(`Variable ${varName} in ${info.firstCell.raw} not referenced in any other cell`)
+  }
+
+  return { symbols, errors }
+}
+
+// =============================================================================
+// Initial Value Assignment
+// =============================================================================
+
+// Build equations list for solvem() from cells
+// Each equation is an array of expressions that should all be equal
+function buildEquations(cells) {
+  const eqns = []
+  for (const cell of cells) {
+    const eqn = [...cell.ceqn]
+    eqns.push(eqn)
+  }
+  return eqns
+}
+
+function hasInitExpr(cell) {
+  return cell.initExpr !== null && cell.initExpr !== undefined
+}
+
+function cellPartsForInit(cell, includeInit) {
+  const parts = [...(cell.urparts || cell.urceqn || [])]
+  if (includeInit && hasInitExpr(cell)) {
+    parts.push(cell.initExpr)
+  }
+  return parts
+}
+
+function buildInitialEquations(cells, includeInit = false) {
+  return cells.map(c => {
+    const parts = cellPartsForInit(c, includeInit)
+    return parts.map(p => {
+      if (typeof p !== 'string') return p
+      const vars = varparse(p)
+      if (vars.size !== 0) return p
+      const r = vareval(p, {})
+      if (r.error || !isFiniteNumber(r.value)) return p
+      return r.value
+    })
+  })
+}
+
+function buildInitialSeedValues(cells, includeInit = false) {
+  const values = {}
+  for (const cell of cells) {
+    const parts = cellPartsForInit(cell, includeInit)
+    for (const expr of parts) {
+      if (typeof expr !== 'string') continue
+      for (const v of varparse(expr)) {
+        if (values[v] === undefined) values[v] = 1
+      }
+    }
+  }
+  return values
+}
+
+function combineBounds(cells) {
+  const combined = new Map()
+
+  for (const cell of cells.filter(c => c.ineq)) {
+    const { varName, inf, sup, infStrict, supStrict } = cell.ineq
+    const entry = combined.get(varName) || { inf: null, sup: null, infStrict: false, supStrict: false }
+
+    if (isFiniteNumber(inf)) {
+      if (entry.inf === null || inf > entry.inf) {
+        entry.inf = inf
+        entry.infStrict = infStrict
+      } else if (Math.abs(inf - entry.inf) < 1e-12) {
+        entry.infStrict = entry.infStrict || infStrict
+      }
+    }
+
+    if (isFiniteNumber(sup)) {
+      if (entry.sup === null || sup < entry.sup) {
+        entry.sup = sup
+        entry.supStrict = supStrict
+      } else if (Math.abs(sup - entry.sup) < 1e-12) {
+        entry.supStrict = entry.supStrict || supStrict
+      }
+    }
+
+    combined.set(varName, entry)
+  }
+
+  return combined
+}
+
+function strictEpsilon(infVal, supVal) {
+  const hasInf = isFiniteNumber(infVal)
+  const hasSup = isFiniteNumber(supVal)
+  const scale = Math.max(Math.abs(hasInf ? infVal : 0), Math.abs(hasSup ? supVal : 0), 1)
+  let eps = scale * 1e-9 + 1e-9
+  if (hasInf && hasSup) {
+    const span = Math.abs(supVal - infVal)
+    if (span > 0) eps = Math.min(eps, span / 1000)
+  }
+  return eps
+}
+
+function getEffectiveBounds(cells) {
+  const combined = combineBounds(cells)
+  const inf = {}
+  const sup = {}
+
+  for (const [varName, entry] of combined) {
+    const eps = strictEpsilon(entry.inf, entry.sup)
+    if (isFiniteNumber(entry.inf)) {
+      inf[varName] = entry.inf + (entry.infStrict ? eps : 0)
+    }
+    if (isFiniteNumber(entry.sup)) {
+      sup[varName] = entry.sup - (entry.supStrict ? eps : 0)
+    }
+  }
+
+  return { inf, sup, combined }
+}
+
+function contradictionsForEqns(eqns, ass, zij) {
+  const errors = []
+
+  for (let i = 0; i < eqns.length; i++) {
+    const eqn = eqns[i]
+    if (zij[i] === 0) continue
+    const results = eqn.map(expr => {
+      if (expr === null || expr === undefined) return null
+      const s = String(expr)
+      if (!s.trim()) return null
+      const r = vareval(s, ass)
+      return r.error ? null : r.value
+    })
+
+    if (results.some(r => r === null)) continue
+
+    const first = results[0]
+    // Tolerance must be >= display precision (4 decimal places) to avoid
+    // showing contradictions like "1.4023 ≠ 1.4023"
+    const tolerance = Math.abs(first) * 1e-4 + 1e-4
+    for (let i = 1; i < results.length; i++) {
+      if (Math.abs(results[i] - first) > tolerance) {
+        const exprStr = eqn.join(' = ')
+        const valuesStr = results.map(r => formatNum(r)).join(' ≠ ')
+        errors.push(`Contradiction: {${exprStr}} evaluates to ${valuesStr}`)
+        break
+      }
+    }
+  }
+
+  return errors
+}
+
+function recomputeCellCvals(cells, ass, fixedCellIds, pinnedCellId = null) {
+  for (const cell of cells) {
+    if (cell.id === pinnedCellId) continue
+    if (fixedCellIds && fixedCellIds.has(cell.id) && isFiniteNumber(cell.cval)) {
+      continue
+    }
+    if (!cell.ceqn || cell.ceqn.length === 0) continue
+
+    const results = cell.ceqn.map(expr => {
+      const r = vareval(expr, ass)
+      return r.error ? null : r.value
+    }).filter(isFiniteNumber)
+
+    if (results.length === 0) continue
+    cell.cval = results.reduce((a, b) => a + b, 0) / results.length
+  }
+}
+
+// Compute initial values for all variables using solvem()
+function computeInitialValues(cells, bounds) {
+  const errors = []
+  const baseErrors = []
+
+  // Step 1: Solve the template as written (including constants).
+  const { inf, sup } = bounds
+  const baseEqns = buildInitialEquations(cells, false)
+  const baseSeedValues = buildInitialSeedValues(cells, false)
+  let baseResult
+  let baseAss
+  try {
+    baseResult = solvem(baseEqns, baseSeedValues, inf, sup)
+    baseAss = baseResult.ass
+  } catch (e) {
+    baseErrors.push(String(e && e.message ? e.message : e))
+    baseAss = { ...baseSeedValues }
+    baseResult = { ass: baseAss, zij: new Array(baseEqns.length).fill(NaN), sat: false }
+  }
+
+  if (!baseResult.sat) {
+    baseErrors.push(...contradictionsForEqns(baseEqns, baseAss, baseResult.zij))
+  }
+
+  let solve = { ass: baseAss, eqns: baseEqns, zij: baseResult.zij, sat: baseResult.sat }
+
+  const initCells = cells.filter(hasInitExpr)
+  if (initCells.length) {
+    const constInitValues = cells.map(c => {
+      if (!hasInitExpr(c)) return null
+      const constVal = evalConstantExpression(c.initExpr)
+      return constVal === null ? null : constVal
+    })
+    const hasConstInit = constInitValues.some(isFiniteNumber)
+    let seedAss = baseAss
+
+    if (hasConstInit) {
+      const constEqns = baseEqns.map((eqn, i) => {
+        const initVal = constInitValues[i]
+        return isFiniteNumber(initVal) ? [...eqn, initVal] : eqn
+      })
+      let constResult
+      let constAss
+      try {
+        constResult = solvem(constEqns, baseSeedValues, inf, sup)
+        constAss = constResult.ass
+      } catch (e) {
+        constAss = { ...baseSeedValues }
+        constResult = { ass: constAss, zij: new Array(constEqns.length).fill(NaN), sat: false }
+      }
+      if (constResult.sat) seedAss = constAss
+    }
+
+    const invalidInitCells = []
+    const initValues = cells.map((c, i) => {
+      if (!hasInitExpr(c)) return null
+      const constVal = constInitValues[i]
+      if (isFiniteNumber(constVal)) return constVal
+      const r = vareval(c.initExpr, seedAss)
+      const valOk = !r.error && isFiniteNumber(r.value)
+      if (!valOk) invalidInitCells.push(c)
+      return valOk ? r.value : null
+    })
+
+    const initEqns = baseEqns.map((eqn, i) => {
+      const initVal = initValues[i]
+      return isFiniteNumber(initVal) ? [...eqn, initVal] : eqn
+    })
+    const initSeedValues = baseSeedValues
+    let initResult
+    let initAss
+    try {
+      initResult = solvem(initEqns, initSeedValues, inf, sup)
+      initAss = initResult.ass
+    } catch (e) {
+      errors.push(String(e && e.message ? e.message : e))
+      initAss = { ...initSeedValues }
+      initResult = { ass: initAss, zij: new Array(initEqns.length).fill(NaN), sat: false }
+    }
+
+    const initOk = initResult.sat && invalidInitCells.length === 0
+    if (initOk) {
+      solve = { ass: initAss, eqns: initEqns, zij: initResult.zij, sat: initResult.sat }
+    } else {
+      if (!baseResult.sat && baseErrors.length) {
+        logFailedSolve(baseEqns, baseSeedValues, baseAss)
+        errors.push(...baseErrors)
+      }
+      if (!initResult.sat) {
+        logFailedSolve(initEqns, initSeedValues, initAss)
+      }
+      errors.push(...invalidInitCells.map(cell => `Initial value for ${cell.raw} incompatible with constraints`))
+      // TODO: vet Latin error copy with human.
+      errors.push('Inconsistent initial values')
+    }
+  } else if (!baseResult.sat) {
+    logFailedSolve(baseEqns, baseSeedValues, baseAss)
+    errors.push(...baseErrors)
+  }
+
+  return { solve, errors }
+}
+
+// =============================================================================
+// Constraint Solver
+// =============================================================================
+
+// Check if a cell's cval matches all expressions in its ceqn
+// Per spec: "cell's field is shown in red if cval differs from any of the expressions in ceqn"
+function isCellViolated(cell, ass) {
+  const cval = cell.cval
+  if (!isFiniteNumber(cval)) return true
+
+  const tol = 1e-6  // Matches solver tolerance for practical floating-point comparisons
+  const tolerance = Math.abs(cval) * tol + tol
+
+  if (cell.ineq) {
+    const boundTol = Math.abs(cval) * 1e-9 + 1e-9
+    const { inf, sup, infStrict, supStrict } = cell.ineq
+    if (isFiniteNumber(inf)) {
+      const lowerOk = infStrict ? (cval > inf + boundTol) : (cval + boundTol >= inf)
+      if (!lowerOk) return true
+    }
+    if (isFiniteNumber(sup)) {
+      const upperOk = supStrict ? (cval < sup - boundTol) : (cval - boundTol <= sup)
+      if (!upperOk) return true
+    }
+  }
+
+  for (const expr of cell.ceqn) {
+    if (!expr || expr.trim() === '') continue
+
+    const result = vareval(expr, ass)
+    if (result.error) return true
+
+    if (Math.abs(result.value - cval) > tolerance) return true
+  }
+
+  return false
+}
+
+// Get set of cell IDs that are violated (for UI highlighting)
+function getViolatedCellIds(cells, ass) {
+  const violatedIds = new Set()
+  for (const cell of cells) {
+    if (isCellViolated(cell, ass)) {
+      violatedIds.add(cell.id)
+    }
+  }
+  return violatedIds
+}
+
+// =============================================================================
+// State Management
+// =============================================================================
+
+let state = {
+  recipeText: '',
+  cells: [],
+  solve: { ass: {}, eqns: null, zij: null, sat: true },
+  fixedCellIds: new Set(),
+  errors: [],
+  solveBanner: '',
+  invalidExplainBanner: '',
+  invalidInputCellIds: new Set(),
+  hiddenSliders: new Set(),
+  bounds: { inf: {}, sup: {}, combined: new Map() },
+}
+
+// =============================================================================
+// Main Parse and Render Functions
+// =============================================================================
+
+function parseRecipe() {
+  const text = state.recipeText
+
+  if (!text.trim()) { // does this mean the whole reciplate is the empty string?
+    state.cells = []
+    state.solve = { ass: {}, eqns: null, zij: null, sat: true }
+    state.errors = []
+    state.solveBanner = ''
+    state.invalidExplainBanner = ''
+    state.invalidInputCellIds = new Set()
+    state.bounds = { inf: {}, sup: {}, combined: new Map() }
+    return
+  }
+
+  // Check for syntax errors (nested/unbalanced braces)
+  const syntaxErrors = checkBraceSyntax(text)
+
+  // Parse
+  let cells = extractCells(text)
+  cells = cells.map(parseCell)
+
+  // Build symbol table
+  const { errors: symbolErrors } = buildSymbolTable(cells)
+  
+  // Compute initial values (includes template satisfiability check)
+  const bounds = getEffectiveBounds(cells)
+  const { solve, errors: valueErrors } = computeInitialValues(cells, bounds)
+
+  const allErrors = [...syntaxErrors, ...symbolErrors, ...valueErrors]
+  
+  // Update state
+  state.cells = cells
+  state.solve = solve
+  state.bounds = bounds
+  state.errors = allErrors
+  // Per README future-work item 8: cells defined with bare numbers start frozen
+  // state.fixedCellIds = new Set(cells.filter(c => c.fix).map(c => c.id))
+  state.fixedCellIds = new Set(cells.filter(c => c.startsFrozen).map(c => c.id))
+  recomputeCellCvals(cells, solve.ass, state.fixedCellIds)
+  state.solveBanner = ''
+  state.invalidExplainBanner = ''
+  state.invalidInputCellIds = new Set()
+}
+
+function setInvalidExplainBannerFromInvalidity(invalidCellIds) {
+  const hasErrors = (state.errors || []).length > 0
+  const hasSolveBanner = !!state.solveBanner
+  const invalidInputId = state.invalidInputCellIds?.size
+    ? [...state.invalidInputCellIds][state.invalidInputCellIds.size - 1]
+    : null
+  const invalidInputCell = invalidInputId ? state.cells.find(c => c.id === invalidInputId) : null
+  const label = invalidInputCell?.ceqn?.length
+    ? String(invalidInputCell.ceqn[0] || '').trim()
+    : ''
+  const shownLabel = label || '?'
+  const invalidInputMessage = invalidInputId ? `ERROR1753: ${shownLabel}` : ''
+  const invalidCellId = invalidCellIds?.size
+    ? [...invalidCellIds][invalidCellIds.size - 1]
+    : null
+  const invalidCell = invalidCellId ? state.cells.find(c => c.id === invalidCellId) : null
+  const syntaxMessage = invalidCell ? `Syntax error in template: {${invalidCell.urtext}}` : ''
+  state.invalidExplainBanner = (hasErrors || hasSolveBanner)
+    ? ''
+    : (invalidInputId ? invalidInputMessage : (invalidCellId ? syntaxMessage : ''))
+}
+
+function setSolveBannerFromSatisfaction(sat) {
+  const anyFrozen = state.fixedCellIds.size > 0
+  state.solveBanner = sat
+    ? ''
+    : (anyFrozen ? 'No solution found (try unfreezing cells)' : 'No solution found')
+}
+
+function solveAndApply({
+  editedCellId = null,
+  editedValue = null,
+  editedFieldEl = null,
+  seedOverrides = null,
+} = {}) {
+  const seedAss = { ...state.solve.ass, ...(seedOverrides || {}) }
+
+  const eqns = buildInteractiveEqns(editedCellId, editedValue)
+  const { inf, sup } = state.bounds
+  const solveResult = solvem(eqns, seedAss, inf, sup)
+  const solvedAss = solveResult.ass
+  const sat = solveResult.sat
+  const zij = solveResult.zij
+
+  if (!sat) {
+    logFailedSolve(eqns, seedAss, solvedAss)
+  }
+
+  setSolveBannerFromSatisfaction(sat)
+
+  state.solve = { ass: solvedAss, eqns, zij, sat }
+
+  const preserveEdited = editedCellId !== null
+  if (preserveEdited) {
+    const editedCell = state.cells.find(c => c.id === editedCellId)
+    if (editedCell) editedCell.cval = editedValue
+  }
+
+  const skipRecomputeCellId = preserveEdited ? editedCellId : null
+  if (sat) {
+    recomputeCellCvals(state.cells, state.solve.ass, state.fixedCellIds, skipRecomputeCellId)
+  }
+
+  const invalidCellIds = collectInvalidCellIds(eqns, zij)
+
+  setInvalidExplainBannerFromInvalidity(invalidCellIds)
+
+  return { eqns, solved: solvedAss, sat, invalidCellIds }
+}
+
+function buildInteractiveEqns(editedCellId = null, editedValue = null) {
+  return state.cells.map(c => {
+    const eqn = [...c.ceqn]
+
+    if (editedCellId !== null && c.id === editedCellId) {
+      eqn.push(editedValue)
+    } else if (state.fixedCellIds.has(c.id)) {
+      eqn.push(c.cval)
+    }
+
+    return eqn
+  })
+}
+
+function getUnsatisfiedCellIds(eqns, zij) {
+  const unsatisfied = new Set()
+  if (!Array.isArray(zij)) return unsatisfied
+
+  const limit = Math.min(eqns.length, zij.length)
+  for (let i = 0; i < limit; i++) {
+    const residual = zij[i]
+    if (Number.isFinite(residual) && residual === 0) continue
+    const cell = state.cells[i]
+    if (cell && cell.id) unsatisfied.add(cell.id)
+  }
+
+  return unsatisfied
+}
+
+// Combine per-cell violations, solver residuals, and invalid input markers.
+function collectInvalidCellIds(eqns, zij) {
+  const invalidCellIds = new Set(getViolatedCellIds(state.cells, state.solve.ass))
+
+  const unsatisfied = state.solveBanner && eqns && zij ? getUnsatisfiedCellIds(eqns, zij) : null
+  unsatisfied && unsatisfied.forEach(id => invalidCellIds.add(id))
+  for (const id of state.invalidInputCellIds) invalidCellIds.add(id)
+
+  return invalidCellIds
+}

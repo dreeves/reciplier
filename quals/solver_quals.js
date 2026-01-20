@@ -1096,9 +1096,11 @@ function runAllSolverQuals(ctx) {
 
 function main() {
   const root = path.resolve(__dirname, '..')
+  const mathevalPath = path.join(root, 'matheval.js')
   const csolverPath = path.join(root, 'csolver.js')
 
   const ctx = makeContext()
+  loadScriptIntoContext(mathevalPath, ctx)
   loadScriptIntoContext(csolverPath, ctx)
 
   assert.equal(typeof ctx.solvem, 'function', 'csolver.js should define solvem')

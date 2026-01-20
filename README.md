@@ -671,10 +671,6 @@ Solve[{r == 0.5, pay == (1-}, {fmv, get, pay, r}]
 ```
 I need to find replicata for this. Maybe in pyzza?
 
-23. Implement inequalities and sliders per spec above.
-
-24. Implement the new colon syntax for initialization values spec'd below.
-
 25. Refactor: Put all the parsing and eval code in its own file (matheval.js or
 mparser.js or something). But have to think about where custom functions live,
 like unixtime() that we're making available to the eval environment. Suppose the
@@ -737,7 +733,23 @@ But then what's the syntax or new UI for constraints vs expressions?
 
 And, actually, the whole beauty is that you can change the value of expressions
 and Reciplier figures out what everything has to equal to make that true. So
-never mind, I think. 
+never mind, I think.
+
+What if specifying bounds for a cell is what makes it render as a slider? On the
+one hand, that's messy design. Better to have an explicit indicator for field vs
+slider and, orthogonally, the ability to specifying bounds, or perhaps arbitrary
+inequalities. But, pragmatically...
+
+* Eggs: {12x} large
+* Milk: {5.333x} cups = {1.262x} liters = {1302x} grams
+* Flour: {3x} cups = {410x} grams
+* Butter: {8x} tbsp melted = {115x} grams
+* Salt: {2x} tsp = {14x} grams
+
+Yield: roughly {29x} crepes
+
+Scaled by a factor of {x : 1} {.1 <= x <= 10}
+
 
 
 
