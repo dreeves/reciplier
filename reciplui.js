@@ -82,9 +82,6 @@ ${disableInputs ? ' disabled' : ''}>`
       </div>`
 
   const nonCriticalBanners = `<div id="nonCriticalBanners">${solveBanner}${invalidExplainBanner}</div>`
-
-  // Update slider display
-  updateSliderDisplay()
   
   if (state.cells.length === 0 && state.errors.length === 0) {
     output.style.display = 'none'
@@ -105,6 +102,9 @@ ${disableInputs ? ' disabled' : ''}>`
     input.addEventListener('keypress', handleFieldKeypress)
     input.addEventListener('dblclick', handleFieldDoubleClick)
   })
+
+  // Update slider display
+  syncAfterSolve(invalidCellIds)
 }
 
 // =============================================================================
