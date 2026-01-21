@@ -6,11 +6,14 @@ function escapeHtml(text) {
   return div.innerHTML
 }
 
-function findCommentRanges(text) {
+// Deprecated: we no longer want anything but the markdown renderer to care
+// whether something's part of an HTML comment or not.
+// All the functions and variables with an "OLD" suffix in this file should die.
+function findCommentRangesOLD(text) {
   const ranges = []
-  const commentRegex = /<!--[\s\S]*?-->/g
+  const commentRegexOLD = /<!--[\s\S]*?-->/g
   let match
-  while ((match = commentRegex.exec(text)) !== null) {
+  while ((match = commentRegexOLD.exec(text)) !== null) {
     ranges.push({
       start: match.index,
       end: match.index + match[0].length
@@ -19,10 +22,10 @@ function findCommentRanges(text) {
   return ranges
 }
 
-function nonCommentSlices(start, end, commentRanges) {
+function nonCommentSlicesOLD(start, end, commentRangesOLD) {
   const slices = []
   let pos = start
-  for (const { start: cStart, end: cEnd } of commentRanges) {
+  for (const { start: cStart, end: cEnd } of commentRangesOLD) {
     if (cEnd <= pos) continue
     if (cStart >= end) break
     if (cStart > pos) slices.push([pos, Math.min(cStart, end)])
@@ -33,24 +36,24 @@ function nonCommentSlices(start, end, commentRanges) {
   return slices
 }
 
-function isIndexInComment(index, commentRanges) {
-  return commentRanges.some(r => index >= r.start && index < r.end)
+function isIndexInCommentOLD(index, commentRangesOLD) {
+  return commentRangesOLD.some(r => index >= r.start && index < r.end)
 }
 
 function getScaledRecipeText() {
   let result = ''
   let lastIndex = 0
   const text = state.recipeText
-  const commentRanges = findCommentRanges(text)
+  const commentRangesOLD = findCommentRangesOLD(text)
   
   const sortedCells = state.cells
-    .filter(c => !isIndexInComment(c.startIndex, commentRanges))
+    .filter(c => !isIndexInCommentOLD(c.startIndex, commentRangesOLD))
     .sort((a, b) => a.startIndex - b.startIndex)
   
   for (const cell of sortedCells) {
     // Add text before this cell
     if (cell.startIndex > lastIndex) {
-      for (const [s, e] of nonCommentSlices(lastIndex, cell.startIndex, commentRanges)) {
+      for (const [s, e] of nonCommentSlicesOLD(lastIndex, cell.startIndex, commentRangesOLD)) {
         result += text.substring(s, e)
       }
     }
@@ -63,7 +66,7 @@ function getScaledRecipeText() {
   
   // Add remaining text
   if (lastIndex < text.length) {
-    for (const [s, e] of nonCommentSlices(lastIndex, text.length, commentRanges)) {
+    for (const [s, e] of nonCommentSlicesOLD(lastIndex, text.length, commentRangesOLD)) {
       result += text.substring(s, e)
     }
   }
@@ -126,7 +129,7 @@ function sliderBoundsForCell(cell) {
   return bounds
 }
 
-function sliderLineForCell(cell, highlightCellId, commentRanges) {
+function sliderLineForCell(cell, highlightCellId, commentRangesOLD) {
   const text = state.recipeText
   const lineStart = text.lastIndexOf('\n', cell.startIndex - 1) + 1
   const lineEndRaw = text.indexOf('\n', cell.startIndex)
@@ -134,7 +137,7 @@ function sliderLineForCell(cell, highlightCellId, commentRanges) {
 
   const cellsInLine = state.cells
     .filter(c => c.startIndex >= lineStart && c.startIndex < lineEnd)
-    .filter(c => !isIndexInComment(c.startIndex, commentRanges))
+    .filter(c => !isIndexInCommentOLD(c.startIndex, commentRangesOLD))
     .sort((a, b) => a.startIndex - b.startIndex)
 
   let result = ''
@@ -144,7 +147,7 @@ function sliderLineForCell(cell, highlightCellId, commentRanges) {
 
   for (const c of cellsInLine) {
     if (c.startIndex > pos) {
-      for (const [s, e] of nonCommentSlices(pos, c.startIndex, commentRanges)) {
+      for (const [s, e] of nonCommentSlicesOLD(pos, c.startIndex, commentRangesOLD)) {
         result += text.substring(s, e)
       }
     }
@@ -158,7 +161,7 @@ function sliderLineForCell(cell, highlightCellId, commentRanges) {
   }
 
   if (pos < lineEnd) {
-    for (const [s, e] of nonCommentSlices(pos, lineEnd, commentRanges)) {
+    for (const [s, e] of nonCommentSlicesOLD(pos, lineEnd, commentRangesOLD)) {
       result += text.substring(s, e)
     }
   }
@@ -216,7 +219,7 @@ function sliderLineHtml(lineText, highlightStart, highlightEnd, maxChars = 50) {
   return `${prefixText}${before}<span class="slider-highlight">${highlighted}</span>${after}${suffixText}`
 }
 
-function buildSliderDefs(cells, commentRanges) {
+function buildSliderDefs(cells, commentRangesOLD) {
   const defs = []
   for (const { varName, cell } of pickSliderCells(cells)) {
     const bounds = sliderBoundsForCell(cell)
@@ -224,7 +227,7 @@ function buildSliderDefs(cells, commentRanges) {
     const max = bounds.max
     const value = isFiniteNumber(cell.cval) ? cell.cval : min
     const clamped = Math.min(max, Math.max(min, value))
-    const lineInfo = sliderLineForCell(cell, cell.id, commentRanges)
+    const lineInfo = sliderLineForCell(cell, cell.id, commentRangesOLD)
     defs.push({
       varName,
       cellId: cell.id,
@@ -290,9 +293,9 @@ function syncSliderPanel(panel, defs) {
 
 function updateSliderDisplay() {
   const panel = $('sliderPanel')
-  const commentRanges = findCommentRanges(state.recipeText)
-  const visibleCells = state.cells.filter(c => !isIndexInComment(c.startIndex, commentRanges))
-  const defs = buildSliderDefs(visibleCells, commentRanges).filter(def => !state.hiddenSliders.has(def.varName))
+  const commentRangesOLD = findCommentRangesOLD(state.recipeText)
+  const visibleCells = state.cells.filter(c => !isIndexInCommentOLD(c.startIndex, commentRangesOLD))
+  const defs = buildSliderDefs(visibleCells, commentRangesOLD).filter(def => !state.hiddenSliders.has(def.varName))
   if (defs.length === 0) {
     panel.innerHTML = ''
     panel.style.display = 'none'

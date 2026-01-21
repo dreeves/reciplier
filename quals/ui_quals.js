@@ -1297,7 +1297,7 @@ async function main() {
     }, multiColonTemplate)
     await page.waitForSelector('#recipeOutput', { visible: true })
     const multiColonErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
-    assert.ok((multiColonErrors || []).some(e => /plures colonos/i.test(e)))
+    assert.ok((multiColonErrors || []).some(e => /more than one colon/i.test(e)))
 
     const colonRhsTemplate = '{x : 1 = 2} {x}'
     await page.$eval('#recipeTextarea', (el, v) => {
@@ -1306,7 +1306,7 @@ async function main() {
     }, colonRhsTemplate)
     await page.waitForSelector('#recipeOutput', { visible: true })
     const colonRhsErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
-    assert.ok((colonRhsErrors || []).some(e => /plus quam unam expressionem post colonem/i.test(e)))
+    assert.ok((colonRhsErrors || []).some(e => /more than one expression/i.test(e)))
 
     const initConflictTemplate = '{x = 1 : 2} {x}'
     await page.$eval('#recipeTextarea', (el, v) => {

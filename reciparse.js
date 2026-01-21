@@ -40,9 +40,6 @@ function checkBraceSyntax(text) {
   return errors
 }
 
-// Extract all {...} cells from text, noting which are inside HTML comments
-// TODO: no, we shouldn't care whether anything's in an html comment when 
-// extracting cells. only the rendering cares about that.
 function extractCells(text) {
   const cells = []
   let cellId = 0
@@ -52,7 +49,6 @@ function extractCells(text) {
   let match
   while ((match = cellRegex.exec(text)) !== null) {
     // TODO: what's the difference between raw and urtext?
-    // TODO: cells shouldn't care if they're defined inside a comment, probably
     cells.push({
       id: `cell_${cellId++}`,
       raw: match[0],

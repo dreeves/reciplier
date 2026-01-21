@@ -26,23 +26,19 @@ function renderRecipe() {
 
   function renderRecipeBody({ disableInputs, invalidCellIds }) {
     const text = state.recipeText
-    const commentRanges = findCommentRanges(text)
     // Build the rendered text
     let markdownText = ''
     let lastIndex = 0
 
     // Sort cells by start index
     const visibleCells = state.cells
-      .filter(c => !isIndexInComment(c.startIndex, commentRanges))
       .sort((a, b) => a.startIndex - b.startIndex)
     const placeholders = new Map()
 
     for (const cell of visibleCells) {
       // Add text before this cell
       if (cell.startIndex > lastIndex) {
-        for (const [s, e] of nonCommentSlices(lastIndex, cell.startIndex, commentRanges)) {
-          markdownText += text.substring(s, e)
-        }
+        markdownText += text.substring(lastIndex, cell.startIndex)
       }
 
       // Render the cell as input field
@@ -64,9 +60,7 @@ function renderRecipe() {
 
     // Add remaining text after last cell
     if (lastIndex < text.length) {
-      for (const [s, e] of nonCommentSlices(lastIndex, text.length, commentRanges)) {
-        markdownText += text.substring(s, e)
-      }
+      markdownText += text.substring(lastIndex, text.length)
     }
 
     // Convert newlines to <br> for display

@@ -72,13 +72,17 @@ function buildSymbolTable(cells) {
   const varInfo = new Map()
 
   // First pass: collect variables and check for errors
-  cells.some(c => c.ineqError) && errors.push('Inequalities must start and end with a constant')
+  cells.some(c => c.ineqError) && errors.push(
+    'Inequalities must start and end with a constant')
 
   for (const cell of cells) {
     // Error case 7: multiple bare numbers in a cell
-    cell.multipleNumbers && errors.push(`Cell ${cell.raw} has more than one numerical value`)
-    cell.colonError === 'multi' && errors.push(`Cella ${cell.raw} plures colonos habet`)
-    cell.colonError === 'rhs' && errors.push(`Cella ${cell.raw} plus quam unam expressionem post colonem habet`)
+    cell.multipleNumbers && errors.push(
+      `Cell ${cell.raw} has more than one numerical value`)
+    cell.colonError === 'multi' && errors.push(
+      `Cell ${cell.raw} has more than one colon`)
+    cell.colonError === 'rhs' && errors.push(
+      `Cell ${cell.raw} has more than one expression after the colon`)
 
     cell.ceqn.length === 0 && cell.cval !== null &&
       errors.push(`Cell ${cell.raw} is a bare number ` +
@@ -101,11 +105,13 @@ function buildSymbolTable(cells) {
   }
 
   // Check for unreferenced variables (Error Case 4)
-  // Per README: "A variable in a cell isn't referenced by any other cell."
-  // For each variable in each cell, check if it appears in at least one OTHER cell.
-  // Cells in HTML comments count as references (that's the documented workaround).
-  for (const [varName, info] of varInfo) {
-    info.count === 1 && errors.push(`Variable ${varName} in ${info.firstCell.raw} not referenced in any other cell`)
+  // Per spec: "A variable in a cell isn't referenced by any other cell."
+  // For each variable in each cell, check if it appears in at least one OTHER
+  // cell. Cells in HTML comments count (that's the documented workaround if you
+  // want to make this error shut up).
+  for (const [v, info] of varInfo) {
+    info.count === 1 && errors.push(
+      `Variable ${v} in ${info.firstCell.raw} not referenced in any other cell`)
   }
 
   return { symbols, errors }
