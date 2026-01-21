@@ -46,7 +46,6 @@ function checkBraceSyntax(text) {
 function extractCells(text) {
   const cells = []
   let cellId = 0
-  const commentRanges = findCommentRanges(text)
 
   // Find all {...} cells (simple non-nested matching)
   const cellRegex = /\{([^{}]*)\}/g
@@ -59,7 +58,6 @@ function extractCells(text) {
       raw: match[0],
       urtext: match[1],
       content: match[1],
-      inComment: commentRanges.some(r => match.index >= r.start && match.index < r.end),
       startIndex: match.index,
       endIndex: match.index + match[0].length
     })

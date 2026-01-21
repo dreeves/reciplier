@@ -847,18 +847,17 @@ async function main() {
 
       const invalids = rendered.querySelectorAll('input.recipe-field.invalid')
       if (!invalids.length) return { ok: false, why: 'no invalid field' }
-      const lastInvalid = invalids[invalids.length - 1]
+      let anchor = invalids[invalids.length - 1]
 
-      let br = null
-      for (let n = lastInvalid.nextSibling; n; n = n.nextSibling) {
-        if (n.nodeType === 1 && n.tagName === 'BR') { br = n; break }
+      while (anchor && anchor.parentNode !== rendered) {
+        anchor = anchor.parentNode
       }
-      if (!br) return { ok: false, why: 'no br after invalid' }
+      if (!anchor) return { ok: false, why: 'no anchor' }
 
       const banners = document.getElementById('nonCriticalBanners')
       if (!banners) return { ok: false, why: 'no nonCriticalBanners' }
 
-      return { ok: banners.previousSibling === br, why: 'bad position' }
+      return { ok: banners.previousSibling === anchor, why: 'bad position' }
     })
     assert.equal(invalidExplainPos.ok, true, invalidExplainPos.why)
 
@@ -1184,6 +1183,38 @@ async function main() {
     const bValHidden = await getInputValue(page, 'input.recipe-field[data-label="b"]')
     assert.equal(aValHidden, '5')
     assert.equal(bValHidden, '10')
+
+    // Qual: markdown rendering allows raw HTML and ignores HTML comments
+    const markdownTemplate = '# Markdown Header\n\n* Item {x}\n\nParagraph with <span id=\"rawhtml\">raw</span> html.\n<!-- hidden {y} -->'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, markdownTemplate)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    const markdownResult = await page.evaluate(() => {
+      const rendered = document.querySelector('#recipeOutput .recipe-rendered')
+      if (!rendered) return { ok: false, why: 'no recipe-rendered' }
+      const header = rendered.querySelector('h1')
+      const raw = rendered.querySelector('#rawhtml')
+      const listItems = rendered.querySelectorAll('ul li')
+      const inputs = rendered.querySelectorAll('input.recipe-field')
+      const text = rendered.textContent || ''
+      return {
+        ok: true,
+        header: header ? header.textContent : '',
+        raw: !!raw,
+        listCount: listItems.length,
+        inputCount: inputs.length,
+        hasHidden: /hidden/.test(text)
+      }
+    })
+    assert.equal(markdownResult.ok, true, markdownResult.why)
+    assert.equal(markdownResult.header, 'Markdown Header')
+    assert.equal(markdownResult.raw, true)
+    assert.equal(markdownResult.listCount, 1)
+    assert.equal(markdownResult.inputCount, 1)
+    assert.equal(markdownResult.hasHidden, false)
 
     // Qual: constant at end is default, not frozen (during typing)
     const defaultNotFrozen = '{x : 1} {y = 2x}'

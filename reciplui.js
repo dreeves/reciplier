@@ -2,6 +2,8 @@
 // Main Parse and Render Functions
 // =============================================================================
 
+const markdownRenderer = markdownit({ html: true, breaks: true })
+
 function updateRecipeDropdown() {
   // Check if current text matches any recipe
   let matchingKey = 'custom'
@@ -26,31 +28,36 @@ function renderRecipe() {
     const text = state.recipeText
     const commentRanges = findCommentRanges(text)
     // Build the rendered text
-    let html = ''
+    let markdownText = ''
     let lastIndex = 0
 
     // Sort cells by start index
-    const visibleCells = state.cells.filter(c => !c.inComment)
-                                    .sort((a, b) => a.startIndex - b.startIndex)
+    const visibleCells = state.cells
+      .filter(c => !isIndexInComment(c.startIndex, commentRanges))
+      .sort((a, b) => a.startIndex - b.startIndex)
+    const placeholders = new Map()
 
     for (const cell of visibleCells) {
       // Add text before this cell
       if (cell.startIndex > lastIndex) {
         for (const [s, e] of nonCommentSlices(lastIndex, cell.startIndex, commentRanges)) {
-          html += escapeHtml(text.substring(s, e))
+          markdownText += text.substring(s, e)
         }
       }
 
       // Render the cell as input field
-      html += `\
-<input type="text" class="recipe-field \
-${state.fixedCellIds.has(cell.id) ? 'fixed'   : ''} \
-${invalidCellIds.has(cell.id)     ? 'invalid' : ''}" \
-data-label="${cell.ceqn.length > 0 ? cell.ceqn[0].trim() : ''}" \
-data-cell-id="${cell.id}" \
-value="${formatNum(cell.cval)}" \
-title="${cell.urtext.replace(/"/g, '&quot;')}"\
-${disableInputs ? ' disabled' : ''}>`
+      const value = cell.cval
+      const displayValue = formatNum(value)
+      const isFixed = state.fixedCellIds.has(cell.id)
+      const isInvalid = invalidCellIds.has(cell.id)
+      const title = `${cell.urtext}`.replace(/"/g, '&quot;')
+      const disabledAttr = disableInputs ? ' disabled' : ''
+
+      const label = cell.ceqn.length > 0 ? cell.ceqn[0].trim() : ''
+      const inputHtml = `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''} ${isInvalid ? 'invalid' : ''}" data-label="${label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}"${disabledAttr}>`
+      const placeholder = `@@RECIPLIER_CELL_${cell.id}@@`
+      placeholders.set(placeholder, inputHtml)
+      markdownText += placeholder
 
       lastIndex = cell.endIndex
     }
@@ -58,12 +65,15 @@ ${disableInputs ? ' disabled' : ''}>`
     // Add remaining text after last cell
     if (lastIndex < text.length) {
       for (const [s, e] of nonCommentSlices(lastIndex, text.length, commentRanges)) {
-        html += escapeHtml(text.substring(s, e))
+        markdownText += text.substring(s, e)
       }
     }
 
     // Convert newlines to <br> for display
-    html = html.replace(/\n/g, '<br>')
+    let html = markdownRenderer.render(markdownText)
+    for (const [placeholder, inputHtml] of placeholders) {
+      html = html.split(placeholder).join(inputHtml)
+    }
     return `<div class="recipe-rendered">${html}</div>`
   }
 
@@ -127,25 +137,19 @@ function updateInvalidExplainBannerInDom() {
   updateBannerInDom('invalidExplainBanner', state.invalidExplainBanner)
 }
 
-function repositionNonCriticalBannersAfterLastInvalidBr() {
+function repositionNonCriticalBannersAfterLastInvalidField() {
   const rendered = $('recipeOutput')?.querySelector('.recipe-rendered')
   const banners = rendered && $('nonCriticalBanners')
   if (!rendered || !banners) return
 
   const invalidFields = rendered.querySelectorAll('input.recipe-field.invalid')
-  const lastInvalid = invalidFields.length ? invalidFields[invalidFields.length - 1] : null
+  let anchor = invalidFields.length ? invalidFields[invalidFields.length - 1] : null
 
-  let br = null
-  if (lastInvalid) {
-    for (let n = lastInvalid.nextSibling; n; n = n.nextSibling) {
-      if (n.nodeType === 1 && n.tagName === 'BR') {
-        br = n
-        break
-      }
-    }
+  while (anchor && anchor.parentNode !== rendered) {
+    anchor = anchor.parentNode
   }
 
-  const refNode = br ? br.nextSibling : null
+  const refNode = anchor ? anchor.nextSibling : null
   rendered.insertBefore(banners, refNode)
 }
 
@@ -175,7 +179,7 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
     })
   }
 
-  repositionNonCriticalBannersAfterLastInvalidBr()
+  repositionNonCriticalBannersAfterLastInvalidField()
   updateSliderDisplay()
 }
 
@@ -187,7 +191,7 @@ function markInvalidInput(input, cellId, message) {
   state.invalidInputCellIds.add(cellId)
   state.invalidExplainBanner = message
   updateInvalidExplainBannerInDom()
-  repositionNonCriticalBannersAfterLastInvalidBr()
+  repositionNonCriticalBannersAfterLastInvalidField()
 }
 
 function clearInvalidInput(cellId) {

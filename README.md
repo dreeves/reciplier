@@ -572,11 +572,14 @@ same value. Like {x = 1 = 2} or {x = 1 = y*z = 1}.
 6. Unknown unknowns: Other errors we haven't thought of yet or ways the template
 file violates any expectations. Anti-Postel FTW.
 
+## Things that are implemented that want incorporated into the spec
+
+1. Markdown rendering, including html comments.
+ So far we respect html comments in rendering reciplates
+but we want to support all markdown + html.
+
 
 ## Future Work
-
-1. Markdown rendering. So far we respect html comments in rendering reciplates
-but we want to support all markdown + html.
 
 2. Direct links to recipes. When you select a recipe template from the dropdown,
 update the query string like "reciplier.dreev.es/?recipe=crepes" using the keys
@@ -595,8 +598,6 @@ for a name for their recipe too.
 cells by muscle memory to highlight the current contents of a field in order to
 overwrite it. Worse, if you don't happen to ever double-click a cell then
 freezing/unfreezing is totally undiscoverable.
-
-5. Bug: "2 x" should parse to "2*x".
 
 6. Thinking out loud about going more anti-magic: Currently when you edit a
 field the system just tries changing other variables until something works.
@@ -645,8 +646,6 @@ html comment in order to suppress the "unreferenced variable" banner.
 
 17. It shouldn't be hard to add a Gaussian elimination solver to the kitchen
 sink in csolver.js, why not.
-
-18. If x is defined implicitly, the slider should still work.
 
 19. Refactor: Use only varparse, not findVariables or varsInExpr or anything
 else.
@@ -749,6 +748,8 @@ inequalities. But, pragmatically...
 Yield: roughly {29x} crepes
 
 Scaled by a factor of {x : 1} {.1 <= x <= 10}
+{.1 <= x : 1 < 10}
+{.1 <= x < 10 : 1}
 
 
 
