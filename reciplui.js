@@ -10,6 +10,62 @@ const LONGPRESS_DELAY_MS = 400
 // Main Parse and Render Functions
 // =============================================================================
 
+function renderErrorDisplay(messages) {
+  if (!messages || messages.length === 0) return ''
+  const items = messages.map(m => `<div class="error-message">⚠️ ${escapeHtml(m)}</div>`).join('')
+  return `<div class="error-display">${items}</div>`
+}
+
+function assignErrorsToCells(errors, cells) {
+  const byCell = new Map()
+  const global = []
+  for (const err of errors) {
+    let matchedCell = null
+    for (const cell of cells) {
+      if (err.includes(cell.raw)) {
+        matchedCell = cell
+        break
+      }
+    }
+    if (matchedCell) {
+      const list = byCell.get(matchedCell.id) || []
+      list.push(err)
+      byCell.set(matchedCell.id, list)
+    } else {
+      global.push(err)
+    }
+  }
+  return { byCell, global }
+}
+
+function findRenderedAnchor(rendered, cellId) {
+  const input = rendered.querySelector(`input.recipe-field[data-cell-id="${cellId}"]`)
+  if (!input) throw new Error('renderRecipe: missing input for error banner anchor')
+  let anchor = input
+  while (anchor && anchor.parentNode !== rendered) {
+    anchor = anchor.parentNode
+  }
+  return anchor
+}
+
+function insertCriticalErrorBanners(rendered, errorAssignments) {
+  if (!rendered) throw new Error('renderRecipe: missing rendered container for error banners')
+  for (const [cellId, messages] of errorAssignments.byCell) {
+    if (!messages || messages.length === 0) {
+      throw new Error('renderRecipe: empty error list for cell banner')
+    }
+    const anchor = findRenderedAnchor(rendered, cellId)
+    const bannerHtml = renderErrorDisplay(messages)
+    if (!bannerHtml) throw new Error('renderRecipe: empty banner html for cell error')
+    anchor.insertAdjacentHTML('afterend', bannerHtml)
+  }
+  const globalHtml = renderErrorDisplay(errorAssignments.global)
+  if (errorAssignments.global.length > 0 && !globalHtml) {
+    throw new Error('renderRecipe: empty banner html for global errors')
+  }
+  if (globalHtml) rendered.insertAdjacentHTML('beforeend', globalHtml)
+}
+
 const markdownRenderer = markdownit({ html: true, breaks: true })
 
 function updateRecipeDropdown() {
@@ -31,57 +87,6 @@ function renderRecipe() {
   const criticalErrors = state.errors
 
   const invalidCellIds = collectInvalidCellIds(state.solve.eqns, state.solve.zij)
-
-  function renderErrorDisplay(messages) {
-    if (!messages || messages.length === 0) return ''
-    const items = messages.map(m => `<div class="error-message">⚠️ ${escapeHtml(m)}</div>`).join('')
-    return `<div class="error-display">${items}</div>`
-  }
-
-  function assignErrorsToCells(errors, cells) {
-    const byCell = new Map()
-    const global = []
-    for (const err of errors) {
-      let matchedCell = null
-      for (const cell of cells) {
-        if (err.includes(cell.raw)) {
-          matchedCell = cell
-          break
-        }
-      }
-      if (matchedCell) {
-        const list = byCell.get(matchedCell.id) || []
-        list.push(err)
-        byCell.set(matchedCell.id, list)
-      } else {
-        global.push(err)
-      }
-    }
-    return { byCell, global }
-  }
-
-  function findRenderedAnchor(rendered, cellId) {
-    const input = rendered.querySelector(`input.recipe-field[data-cell-id="${cellId}"]`)
-    if (!input) return null
-    let anchor = input
-    while (anchor && anchor.parentNode !== rendered) {
-      anchor = anchor.parentNode
-    }
-    return anchor
-  }
-
-  function insertCriticalErrorBanners(rendered, errorAssignments) {
-    if (!rendered) return
-    for (const [cellId, messages] of errorAssignments.byCell) {
-      const anchor = findRenderedAnchor(rendered, cellId)
-      if (!anchor) continue
-      const bannerHtml = renderErrorDisplay(messages)
-      if (!bannerHtml) continue
-      anchor.insertAdjacentHTML('afterend', bannerHtml)
-    }
-    const globalHtml = renderErrorDisplay(errorAssignments.global)
-    if (globalHtml) rendered.insertAdjacentHTML('beforeend', globalHtml)
-  }
 
   function renderRecipeBody({ disableInputs, invalidCellIds }) {
     const text = state.recipeText

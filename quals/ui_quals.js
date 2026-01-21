@@ -92,9 +92,24 @@ async function main() {
   const page = await browser.newPage()
 
   const pageConsoleLogs = []
+  const pageErrors = []
   page.on('console', msg => {
     pageConsoleLogs.push(msg.text())
   })
+  page.on('pageerror', err => {
+    pageErrors.push(String(err && err.message ? err.message : err))
+  })
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms))
+  const clearPageErrors = () => { pageErrors.length = 0 }
+  const waitForPageError = async (pattern, label) => {
+    const deadline = Date.now() + 2000
+    while (Date.now() < deadline) {
+      if (pageErrors.some(msg => pattern.test(msg))) return
+      await sleep(50)
+    }
+    assert.ok(false, label)
+  }
 
   try {
     await page.goto(fileUrl(path.join(__dirname, '..', 'index.html')))
@@ -799,6 +814,67 @@ async function main() {
     assert.ok(/Nested braces|Unclosed brace|Unmatched closing brace/i.test(nestedErrText))
     const nestedCopyDisabled = await page.$eval('#copyButton', el => el.disabled)
     assert.equal(nestedCopyDisabled, true)
+
+    // Qual: error banners fail loudly if rendered container is missing
+    clearPageErrors()
+    await page.evaluate(() => {
+      const output = document.getElementById('recipeOutput')
+      if (!output) return
+      const original = output.querySelector.bind(output)
+      output.querySelector = sel => (sel === '.recipe-rendered' ? null : original(sel))
+    })
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, unsatTemplate)
+    await waitForPageError(/missing rendered container/i, 'expected error for missing rendered container')
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('#recipeTextarea')
+
+    // Qual: error banners fail loudly if anchor input is missing
+    clearPageErrors()
+    await page.evaluate(() => {
+      const original = Element.prototype.querySelector
+      Element.prototype.querySelector = function (sel) {
+        if (this.classList && this.classList.contains('recipe-rendered') && sel.startsWith('input.recipe-field')) {
+          return null
+        }
+        return original.call(this, sel)
+      }
+    })
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, unsatTemplate)
+    await waitForPageError(/missing input for error banner anchor/i, 'expected error for missing banner anchor')
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('#recipeTextarea')
+
+    // Qual: error banners fail loudly on empty per-cell error lists
+    clearPageErrors()
+    await page.evaluate(() => {
+      const originalAssign = window.assignErrorsToCells
+      window.assignErrorsToCells = () => ({ byCell: new Map([['cell_0', []]]), global: [] })
+      window.__restoreAssignErrorsToCells = () => { window.assignErrorsToCells = originalAssign }
+    })
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, unsatTemplate)
+    await waitForPageError(/empty error list for cell banner/i, 'expected error for empty per-cell error list')
+    await page.evaluate(() => { window.__restoreAssignErrorsToCells && window.__restoreAssignErrorsToCells() })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('#recipeTextarea')
+
+    // Qual: global-only errors render without throwing
+    clearPageErrors()
+    const unclosedBraceTemplate = '{x'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, unclosedBraceTemplate)
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    assert.equal(pageErrors.length, 0)
 
     // Qual: test recipe editing x/2 cell infers x
     await page.select('#recipeSelect', 'test')
