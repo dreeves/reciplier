@@ -572,94 +572,91 @@ same value. Like {x = 1 = 2} or {x = 1 = y*z = 1}.
 6. Unknown unknowns: Other errors we haven't thought of yet or ways the template
 file violates any expectations. Anti-Postel FTW.
 
+
 ## Things that are implemented that want incorporated into the spec
 
-1. Markdown rendering, including html comments.
- So far we respect html comments in rendering reciplates
-but we want to support all markdown + html.
+* [MDC] Markdown rendering, including html comments.
+
+* [COQ] Each time solvem returns sat=false, print to the browser console a qual
+for it. Also print the constraint satisfaction problem in Mathematica syntax so
+I can confirm if it's really true that there's no solution. For example:
+Solve[{c == 50, a == 3x, b == 4x, 25 == a^2 + b^2 == c^2}, {c, a, b, x}]
 
 
 ## Future Work
 
-2. Direct links to recipes. When you select a recipe template from the dropdown,
-update the query string like "reciplier.dreev.es/?recipe=crepes" using the keys
-in `recipeDropdown`. If the user edits the template, encode the whole thing with
-lz-string in real time like "reciplier.dreev.es/?rawcipe=GARBLEDYGOOK". Also, as
-the user edits fields, append the cvals to the URL as well, like
+* [LNK] Direct links to recipes. When you select a recipe template from the
+dropdown, update the query string like "reciplier.dreev.es/?recipe=crepes" using
+the keys in `recipeDropdown`. If the user edits the template, encode the whole
+thing with lz-string in real time like 
+"reciplier.dreev.es/?rawcipe=GARBLEDYGOOK".
+Also, as the user edits fields, append the cvals to the URL as well, like
 "reciplier.dreev.es/?recipe=pyzza&x=3&a=9&b=12&c=15".
 
-3. Crowdsource templates. If the template text area doesn't match one of the 
-existing reciplates (the dropdown shows "Custom Template" in this case) then 
-a buttom becomes clickable that opens a popup that prompts the user to submit 
+* [CRT] Crowdsource templates. If the template text area doesn't match one of
+the existing reciplates (the dropdown shows "Custom Template" in this case) then
+a buttom becomes clickable that opens a popup that prompts the user to submit
 their template to be considered for inclusion in the dropdown. Prompt the user
 for a name for their recipe too.
 
-4. Double-clicking to freeze/unfreeze is terrible. For one thing, I double-click
-cells by muscle memory to highlight the current contents of a field in order to
-overwrite it. Worse, if you don't happen to ever double-click a cell then
-freezing/unfreezing is totally undiscoverable.
+* [DCF] Double-clicking to freeze/unfreeze is terrible. For one thing, I
+double-click cells by muscle memory to highlight the current contents of a field
+in order to overwrite it. Worse, if you don't happen to ever double-click a cell
+then freezing/unfreezing is totally undiscoverable.
 
-6. Thinking out loud about going more anti-magic: Currently when you edit a
+* [SEE] Thinking out loud about going more anti-magic: Currently when you edit a
 field the system just tries changing other variables until something works.
 That's pretty magical. What if instead you could see other fields kind of cross
 themselves out and show the new values implied by your edit? Or, like, if more
 than one cell can change to accommodate your edit you're forced to explicitly
 freeze cells until that's no longer the case?
 
-7. Make it easy to add any new math functions or other utilities that we want
-available for defining cells. Like how we currently have `unixtime()`. I.e.,
-functions or constants that can be referred to in the vareval environment. Maybe
-even have that code available in the UI, unobtrusively so as not to clutter the
-UI for the simple recipe use case.
+* [MTH] Make it easy to add any new math functions or other utilities that we
+want available for defining cells. Like how we currently have `unixtime()`.
+I.e., functions or constants that can be referred to in the vareval environment.
+Maybe even have that code available in the UI, unobtrusively so as not to
+clutter the UI for the simple recipe use case. Just an idea for now.
 
-8. Is it too weird to define constants via constraints where the constant part
-comes first? Syntax like {tau := 6.28} could define a constant and it's just
-uneditable, rendering as normal text, no field. Another option is the idea above
-about defining new functions and constants.
+* [CON] Syntax like {tau := 6.28} could define a constant and it's just
+uneditable, rendering as normal text, no field. Another option is [MTH] above
+about defining new functions and constants. Just an idea for now.
 
-9. Then could we support something like {goal_units := "kg"} and then ... I
+* [ERB] Then could we support something like {goal_units := "kg"} and then ... I
 guess that's turning this thing into a whole templating engine like ERB.
 
-10. Support arithmetic in the fields, not just the template.
+* [ARI] Support arithmetic in the fields, not just the template.
 
-11. Each time solvem returns sat==false, print to the browser console a qual for
-it. Also print the constraint satisfaction problem in Mathematica syntax so I
-can confirm if it's really true that there's no solution. For example:
-Solve[{c == 50, a == 3x, b == 4x, 25 == a^2 + b^2 == c^2}, {c, a, b, x}]
-(Done?)
+* [SPN] Show a spinner or something while searching for a solution. (Not
+currently necessary; could be in the future with fancier solvers.)
 
-12. Show a spinner or something while searching for a solution. (Not currently
-necessary; could be in the future with fancier solvers.)
+* [SRR] Add more recipes from http://doc.dreev.es/recipes or even make Reciplier
+the master copy for those recipes.
 
-13. Add more recipes from http://doc.dreev.es/recipes or even make Reciplier the
-master copy for those recipes.
+* [BAN] Insert the error banners directly below where the problem is, so that
+the UI you're trying to interact with never shifts on you.
 
-14. Insert the error banners directly below where the problem is, so that the
-UI you're trying to interact with never shifts on you.
+* [LNW] See if this can subsume https://dreeves.github.io/loanwolf/
 
-15. See if this can subsume https://dreeves.github.io/loanwolf/
+* [DER] Make error messages dismissable. That way if you, say, intentionally
+make an unreferenced variable, maybe in order to have a slider for it, then you
+get the warning but don't have to employ the workaround of adding a dummy cell
+in an html comment in order to suppress the "unreferenced variable" banner.
+(I don't think "in order to make a slider for it" makes sense currently. Ignore
+this one for now.)
 
-16. Make error messages dismissable. That way if you, say, intentionally make an
-unreferenced variable, maybe in order to have a slider for it, then you get the
-warning but don't have to employ the workaround of adding a dummy cell in an
-html comment in order to suppress the "unreferenced variable" banner.
-
-17. It shouldn't be hard to add a Gaussian elimination solver to the kitchen
+* [GAU] It shouldn't be hard to add a Gaussian elimination solver to the kitchen
 sink in csolver.js, why not.
 
-19. Refactor: Use only varparse, not findVariables or varsInExpr or anything
-else.
-
-20. The preval function should handle things like `2(a+b)`. And what about 
+* [IMM] The preval function should handle things like `2(a+b)`. And what about
 `x(a+b)`? That's ambiguous between multiplication and a function named `x`.
 Which is why Mathematica uses square brackets for function, which, maybe we want
 to just embrace that? In the meantime, numbers followed by parentheses should be
-treated as multiplication, I think.
+treated as multiplication, I think. Add lots of quals before fussing with this.
 
-21. While we're at it, supporting "23%" to mean 0.23 might be handy. Or maybe we
-want the percent sign to mean mod. TBD.
+* [PER] While we're at it, supporting "23%" to mean 0.23 might be handy. Or
+maybe we want the percent sign to mean mod. TBD.
 
-22. When the solver fails and we generate a qual, the version in Mathematica
+* [SYN] When the solver fails and we generate a qual, the version in Mathematica
 syntax is buggy. Oh, wait, maybe both the JavaScript and Mathematica syntax are
 buggy. Example:
 ```
@@ -670,27 +667,17 @@ Solve[{r == 0.5, pay == (1-}, {fmv, get, pay, r}]
 ```
 I need to find replicata for this. Maybe in pyzza?
 
-25. Refactor: Put all the parsing and eval code in its own file (matheval.js or
-mparser.js or something). But have to think about where custom functions live,
-like unixtime() that we're making available to the eval environment. Suppose the
-math parsing and eval library provides varparse and vareval and isconstant and
-isbarevar. Then custom functions could also live there. I'm not sure whether all
-that can be a black box from csolver's perspective. Possibly not.
-
-26. Make the error banners stack a little tighter when there's more than one of
-them. Actually maybe it's as simple as nixing the extra vertical whitespace that
-gets inserted below each error banner.
-
-27. Bike Tour Burritos doesn't properly infer an earlier or later start time
+* [BTB] Bike Tour Burritos doesn't properly infer an earlier or later start time
 when the user bumps the average speed down or up.
 
-28. The length of the excerpts shown for the sliders should depend on the
+* [SLE] The length of the excerpts shown for the sliders should depend on the
 display width. Also it should show as rendered, eg, it shouldn't show html
-comments.
+comments. But ignore this; we may be revamping sliders.
 
-29. Latest half-baked idea: 
 
-Every cell is a JSON object:
+## Latest half-baked ideas for cell syntax
+
+What if every cell is a JSON object:
   {eq: "x = 2y", min: 0, max: 99, ini: 50, elm: 'field', ...}
 As syntactic sugar you can omit "eq" like so:
   {x = 2y, min: 0, max: 99, ini: 50, elm: "slider", ...}

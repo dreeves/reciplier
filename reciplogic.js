@@ -63,8 +63,6 @@ function logFailedSolve(eqns, seedValues, solvedValues) {
 // Symbol Table and Validation
 // =============================================================================
 
-// findVariables is now provided by csolver.js
-
 // Build symbol table from parsed cells
 function buildSymbolTable(cells) {
   const symbols = {}
