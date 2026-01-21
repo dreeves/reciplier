@@ -1,4 +1,12 @@
 // =============================================================================
+// Configuration
+// =============================================================================
+
+// Trigger mode for pegging/freezing fields: 'longpress', 'dblclick', 'tripleclick'
+const TRIGGER_MODE = 'longpress'
+const LONGPRESS_DELAY_MS = 400
+
+// =============================================================================
 // Main Parse and Render Functions
 // =============================================================================
 
@@ -104,7 +112,7 @@ function renderRecipe() {
     input.addEventListener('input', handleFieldInput)
     // input.addEventListener('blur', handleFieldBlur)
     input.addEventListener('keypress', handleFieldKeypress)
-    input.addEventListener('dblclick', handleFieldDoubleClick)
+    attachPegTrigger(input)
   })
 
   // Update slider display
@@ -224,8 +232,11 @@ function handleFieldKeypress(e) {
   }
 }
 
-function handleFieldDoubleClick(e) {
-  const input = e.target
+// =============================================================================
+// Peg/Freeze Toggle Logic
+// =============================================================================
+
+function toggleCellPeg(input) {
   const cellId = input.dataset.cellId
   
   // Per README: "you can't mark a field fixed when in that state" (invalid)
@@ -245,6 +256,53 @@ function handleFieldDoubleClick(e) {
   // Re-solve under the new frozen constraints and update the banner invariant.
   solveAndApply({ editedCellId: null, editedValue: null })
   renderRecipe()
+}
+
+// --- Double-click trigger ---
+function handleFieldDoubleClick(e) {
+  toggleCellPeg(e.target)
+}
+
+// --- Long-press trigger ---
+let longpressTimer = null
+let longpressTarget = null
+
+function handleFieldPointerDown(e) {
+  const input = e.target
+  longpressTarget = input
+  input.classList.add('pressing')
+  
+  longpressTimer = setTimeout(() => {
+    if (longpressTarget === input) {
+      toggleCellPeg(input)
+      longpressTarget = null
+    }
+  }, LONGPRESS_DELAY_MS)
+}
+
+function handleFieldPointerEnd(e) {
+  const input = e.target
+  input.classList.remove('pressing')
+  
+  if (longpressTimer) {
+    clearTimeout(longpressTimer)
+    longpressTimer = null
+  }
+  longpressTarget = null
+}
+
+// --- Attach triggers based on mode ---
+function attachPegTrigger(input) {
+  if (TRIGGER_MODE === 'dblclick') {
+    input.addEventListener('dblclick', handleFieldDoubleClick)
+  } else if (TRIGGER_MODE === 'longpress') {
+    input.addEventListener('pointerdown', handleFieldPointerDown)
+    input.addEventListener('pointerup', handleFieldPointerEnd)
+    input.addEventListener('pointerleave', handleFieldPointerEnd)
+    input.addEventListener('pointercancel', handleFieldPointerEnd)
+  } else {
+    throw new Error(`Unknown TRIGGER_MODE: ${TRIGGER_MODE}`)
+  }
 }
 
 function handleRecipeChange() {

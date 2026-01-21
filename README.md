@@ -744,10 +744,10 @@ Scaled by a factor of {x : 1} {.1 <= x <= 10}
 SCRATCH AREA: ------------------------------------------------------------------
 
 Brainstorming ways to indicate an initially frozen field:
-* number first in urtext: {6.28 = tau} or {0 < 6.18 = tau < 7}
+* NIX: number first in urtext: {6.28 = tau} or {0 < 6.18 = tau < 7}
 * double curly braces: {{tau = 6.28}}
 * double square brackets: [[tau = 6.28]]
-* symbol in all caps: {TAU = 6.28}
+* NIX: symbol in all caps: {TAU = 6.28}
 * colon-equals: {tau := 6.28}
 * cell has a constant as one of the sides of the equation [GOING WITH THIS]
 

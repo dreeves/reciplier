@@ -54,16 +54,31 @@ content="Paste in a recipe and scale it up or down. Also a constraint satisfacti
     hidden
   >
     <div class="help-popover-inner text-sm text-gray-600">
-      <p>
-This is kind of a free-form spreadsheet.
-Check out the example "recipes" and it will gradually make sense.
-The idea is you create cells with curly braces that contain expressions or equations, like
-<span class="font-mono">{2x}</span> or 
-<span class="font-mono">{x : 1}</span> or
-<span class="font-mono">{a^2 + b^2 = c^2}</span>. 
+<h3>Reciplier Help</h3>
+<p>
+Basic usage is pretty self-explanatory.
+Paste in a recipe and replace quantities with expressions in curly braces.
+Like "3 eggs" becomes 
+<span class="font-mono">{3x} eggs</span> 
+and then at the end of the recipe include a line like
+<span class="font-mono">Scaled by {x:1}</span>.
+The things in curly braces are called cells and they get rendered as fields you can edit.
+Change any field and the rest adjust themselves.
+</p>
+<p>
+Check out the example recipes and it will all gradually make sense.
+</p>
+<h3>Advanced Usage</h3>
+<p>
+This is kind of a free-form spreadsheet and constraint solver.
+You can include equations in cells and Reciplier tries to find an assignment of values to all the variables that satisfies all the equations.
+Like if you include
+<span class="font-mono">{a}^2 + {b}^2 = {c}^2 = {a^2 + b^2 = c^2}</span>
+in the recipe template, you have a nifty interface for finding Pythagorean triples.
 (Nerds: "2x" is short for "2*x" but "x2" is just a variable, not "x*2".)
-      </p>
-      <p>
+</p>
+<h3>Credits and Colophon</h3>
+<p>
 This was originally vibe-coded by Cantor Soule-Reeves and Daniel Reeves with
 <a href="https://claude.ai" title="This was before Sonnet 4.5; not sure which exactly">Claude</a>
 and then mostly
@@ -115,7 +130,7 @@ for an example of some prior art.
   
   <div class="text-center text-gray-400 text-sm mt-4">
     <div class="text-gray-300 text-xs mt-1">
-      v2026.01.20-e
+      v2026.01.20-f
     </div>
   </div>
 </div>

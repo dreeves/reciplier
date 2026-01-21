@@ -270,6 +270,11 @@ button:disabled {
   font-weight: 600;
 }
 
+.recipe-field.pressing {
+  background-color: #e5e7eb;
+  transition: background-color 0.1s ease;
+}
+
 /* Error display */
 .error-display {
   padding: 1rem;
