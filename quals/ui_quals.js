@@ -49,8 +49,22 @@ async function typeIntoFieldNoBlur(page, selector, value) {
 }
 
 async function dblClickSelector(page, selector) {
+  await longpressSelector(page, selector)
+}
+
+async function longpressSelector(page, selector, holdMs = 450) {
   const el = await page.waitForSelector(selector, { visible: true })
-  await el.click({ clickCount: 2 })
+  await el.hover()
+  await page.mouse.down()
+  await new Promise(r => setTimeout(r, holdMs))
+  await page.mouse.up()
+}
+
+async function longpressHandle(page, handle, holdMs = 450) {
+  await handle.hover()
+  await page.mouse.down()
+  await new Promise(r => setTimeout(r, holdMs))
+  await page.mouse.up()
 }
 
 async function getInputValue(page, selector) {
@@ -513,7 +527,7 @@ async function main() {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false)
-      await h.click({ clickCount: 2 })
+      await longpressHandle(page, h)
       await h.dispose()
     }
 
@@ -560,7 +574,7 @@ async function main() {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false, `dial bug1b: couldn't find field with title containing "${t}"`)
-      await h.click({ clickCount: 2 })  // Double-click to freeze
+      await longpressHandle(page, h)  // Double-click to freeze
       await h.dispose()
     }
 
@@ -613,7 +627,7 @@ async function main() {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false, `dial soft fallback: couldn't find field with title containing "${t}"`)
-      await h.click({ clickCount: 2 })
+      await longpressHandle(page, h)
       await h.dispose()
     }
 
@@ -657,7 +671,7 @@ async function main() {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false, `dial rate=0: couldn't find field with title containing "${t}"`)
-      await h.click({ clickCount: 2 })
+      await longpressHandle(page, h)
       await h.dispose()
     }
 
@@ -741,8 +755,8 @@ async function main() {
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }, unsatTemplate)
 
-    await page.waitForSelector('.error-display', { visible: true })
-    const unsatErrText = await page.$eval('.error-display', el => el.textContent || '')
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    const unsatErrText = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
     assert.ok(/Contradiction:/i.test(unsatErrText))
     const unsatCopyDisabled = await page.$eval('#copyButton', el => el.disabled)
     assert.equal(unsatCopyDisabled, true)
@@ -754,8 +768,8 @@ async function main() {
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }, bareConstantTemplate)
 
-    await page.waitForSelector('.error-display', { visible: true })
-    const bareErrText = await page.$eval('.error-display', el => el.textContent || '')
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    const bareErrText = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
     assert.ok(/bare number/i.test(bareErrText))
     const bareCopyDisabled = await page.$eval('#copyButton', el => el.disabled)
     assert.equal(bareCopyDisabled, true)
@@ -767,8 +781,8 @@ async function main() {
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }, multipleConstantsTemplate)
 
-    await page.waitForSelector('.error-display', { visible: true })
-    const multipleErrText = await page.$eval('.error-display', el => el.textContent || '')
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    const multipleErrText = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
     assert.ok(/more than one numerical value/i.test(multipleErrText))
     const multipleCopyDisabled = await page.$eval('#copyButton', el => el.disabled)
     assert.equal(multipleCopyDisabled, true)
@@ -780,8 +794,8 @@ async function main() {
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }, nestedBracesTemplate)
 
-    await page.waitForSelector('.error-display', { visible: true })
-    const nestedErrText = await page.$eval('.error-display', el => el.textContent || '')
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    const nestedErrText = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
     assert.ok(/Nested braces|Unclosed brace|Unmatched closing brace/i.test(nestedErrText))
     const nestedCopyDisabled = await page.$eval('#copyButton', el => el.disabled)
     assert.equal(nestedCopyDisabled, true)
@@ -889,8 +903,13 @@ async function main() {
       const banners = document.getElementById('nonCriticalBanners')
       if (!banners) return { ok: false, why: 'no nonCriticalBanners' }
 
-      const ok = banners.parentElement === rendered && banners.nextElementSibling === null
-      return { ok, why: ok ? 'ok' : 'banners not last element child' }
+      const invalidFields = rendered.querySelectorAll('input.recipe-field.invalid')
+      const lastInvalid = invalidFields.length ? invalidFields[invalidFields.length - 1] : null
+      const afterInvalid = lastInvalid
+        ? ((lastInvalid.compareDocumentPosition(banners) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0)
+        : true
+      const ok = banners.parentElement === rendered && afterInvalid
+      return { ok, why: ok ? 'ok' : 'banners not after invalid field' }
     })
     assert.equal(invalidExplainNoBrPos.ok, true, invalidExplainNoBrPos.why)
 
@@ -972,7 +991,7 @@ async function main() {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false)
-      await h.click({ clickCount: 2 })
+      await longpressHandle(page, h)
       await h.dispose()
       await waitForNextFrame(page)
     }
@@ -1325,8 +1344,8 @@ async function main() {
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }, nestedBraces)
 
-    await page.waitForSelector('.error-display', { visible: true })
-    const nestedError = await page.$eval('.error-display', el => el.textContent || '')
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    const nestedError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
     assert.ok(/nested braces/i.test(nestedError), 'Nested braces should produce error')
 
     // Qual: unclosed brace syntax error
@@ -1336,8 +1355,8 @@ async function main() {
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }, unclosed)
 
-    await page.waitForSelector('.error-display', { visible: true })
-    const unclosedError = await page.$eval('.error-display', el => el.textContent || '')
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    const unclosedError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
     assert.ok(/unclosed brace/i.test(unclosedError), 'Unclosed brace should produce error')
 
     // Qual: unreferenced variable shows error (Error Case 4)

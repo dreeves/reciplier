@@ -32,6 +32,57 @@ function renderRecipe() {
 
   const invalidCellIds = collectInvalidCellIds(state.solve.eqns, state.solve.zij)
 
+  function renderErrorDisplay(messages) {
+    if (!messages || messages.length === 0) return ''
+    const items = messages.map(m => `<div class="error-message">⚠️ ${escapeHtml(m)}</div>`).join('')
+    return `<div class="error-display">${items}</div>`
+  }
+
+  function assignErrorsToCells(errors, cells) {
+    const byCell = new Map()
+    const global = []
+    for (const err of errors) {
+      let matchedCell = null
+      for (const cell of cells) {
+        if (err.includes(cell.raw)) {
+          matchedCell = cell
+          break
+        }
+      }
+      if (matchedCell) {
+        const list = byCell.get(matchedCell.id) || []
+        list.push(err)
+        byCell.set(matchedCell.id, list)
+      } else {
+        global.push(err)
+      }
+    }
+    return { byCell, global }
+  }
+
+  function findRenderedAnchor(rendered, cellId) {
+    const input = rendered.querySelector(`input.recipe-field[data-cell-id="${cellId}"]`)
+    if (!input) return null
+    let anchor = input
+    while (anchor && anchor.parentNode !== rendered) {
+      anchor = anchor.parentNode
+    }
+    return anchor
+  }
+
+  function insertCriticalErrorBanners(rendered, errorAssignments) {
+    if (!rendered) return
+    for (const [cellId, messages] of errorAssignments.byCell) {
+      const anchor = findRenderedAnchor(rendered, cellId)
+      if (!anchor) continue
+      const bannerHtml = renderErrorDisplay(messages)
+      if (!bannerHtml) continue
+      anchor.insertAdjacentHTML('afterend', bannerHtml)
+    }
+    const globalHtml = renderErrorDisplay(errorAssignments.global)
+    if (globalHtml) rendered.insertAdjacentHTML('beforeend', globalHtml)
+  }
+
   function renderRecipeBody({ disableInputs, invalidCellIds }) {
     const text = state.recipeText
     // Build the rendered text
@@ -79,12 +130,6 @@ function renderRecipe() {
     return `<div class="recipe-rendered">${html}</div>`
   }
 
-  const errorBanner = criticalErrors.length > 0
-    ? `<div class="error-display">
-        ${criticalErrors.map(e => `<div class="error-message">⚠️ ${e}</div>`).join('')}
-      </div>`
-    : ''
-
   const solveBanner = `<div id="solveBanner" class="error-display solve-display"${state.solveBanner ? '' : ' hidden'}>
         <div class="error-message">⚠️ ${escapeHtml(state.solveBanner)}</div>
       </div>`
@@ -94,6 +139,7 @@ function renderRecipe() {
       </div>`
 
   const nonCriticalBanners = `<div id="nonCriticalBanners">${solveBanner}${invalidExplainBanner}</div>`
+  const errorAssignments = assignErrorsToCells(criticalErrors, state.cells)
   
   if (state.cells.length === 0 && state.errors.length === 0) {
     output.style.display = 'none'
@@ -101,9 +147,12 @@ function renderRecipe() {
     return
   }
   
-  output.innerHTML = `${errorBanner}${nonCriticalBanners}${renderRecipeBody({ disableInputs: false, invalidCellIds })}`
+  output.innerHTML = `${nonCriticalBanners}${renderRecipeBody({ disableInputs: false, invalidCellIds })}`
   output.style.display = 'block'
   copySection.style.display = 'block'
+
+  const rendered = output.querySelector('.recipe-rendered')
+  insertCriticalErrorBanners(rendered, errorAssignments)
 
   $('copyButton').disabled = criticalErrors.length > 0
   

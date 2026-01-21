@@ -674,6 +674,11 @@ when the user bumps the average speed down or up.
 display width. Also it should show as rendered, eg, it shouldn't show html
 comments. But ignore this; we may be revamping sliders.
 
+* [OPA] If you try to enter a 5-12-13 triangle in the pyzza recipe, it doesn't
+work because it's constrained to be similar to a 3-4-5 triangle. Which is fine
+but we should find a way to make the problem more transparent to the user. See
+also [SEE].
+
 
 ## Latest half-baked ideas for cell syntax
 
