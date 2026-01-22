@@ -595,13 +595,12 @@ thing with lz-string in real time like
 Also, as the user edits fields, append the cvals to the URL as well, like
 "reciplier.dreev.es/?recipe=pyzza&x=3&a=9&b=12&c=15".
 
+* [ARI] Support arithmetic in the fields, not just the template.
+
+* [GAU] It shouldn't be hard to add a Gaussian elimination solver to the kitchen
+sink in csolver.js, why not.
 
 ## Future Work
-
-* [ARI] Support arithmetic in the fields, not just the template. Should be a
-straightforward call to vareval? Needs lots of quals for this, including typing
-expressions that refer to other variables. Also what should happen if you have a
-cell {x} and you type "x" into it. Maybe "circular reference error"?
 
 * [CRT] Crowdsource templates. If the template text area doesn't match one of
 the existing reciplates (the dropdown shows "Custom Template" in this case) then
@@ -618,7 +617,9 @@ freeze cells until that's no longer the case?
 
 * [VAR] Relatedly, should we make it easy to see the current assignment of
 values to variables? Or should you just include something like 
-`Variables: a={a}, b={b}, ...` in the reciplate if you want to see that?
+`Variables: a={a}, b={b}, ...` in the reciplate if you want to see that? (We
+could even have a macro that expands to the above string using the profile of
+variables defined in the reciplate.)
 
 * [MTH] Make it easy to add any new math functions or other utilities that we
 want available for defining cells. Like how we currently have `unixtime()`.
@@ -640,9 +641,6 @@ currently necessary; could be in the future with fancier solvers.)
 * [SRR] Add more recipes from http://doc.dreev.es/recipes or even make Reciplier
 the master copy for those recipes.
 
-* [BAN] Insert the error banners directly below where the problem is, so that
-the UI you're trying to interact with never shifts on you.
-
 * [LNW] See if this can subsume https://dreeves.github.io/loanwolf/
 
 * [DER] Make error messages dismissable. That way if you, say, intentionally
@@ -651,9 +649,6 @@ get the warning but don't have to employ the workaround of adding a dummy cell
 in an html comment in order to suppress the "unreferenced variable" banner.
 (I don't think "in order to make a slider for it" makes sense currently. Ignore
 this one for now.)
-
-* [GAU] It shouldn't be hard to add a Gaussian elimination solver to the kitchen
-sink in csolver.js, why not.
 
 * [IMM] The preval function should handle things like `2(a+b)`. And what about
 `x(a+b)`? That's ambiguous between multiplication and a function named `x`.
@@ -695,6 +690,9 @@ to choose which) becomes pegged instead. I don't love that. It feels
 insufficiently anti-magical. But having the UI complain at you for entering
 values incompatible with the constraints might be annoying. I suspect there's a
 best-of-all-worlds solution but I haven't found it yet.
+
+* [SYN] If you make a cell like `{12(}` the field is shown in red with a
+question mark but no error is displayed.
 
 
 ## Latest half-baked ideas for cell syntax

@@ -1085,6 +1085,841 @@ function runAllSolverQuals(ctx) {
     check('solvem: golden ratio (phi)', rep.ass.phi, phi, 1e-6)
   })()
 
+  // ==========================================================================
+  // Gaussian elimination solver quals
+  // ==========================================================================
+
+  // Pure linear system: 2x + 3y = 13, x - y = 1 => x=4, y=3 (wait, let me check)
+  // Actually: 2(2) + 3(3) = 4 + 9 = 13, 2 - 3 = -1. Let's use x=4, y=5/3... hmm
+  // Let me pick: x + y = 7, x - y = 3 => x=5, y=2
+  ;(() => {
+    const eqns = [
+      ['x + y', 7],
+      ['x - y', 3],
+    ]
+    const rep = solvem(eqns, { x: 0, y: 0 })
+    check('solvem: linear 2x2 system (sat)', rep.sat, true)
+    check('solvem: linear 2x2 x=5', rep.ass.x, 5, 1e-9)
+    check('solvem: linear 2x2 y=2', rep.ass.y, 2, 1e-9)
+  })()
+
+  // Linear system from README: 2x+3y=33, 5x-4y=2 => x=6, y=7
+  ;(() => {
+    const eqns = [
+      ['2x+3y', 33],
+      ['5x-4y', 2],
+    ]
+    const rep = solvem(eqns, { x: 0, y: 0 })
+    check('solvem: linear README example (sat)', rep.sat, true)
+    check('solvem: linear README x=6', rep.ass.x, 6, 1e-9)
+    check('solvem: linear README y=7', rep.ass.y, 7, 1e-9)
+  })()
+
+  // Overdetermined but consistent linear system
+  ;(() => {
+    const eqns = [
+      ['x', 5],
+      ['y', 3],
+      ['x + y', 8],
+    ]
+    const rep = solvem(eqns, { x: 0, y: 0 })
+    check('solvem: overdetermined linear (sat)', rep.sat, true)
+    check('solvem: overdetermined x=5', rep.ass.x, 5, 1e-9)
+    check('solvem: overdetermined y=3', rep.ass.y, 3, 1e-9)
+  })()
+
+  // simeq reciplate: simultaneous equations with display-only singleton cells
+  // This tests that gaussianElim correctly handles systems where some equations
+  // are singleton display cells (like ["x"]) mixed with actual constraints.
+  ;(() => {
+    const eqns = [
+      ['x'],           // display-only
+      ['y'],           // display-only
+      ['2x + 3y', 33], // constraint: 2x + 3y = 33
+      ['x'],           // display-only
+      ['y'],           // display-only
+      ['5x - 4y', 2],  // constraint: 5x - 4y = 2
+    ]
+    const rep = solvem(eqns, { x: 1, y: 1 })
+    check('solvem: simeq reciplate (sat)', rep.sat, true)
+    check('solvem: simeq reciplate x=6', rep.ass.x, 6, 1e-9)
+    check('solvem: simeq reciplate y=7', rep.ass.y, 7, 1e-9)
+  })()
+
+  // ==========================================================================
+  // Additional linear system quals (3x3, 4x4, fractional coefficients)
+  // ==========================================================================
+
+  // 3x3 linear system: x + y + z = 6, 2x + y - z = 1, x - y + 2z = 5
+  // Solution: x=1, y=2, z=3
+  ;(() => {
+    const eqns = [
+      ['x + y + z', 6],
+      ['2x + y - z', 1],
+      ['x - y + 2z', 5],
+    ]
+    const rep = solvem(eqns, { x: 0, y: 0, z: 0 })
+    check('solvem: 3x3 linear (sat)', rep.sat, true)
+    check('solvem: 3x3 linear x=1', rep.ass.x, 1, 1e-9)
+    check('solvem: 3x3 linear y=2', rep.ass.y, 2, 1e-9)
+    check('solvem: 3x3 linear z=3', rep.ass.z, 3, 1e-9)
+  })()
+
+  // 3x3 with fractional solution: x + y = 5, y + z = 7, x + z = 6
+  // Solution: x=2, y=3, z=4
+  ;(() => {
+    const eqns = [
+      ['x + y', 5],
+      ['y + z', 7],
+      ['x + z', 6],
+    ]
+    const rep = solvem(eqns, { x: 0, y: 0, z: 0 })
+    check('solvem: 3x3 symmetric (sat)', rep.sat, true)
+    check('solvem: 3x3 symmetric x=2', rep.ass.x, 2, 1e-9)
+    check('solvem: 3x3 symmetric y=3', rep.ass.y, 3, 1e-9)
+    check('solvem: 3x3 symmetric z=4', rep.ass.z, 4, 1e-9)
+  })()
+
+  // 4x4 linear system
+  // a + b + c + d = 10, a - b = 2, b - c = 1, c - d = 0
+  // Solution: a=4, b=2, c=1, d=1 (wait, let me check: 4+2+1+1=8, not 10)
+  // Let's use: a + b + c + d = 10, a = 4, b = 3, c = 2, d = 1
+  ;(() => {
+    const eqns = [
+      ['a + b + c + d', 10],
+      ['a', 4],
+      ['b', 3],
+      ['c', 2],
+    ]
+    const rep = solvem(eqns, { a: 0, b: 0, c: 0, d: 0 })
+    check('solvem: 4x4 linear (sat)', rep.sat, true)
+    check('solvem: 4x4 linear a=4', rep.ass.a, 4, 1e-9)
+    check('solvem: 4x4 linear b=3', rep.ass.b, 3, 1e-9)
+    check('solvem: 4x4 linear c=2', rep.ass.c, 2, 1e-9)
+    check('solvem: 4x4 linear d=1', rep.ass.d, 1, 1e-9)
+  })()
+
+  // Linear system with fractional coefficients
+  // 0.5x + 0.25y = 1.5, x - y = 2 => x=8/3, y=2/3
+  ;(() => {
+    const eqns = [
+      ['0.5*x + 0.25*y', 1.5],
+      ['x - y', 2],
+    ]
+    const rep = solvem(eqns, { x: 0, y: 0 })
+    check('solvem: fractional coeffs (sat)', rep.sat, true)
+    check('solvem: fractional coeffs x=8/3', rep.ass.x, 8/3, 1e-9)
+    check('solvem: fractional coeffs y=2/3', rep.ass.y, 2/3, 1e-9)
+  })()
+
+  // Linear system with negative coefficients
+  // -x + 2y = 5, 3x - y = 1 => x=1.4, y=3.2
+  ;(() => {
+    const eqns = [
+      ['-x + 2y', 5],
+      ['3x - y', 1],
+    ]
+    const rep = solvem(eqns, { x: 0, y: 0 })
+    check('solvem: negative coeffs (sat)', rep.sat, true)
+    check('solvem: negative coeffs x=1.4', rep.ass.x, 1.4, 1e-9)
+    check('solvem: negative coeffs y=3.2', rep.ass.y, 3.2, 1e-9)
+  })()
+
+  // Linear system with zero in solution
+  // x + y = 3, x - y = 3 => x=3, y=0
+  ;(() => {
+    const eqns = [
+      ['x + y', 3],
+      ['x - y', 3],
+    ]
+    const rep = solvem(eqns, { x: 1, y: 1 })
+    check('solvem: zero solution (sat)', rep.sat, true)
+    check('solvem: zero solution x=3', rep.ass.x, 3, 1e-9)
+    check('solvem: zero solution y=0', rep.ass.y, 0, 1e-9)
+  })()
+
+  // Linear system with all negative solution
+  // x + y = -5, x - y = -1 => x=-3, y=-2
+  ;(() => {
+    const eqns = [
+      ['x + y', -5],
+      ['x - y', -1],
+    ]
+    const rep = solvem(eqns, { x: 0, y: 0 })
+    check('solvem: negative solution (sat)', rep.sat, true)
+    check('solvem: negative solution x=-3', rep.ass.x, -3, 1e-9)
+    check('solvem: negative solution y=-2', rep.ass.y, -2, 1e-9)
+  })()
+
+  // ==========================================================================
+  // simeq variations (different orderings, mixed systems)
+  // ==========================================================================
+
+  // simeq with constraints first, then display cells
+  ;(() => {
+    const eqns = [
+      ['2x + 3y', 33], // constraint first
+      ['5x - 4y', 2],  // constraint
+      ['x'],           // display-only
+      ['y'],           // display-only
+    ]
+    const rep = solvem(eqns, { x: 1, y: 1 })
+    check('solvem: simeq constraints-first (sat)', rep.sat, true)
+    check('solvem: simeq constraints-first x=6', rep.ass.x, 6, 1e-9)
+    check('solvem: simeq constraints-first y=7', rep.ass.y, 7, 1e-9)
+  })()
+
+  // simeq with interleaved constraints and display cells
+  ;(() => {
+    const eqns = [
+      ['x'],
+      ['2x + 3y', 33],
+      ['y'],
+      ['5x - 4y', 2],
+    ]
+    const rep = solvem(eqns, { x: 1, y: 1 })
+    check('solvem: simeq interleaved (sat)', rep.sat, true)
+    check('solvem: simeq interleaved x=6', rep.ass.x, 6, 1e-9)
+    check('solvem: simeq interleaved y=7', rep.ass.y, 7, 1e-9)
+  })()
+
+  // simeq with extra computed display cells
+  ;(() => {
+    const eqns = [
+      ['x'],
+      ['y'],
+      ['x + y'],        // display computed sum
+      ['2x + 3y', 33],
+      ['5x - 4y', 2],
+    ]
+    const rep = solvem(eqns, { x: 1, y: 1 })
+    check('solvem: simeq with computed display (sat)', rep.sat, true)
+    check('solvem: simeq computed display x=6', rep.ass.x, 6, 1e-9)
+    check('solvem: simeq computed display y=7', rep.ass.y, 7, 1e-9)
+  })()
+
+  // 3x3 simeq style with display cells
+  // x + y + z = 6, x - y = 1, y - z = -1 => x=7/3, y=4/3, z=7/3
+  ;(() => {
+    const eqns = [
+      ['x'],
+      ['y'],
+      ['z'],
+      ['x + y + z', 6],
+      ['x - y', 1],
+      ['y - z', -1],
+    ]
+    const rep = solvem(eqns, { x: 1, y: 1, z: 1 })
+    check('solvem: 3x3 simeq style (sat)', rep.sat, true)
+    check('solvem: 3x3 simeq x=7/3', rep.ass.x, 7/3, 1e-9)
+    check('solvem: 3x3 simeq y=4/3', rep.ass.y, 4/3, 1e-9)
+    check('solvem: 3x3 simeq z=7/3', rep.ass.z, 7/3, 1e-9)
+  })()
+
+  // ==========================================================================
+  // Numerical precision edge cases
+  // ==========================================================================
+
+  // Very small numbers
+  ;(() => {
+    const eqns = [
+      ['x', 1e-9],
+      ['y', '1000*x'],
+    ]
+    const rep = solvem(eqns, { x: 0, y: 0 })
+    check('solvem: very small x=1e-9 (sat)', rep.sat, true)
+    check('solvem: very small x', rep.ass.x, 1e-9, 1e-15)
+    check('solvem: very small y=1e-6', rep.ass.y, 1e-6, 1e-12)
+  })()
+
+  // Very large numbers
+  ;(() => {
+    const eqns = [
+      ['x', 1e9],
+      ['y', 'x/1000'],
+    ]
+    const rep = solvem(eqns, { x: 1, y: 1 })
+    check('solvem: very large x=1e9 (sat)', rep.sat, true)
+    check('solvem: very large x', rep.ass.x, 1e9, 1)
+    check('solvem: very large y=1e6', rep.ass.y, 1e6, 1)
+  })()
+
+  // Mixed large and small
+  ;(() => {
+    const eqns = [
+      ['big', 1000000],
+      ['small', 0.000001],
+      ['ratio', 'big/small'],
+    ]
+    const rep = solvem(eqns, { big: 1, small: 1, ratio: 1 })
+    check('solvem: mixed scale (sat)', rep.sat, true)
+    check('solvem: mixed scale ratio=1e12', rep.ass.ratio, 1e12, 1e6)
+  })()
+
+  // Decimal precision
+  ;(() => {
+    const eqns = [
+      ['x', 3.14159265],
+      ['y', '2*x'],
+    ]
+    const rep = solvem(eqns, { x: 1, y: 1 })
+    check('solvem: decimal precision (sat)', rep.sat, true)
+    check('solvem: decimal x=pi', rep.ass.x, 3.14159265, 1e-9)
+    check('solvem: decimal y=2pi', rep.ass.y, 6.2831853, 1e-6)
+  })()
+
+  // ==========================================================================
+  // Bounds edge cases
+  // ==========================================================================
+
+  // Solution exactly at lower bound
+  ;(() => {
+    const eqns = [['x + 5', 10]]
+    const rep = solvem(eqns, { x: 0 }, { x: 5 }, { x: 100 })
+    check('solvem: at lower bound (sat)', rep.sat, true)
+    check('solvem: at lower bound x=5', rep.ass.x, 5, 1e-9)
+  })()
+
+  // Solution exactly at upper bound
+  ;(() => {
+    const eqns = [['x + 5', 15]]
+    const rep = solvem(eqns, { x: 0 }, { x: 0 }, { x: 10 })
+    check('solvem: at upper bound (sat)', rep.sat, true)
+    check('solvem: at upper bound x=10', rep.ass.x, 10, 1e-9)
+  })()
+
+  // Solution outside bounds (unsat)
+  ;(() => {
+    const eqns = [['x', 100]]
+    const rep = solvem(eqns, { x: 0 }, { x: 0 }, { x: 10 })
+    check('solvem: outside bounds (unsat)', rep.sat, false)
+  })()
+
+  // One-sided lower bound only
+  ;(() => {
+    const eqns = [['x^2', 25]]
+    const rep = solvem(eqns, { x: 1 }, { x: 0 }, {})
+    check('solvem: lower bound only (sat)', rep.sat, true)
+    check('solvem: lower bound only x=5', rep.ass.x, 5, 1e-9)
+  })()
+
+  // One-sided upper bound only
+  ;(() => {
+    const eqns = [['x^2', 25]]
+    const rep = solvem(eqns, { x: -1 }, {}, { x: 0 })
+    check('solvem: upper bound only (sat)', rep.sat, true)
+    check('solvem: upper bound only x=-5', rep.ass.x, -5, 1e-9)
+  })()
+
+  // Tight bounds around solution
+  ;(() => {
+    const eqns = [['x', 5]]
+    const rep = solvem(eqns, { x: 0 }, { x: 4.9 }, { x: 5.1 })
+    check('solvem: tight bounds (sat)', rep.sat, true)
+    check('solvem: tight bounds x=5', rep.ass.x, 5, 1e-9)
+  })()
+
+  // ==========================================================================
+  // Nonlinear equation quals
+  // ==========================================================================
+
+  // Quadratic with positive root preferred
+  ;(() => {
+    const eqns = [['x^2', 16]]
+    const rep = solvem(eqns, { x: 1 })
+    check('solvem: quadratic x^2=16 (sat)', rep.sat, true)
+    check('solvem: quadratic x=4', rep.ass.x, 4, 1e-9)
+  })()
+
+  // Quadratic with bounds forcing negative root
+  ;(() => {
+    const eqns = [['x^2', 16]]
+    const rep = solvem(eqns, { x: -1 }, { x: -10 }, { x: 0 })
+    check('solvem: quadratic negative via bounds (sat)', rep.sat, true)
+    check('solvem: quadratic x=-4', rep.ass.x, -4, 1e-9)
+  })()
+
+  // Cubic root
+  ;(() => {
+    const eqns = [['x^3', 27]]
+    const rep = solvem(eqns, { x: 1 })
+    check('solvem: cubic x^3=27 (sat)', rep.sat, true)
+    check('solvem: cubic x=3', rep.ass.x, 3, 1e-9)
+  })()
+
+  // Cubic with negative
+  ;(() => {
+    const eqns = [['x^3', -8]]
+    const rep = solvem(eqns, { x: -1 })
+    check('solvem: cubic x^3=-8 (sat)', rep.sat, true)
+    check('solvem: cubic x=-2', rep.ass.x, -2, 1e-9)
+  })()
+
+  // Square root relationship
+  ;(() => {
+    const eqns = [
+      ['y', 'sqrt(x)'],
+      ['x', 16],
+    ]
+    const rep = solvem(eqns, { x: 16, y: 1 })
+    check('solvem: sqrt relationship (sat)', rep.sat, true)
+    check('solvem: sqrt y=4', rep.ass.y, 4, 1e-9)
+  })()
+
+  // Inverse relationship: xy = k
+  ;(() => {
+    const eqns = [
+      ['x*y', 24],
+      ['x', 6],
+    ]
+    const rep = solvem(eqns, { x: 6, y: 1 })
+    check('solvem: inverse xy=24 (sat)', rep.sat, true)
+    check('solvem: inverse y=4', rep.ass.y, 4, 1e-9)
+  })()
+
+  // Quadratic formula scenario: ax^2 + bx + c = 0
+  // 2x^2 - 7x + 3 = 0 has roots x=3 and x=0.5
+  ;(() => {
+    const eqns = [
+      ['a', 2],
+      ['b', -7],
+      ['c', 3],
+      ['a*x^2 + b*x + c', 0],
+    ]
+    const rep = solvem(eqns, { a: 2, b: -7, c: 3, x: 2 })
+    check('solvem: quadratic formula (sat)', rep.sat, true)
+    // Should find x=3 or x=0.5 - either is valid
+    const validRoot = Math.abs(rep.ass.x - 3) < 0.01 || Math.abs(rep.ass.x - 0.5) < 0.01
+    check('solvem: quadratic formula valid root', validRoot, true)
+  })()
+
+  // e^x = y relationship
+  ;(() => {
+    const e = Math.E
+    const eqns = [
+      ['y', `${e}^x`],
+      ['x', 2],
+    ]
+    const rep = solvem(eqns, { x: 2, y: 1 })
+    check('solvem: exponential (sat)', rep.sat, true)
+    check('solvem: exponential y=e^2', rep.ass.y, e * e, 1e-9)
+  })()
+
+  // ==========================================================================
+  // Underdetermined and overdetermined system quals
+  // ==========================================================================
+
+  // Underdetermined: more variables than constraints (preserves seeds)
+  ;(() => {
+    const eqns = [
+      ['x + y', 10],
+    ]
+    const rep = solvem(eqns, { x: 3, y: 7 })
+    check('solvem: underdetermined (sat)', rep.sat, true)
+    check('solvem: underdetermined sum=10', rep.ass.x + rep.ass.y, 10, 1e-9)
+  })()
+
+  // Underdetermined with definition: x = 2a, y = 3a, no constraint on a
+  ;(() => {
+    const eqns = [
+      ['x', '2*a'],
+      ['y', '3*a'],
+    ]
+    const rep = solvem(eqns, { a: 5, x: 1, y: 1 })
+    check('solvem: underdetermined chain (sat)', rep.sat, true)
+    check('solvem: underdetermined x=10', rep.ass.x, 10, 1e-9)
+    check('solvem: underdetermined y=15', rep.ass.y, 15, 1e-9)
+  })()
+
+  // Overdetermined consistent: all equations agree
+  ;(() => {
+    const eqns = [
+      ['x', 5],
+      ['y', 3],
+      ['x + y', 8],
+      ['x - y', 2],
+      ['2*x', 10],
+    ]
+    const rep = solvem(eqns, { x: 0, y: 0 })
+    check('solvem: overdetermined consistent (sat)', rep.sat, true)
+    check('solvem: overdetermined x=5', rep.ass.x, 5, 1e-9)
+    check('solvem: overdetermined y=3', rep.ass.y, 3, 1e-9)
+  })()
+
+  // Overdetermined inconsistent: conflicting constraints
+  ;(() => {
+    const eqns = [
+      ['x', 5],
+      ['x', 10],
+    ]
+    const rep = solvem(eqns, { x: 0 })
+    check('solvem: overdetermined inconsistent (unsat)', rep.sat, false)
+  })()
+
+  // ==========================================================================
+  // Real-world recipe scaling quals
+  // ==========================================================================
+
+  // Basic recipe scaling: scale factor x
+  ;(() => {
+    const eqns = [
+      ['flour', '2*x'],
+      ['sugar', '1*x'],
+      ['butter', '0.5*x'],
+      ['x', 3],
+    ]
+    const rep = solvem(eqns, { flour: 1, sugar: 1, butter: 1, x: 1 })
+    check('solvem: recipe scaling (sat)', rep.sat, true)
+    check('solvem: recipe flour=6', rep.ass.flour, 6, 1e-9)
+    check('solvem: recipe sugar=3', rep.ass.sugar, 3, 1e-9)
+    check('solvem: recipe butter=1.5', rep.ass.butter, 1.5, 1e-9)
+  })()
+
+  // Recipe with unit conversion: cups to ml
+  ;(() => {
+    const mlPerCup = 236.588
+    const eqns = [
+      ['cups', 2],
+      ['ml', `${mlPerCup}*cups`],
+    ]
+    const rep = solvem(eqns, { cups: 2, ml: 1 })
+    check('solvem: cups to ml (sat)', rep.sat, true)
+    check('solvem: cups to ml', rep.ass.ml, 2 * mlPerCup, 0.01)
+  })()
+
+  // Recipe reverse scaling: given flour, find scale
+  ;(() => {
+    const eqns = [
+      ['flour', '2*x', 6],
+      ['sugar', '1*x'],
+      ['butter', '0.5*x'],
+    ]
+    const rep = solvem(eqns, { flour: 6, sugar: 1, butter: 1, x: 1 })
+    check('solvem: reverse scaling (sat)', rep.sat, true)
+    check('solvem: reverse x=3', rep.ass.x, 3, 1e-9)
+    check('solvem: reverse sugar=3', rep.ass.sugar, 3, 1e-9)
+  })()
+
+  // Ratio-based recipe: a:b:c = 3:4:5 with total = 24
+  ;(() => {
+    const eqns = [
+      ['a', '3*k'],
+      ['b', '4*k'],
+      ['c', '5*k'],
+      ['a + b + c', 24],
+    ]
+    const rep = solvem(eqns, { a: 1, b: 1, c: 1, k: 1 })
+    check('solvem: ratio recipe (sat)', rep.sat, true)
+    check('solvem: ratio a=6', rep.ass.a, 6, 1e-9)
+    check('solvem: ratio b=8', rep.ass.b, 8, 1e-9)
+    check('solvem: ratio c=10', rep.ass.c, 10, 1e-9)
+  })()
+
+  // Pizza dough hydration: water/flour ratio
+  ;(() => {
+    const eqns = [
+      ['flour', 500],
+      ['hydration', 0.65],
+      ['water', 'flour * hydration'],
+    ]
+    const rep = solvem(eqns, { flour: 500, hydration: 0.65, water: 1 })
+    check('solvem: hydration (sat)', rep.sat, true)
+    check('solvem: hydration water=325', rep.ass.water, 325, 1e-9)
+  })()
+
+  // Multi-ingredient with percentages
+  ;(() => {
+    const eqns = [
+      ['total', 1000],
+      ['flour', '0.6 * total'],
+      ['water', '0.35 * total'],
+      ['yeast', '0.02 * total'],
+      ['salt', '0.03 * total'],
+    ]
+    const rep = solvem(eqns, { total: 1000, flour: 1, water: 1, yeast: 1, salt: 1 })
+    check('solvem: percentages (sat)', rep.sat, true)
+    check('solvem: flour=600', rep.ass.flour, 600, 1e-9)
+    check('solvem: water=350', rep.ass.water, 350, 1e-9)
+    check('solvem: yeast=20', rep.ass.yeast, 20, 1e-9)
+    check('solvem: salt=30', rep.ass.salt, 30, 1e-9)
+  })()
+
+  // ==========================================================================
+  // Additional edge cases
+  // ==========================================================================
+
+  // Identity equation (always satisfied)
+  ;(() => {
+    const eqns = [
+      ['x', 'x'],
+    ]
+    const rep = solvem(eqns, { x: 42 })
+    check('solvem: identity (sat)', rep.sat, true)
+    check('solvem: identity preserves x', rep.ass.x, 42, 1e-9)
+  })()
+
+  // Tautology: a + b = b + a
+  ;(() => {
+    const eqns = [
+      ['a + b', 'b + a'],
+      ['a', 3],
+      ['b', 7],
+    ]
+    const rep = solvem(eqns, { a: 3, b: 7 })
+    check('solvem: tautology (sat)', rep.sat, true)
+  })()
+
+  // Parenthesized expressions
+  ;(() => {
+    const eqns = [
+      ['(x + 1) * (x - 1)', 'x^2 - 1'],
+      ['x', 5],
+    ]
+    const rep = solvem(eqns, { x: 5 })
+    check('solvem: parentheses (sat)', rep.sat, true)
+  })()
+
+  // Division equation
+  ;(() => {
+    const eqns = [
+      ['x / y', 4],
+      ['y', 5],
+    ]
+    const rep = solvem(eqns, { x: 1, y: 5 })
+    check('solvem: division (sat)', rep.sat, true)
+    check('solvem: division x=20', rep.ass.x, 20, 1e-9)
+  })()
+
+  // Multiple equivalent forms
+  ;(() => {
+    const eqns = [
+      ['2*x', 'x + x'],
+      ['x', 7],
+    ]
+    const rep = solvem(eqns, { x: 7 })
+    check('solvem: equivalent forms (sat)', rep.sat, true)
+  })()
+
+  // Circular reference that resolves
+  ;(() => {
+    const eqns = [
+      ['x', 'y + 1'],
+      ['y', 'x - 1'],
+      ['x', 5],
+    ]
+    const rep = solvem(eqns, { x: 5, y: 1 })
+    check('solvem: circular resolves (sat)', rep.sat, true)
+    check('solvem: circular x=5', rep.ass.x, 5, 1e-9)
+    check('solvem: circular y=4', rep.ass.y, 4, 1e-9)
+  })()
+
+  // Long chain propagation
+  ;(() => {
+    const eqns = [
+      ['a', 1],
+      ['b', 'a + 1'],
+      ['c', 'b + 1'],
+      ['d', 'c + 1'],
+      ['e', 'd + 1'],
+      ['f', 'e + 1'],
+    ]
+    const rep = solvem(eqns, { a: 1, b: 1, c: 1, d: 1, e: 1, f: 1 })
+    check('solvem: long chain (sat)', rep.sat, true)
+    check('solvem: chain f=6', rep.ass.f, 6, 1e-9)
+  })()
+
+  // Power of 2 chain
+  ;(() => {
+    const eqns = [
+      ['a', 1],
+      ['b', '2*a'],
+      ['c', '2*b'],
+      ['d', '2*c'],
+    ]
+    const rep = solvem(eqns, { a: 1, b: 1, c: 1, d: 1 })
+    check('solvem: power chain (sat)', rep.sat, true)
+    check('solvem: power d=8', rep.ass.d, 8, 1e-9)
+  })()
+
+  // Geometric sequence
+  ;(() => {
+    const eqns = [
+      ['a', 2],
+      ['r', 3],
+      ['b', 'a*r'],
+      ['c', 'b*r'],
+      ['d', 'c*r'],
+    ]
+    const rep = solvem(eqns, { a: 2, r: 3, b: 1, c: 1, d: 1 })
+    check('solvem: geometric (sat)', rep.sat, true)
+    check('solvem: geometric b=6', rep.ass.b, 6, 1e-9)
+    check('solvem: geometric c=18', rep.ass.c, 18, 1e-9)
+    check('solvem: geometric d=54', rep.ass.d, 54, 1e-9)
+  })()
+
+  // Fibonacci-like: f3 = f1 + f2
+  ;(() => {
+    const eqns = [
+      ['f1', 1],
+      ['f2', 1],
+      ['f3', 'f1 + f2'],
+      ['f4', 'f2 + f3'],
+      ['f5', 'f3 + f4'],
+    ]
+    const rep = solvem(eqns, { f1: 1, f2: 1, f3: 1, f4: 1, f5: 1 })
+    check('solvem: fibonacci (sat)', rep.sat, true)
+    check('solvem: fib f3=2', rep.ass.f3, 2, 1e-9)
+    check('solvem: fib f4=3', rep.ass.f4, 3, 1e-9)
+    check('solvem: fib f5=5', rep.ass.f5, 5, 1e-9)
+  })()
+
+  // Area/perimeter problem
+  ;(() => {
+    const eqns = [
+      ['length', 10],
+      ['width', 5],
+      ['area', 'length * width'],
+      ['perimeter', '2*length + 2*width'],
+    ]
+    const rep = solvem(eqns, { length: 10, width: 5, area: 1, perimeter: 1 })
+    check('solvem: area/perimeter (sat)', rep.sat, true)
+    check('solvem: area=50', rep.ass.area, 50, 1e-9)
+    check('solvem: perimeter=30', rep.ass.perimeter, 30, 1e-9)
+  })()
+
+  // Distance/rate/time problem
+  ;(() => {
+    const eqns = [
+      ['distance', 100],
+      ['rate', 25],
+      ['time', 'distance / rate'],
+    ]
+    const rep = solvem(eqns, { distance: 100, rate: 25, time: 1 })
+    check('solvem: d/r/t problem (sat)', rep.sat, true)
+    check('solvem: time=4', rep.ass.time, 4, 1e-9)
+  })()
+
+  // Compound interest simplified: A = P(1+r)^n
+  ;(() => {
+    const eqns = [
+      ['P', 1000],
+      ['r', 0.05],
+      ['n', 2],
+      ['A', 'P * (1+r)^n'],
+    ]
+    const rep = solvem(eqns, { P: 1000, r: 0.05, n: 2, A: 1 })
+    check('solvem: compound interest (sat)', rep.sat, true)
+    check('solvem: A=1102.5', rep.ass.A, 1102.5, 1e-9)
+  })()
+
+  // ==========================================================================
+  // Multi-term equations and expression equality
+  // ==========================================================================
+
+  // Multi-equals: a = b = c = 5
+  ;(() => {
+    const eqns = [
+      ['a', 'b', 'c', 5],
+    ]
+    const rep = solvem(eqns, { a: 1, b: 1, c: 1 })
+    check('solvem: multi-equals (sat)', rep.sat, true)
+    check('solvem: multi-equals a=5', rep.ass.a, 5, 1e-9)
+    check('solvem: multi-equals b=5', rep.ass.b, 5, 1e-9)
+    check('solvem: multi-equals c=5', rep.ass.c, 5, 1e-9)
+  })()
+
+  // Expression-to-expression equality: 2a = 3b
+  ;(() => {
+    const eqns = [
+      ['2*a', '3*b'],
+      ['a', 6],
+    ]
+    const rep = solvem(eqns, { a: 6, b: 1 })
+    check('solvem: expr=expr (sat)', rep.sat, true)
+    check('solvem: expr=expr b=4', rep.ass.b, 4, 1e-9)
+  })()
+
+  // Baker's percentages: flour=100%, water=65%, salt=2%, yeast=1%
+  ;(() => {
+    const eqns = [
+      ['flour', 500],
+      ['water', '0.65 * flour'],
+      ['salt', '0.02 * flour'],
+      ['yeast', '0.01 * flour'],
+      ['total', 'flour + water + salt + yeast'],
+    ]
+    const rep = solvem(eqns, { flour: 500, water: 1, salt: 1, yeast: 1, total: 1 })
+    check('solvem: baker pct (sat)', rep.sat, true)
+    check('solvem: baker water=325', rep.ass.water, 325, 1e-9)
+    check('solvem: baker salt=10', rep.ass.salt, 10, 1e-9)
+    check('solvem: baker yeast=5', rep.ass.yeast, 5, 1e-9)
+    check('solvem: baker total=840', rep.ass.total, 840, 1e-9)
+  })()
+
+  // Pythagorean 3-4-5 scaling
+  ;(() => {
+    const eqns = [
+      ['a', '3*k'],
+      ['b', '4*k'],
+      ['c', '5*k'],
+      ['a^2 + b^2', 'c^2'],
+      ['k', 2],
+    ]
+    const rep = solvem(eqns, { a: 1, b: 1, c: 1, k: 2 })
+    check('solvem: pythagorean scale (sat)', rep.sat, true)
+    check('solvem: pythagorean a=6', rep.ass.a, 6, 1e-9)
+    check('solvem: pythagorean b=8', rep.ass.b, 8, 1e-9)
+    check('solvem: pythagorean c=10', rep.ass.c, 10, 1e-9)
+  })()
+
+  // Three-way equality chain: a = b = c with a pinned
+  ;(() => {
+    const eqns = [
+      ['a', 'b'],
+      ['b', 'c'],
+      ['a', 7],
+    ]
+    const rep = solvem(eqns, { a: 7, b: 1, c: 1 })
+    check('solvem: equality chain (sat)', rep.sat, true)
+    check('solvem: equality chain a=7', rep.ass.a, 7, 1e-9)
+    check('solvem: equality chain b=7', rep.ass.b, 7, 1e-9)
+    check('solvem: equality chain c=7', rep.ass.c, 7, 1e-9)
+  })()
+
+  // Temperature conversion: C = (F - 32) * 5/9
+  ;(() => {
+    const eqns = [
+      ['F', 212],
+      ['C', '(F - 32) * 5/9'],
+    ]
+    const rep = solvem(eqns, { F: 212, C: 1 })
+    check('solvem: temp conversion (sat)', rep.sat, true)
+    check('solvem: temp C=100', rep.ass.C, 100, 1e-9)
+  })()
+
+  // Reverse temperature conversion
+  ;(() => {
+    const eqns = [
+      ['C', 0],
+      ['F', 'C * 9/5 + 32'],
+    ]
+    const rep = solvem(eqns, { C: 0, F: 1 })
+    check('solvem: reverse temp (sat)', rep.sat, true)
+    check('solvem: reverse temp F=32', rep.ass.F, 32, 1e-9)
+  })()
+
+  // BMI calculation: BMI = weight / height^2 (metric)
+  ;(() => {
+    const eqns = [
+      ['weight', 70],
+      ['height', 1.75],
+      ['bmi', 'weight / height^2'],
+    ]
+    const rep = solvem(eqns, { weight: 70, height: 1.75, bmi: 1 })
+    check('solvem: bmi calc (sat)', rep.sat, true)
+    check('solvem: bmi=22.86', rep.ass.bmi, 70 / (1.75 * 1.75), 0.01)
+  })()
+
   console.log('\n=== Summary ===')
   console.log(`${results.passed} passed, ${results.failed} failed`)
   if (results.failed > 0) {

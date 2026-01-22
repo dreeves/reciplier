@@ -921,7 +921,7 @@ async function main() {
     const invalidExplainHidden = await page.$eval('#invalidExplainBanner', el => !!el.hidden)
     assert.equal(invalidExplainHidden, false)
     const invalidExplainText = await page.$eval('#invalidExplainBanner', el => el.textContent || '')
-    assert.ok(/invalid expression/i.test(invalidExplainText), `Expected 'Invalid expression' in banner, got: ${invalidExplainText}`)
+    assert.ok(/syntax error/i.test(invalidExplainText), `Expected 'Syntax error' in banner, got: ${invalidExplainText}`)
 
     // Qual: invalid numeric input should not snap back (during typing)
     const invalidExplainXValue = await getInputValue(page, 'input.recipe-field[data-label="x"]')
@@ -1632,7 +1632,7 @@ async function main() {
     await new Promise(r => setTimeout(r, 100))
     
     const ariInvalidExprInvalid = await page.$eval('input.recipe-field[data-label="a"]', el => el.classList.contains('invalid'))
-    assert.equal(ariInvalidExprInvalid, true, 'Invalid expression should mark field invalid')
+    assert.equal(ariInvalidExprInvalid, true, 'Syntax error should mark field invalid')
 
     // Qual: sqrt and other math functions work in field input
     await page.select('#recipeSelect', 'pyzza')

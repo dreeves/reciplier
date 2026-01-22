@@ -327,7 +327,7 @@ function handleFieldInput(e) {
     if (!result.error && isFiniteNumber(result.value)) {
       newValue = result.value
     } else {
-      markInvalidInput(input, cellId, `Invalid expression`)
+      markInvalidInput(input, cellId, `Syntax error`)
       return
     }
   }

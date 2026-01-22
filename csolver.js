@@ -8,6 +8,11 @@ assignment, Bob is one's uncle. The beauty of NP-complete problems is it's easy
 to check candidate solutions. 
 
 Idea: keep track of which sub-solvers give valid solutions.
+
+Solver registry (tried in order):
+  1. gaussianElim  - Gaussian elimination for linear systems (fast, exact)
+  2. kludgeProp    - Algebraic propagation + special cases (handles everything)
+  3. gradientDesc  - Gradient descent (disabled: too slow)
 */
 
 var {
@@ -294,12 +299,185 @@ function zidge(eqns, ass) {
 }
 
 // =============================================================================
-// solvemPrimary: The main algebraic/propagation-based solver
+// gaussianElim: Gaussian elimination for linear systems
 // =============================================================================
 
-// TODO: dear god this is a disgusting monstrosity
+// Try to extract linear coefficients from an expression via numerical
+// differentiation
+// Returns {coeffs: [...], constant} or null if nonlinear
+function tryExtractLinearCoeffs(expr, varNames, baseValues) {
+  // Always use zeros as the base for numerical differentiation.
+  // The baseValues parameter is only used to know which variables exist.
+  const zeros = {}
+  for (const v of varNames) zeros[v] = 0
+  
+  const f0 = vareval(expr, zeros)
+  if (f0.error || !isFinite(f0.value)) return null
+  
+  const coeffs = []
+  for (const v of varNames) {
+    const test1 = { ...zeros, [v]: 1 }
+    const test2 = { ...zeros, [v]: 2 }
+    
+    const f1 = vareval(expr, test1)
+    const f2 = vareval(expr, test2)
+    
+    if (f1.error || !isFinite(f1.value)) return null
+    if (f2.error || !isFinite(f2.value)) return null
+    
+    const coeff = f1.value - f0.value
+    const coeff2 = f2.value - f1.value
+    
+    // Check linearity: second difference should equal first difference
+    if (Math.abs(coeff2 - coeff) > 1e-9) return null
+    
+    coeffs.push(coeff)
+  }
+  
+  return { coeffs, constant: f0.value }
+}
 
-function solvemPrimary(eqns, vars, inf = {}, sup = {}) {
+function gaussianElim(eqns, vars, inf, sup) {
+  const varNames = Object.keys(vars).sort()
+  if (varNames.length === 0) {
+    return { ass: { ...vars }, zij: zidge(eqns, vars), sat: eqnsSatisfied(eqns, vars) }
+  }
+  
+  // gaussianElim only handles fully determined linear systems.
+  // For underconstrained systems, fall through to kludgeProp which has
+  // heuristics for choosing among infinitely many solutions.
+  
+  // If any variables are null/undefined/NaN, let kludgeProp handle it with its heuristics
+  const hasUnknowns = varNames.some(v => !(typeof vars[v] === 'number' && isFinite(vars[v])))
+  if (hasUnknowns) {
+    return { ass: { ...vars }, zij: zidge(eqns, vars), sat: false }
+  }
+  
+  // Build linear system from equations
+  // Each equation [a, b, c, ...] means a = b = c = ...
+  // Convert to constraints: a - b = 0, b - c = 0, etc.
+  const rows = []
+  const rhs = []
+  
+  for (const eqn of eqns) {
+    if (eqn.length < 2) continue
+    
+    for (let i = 0; i < eqn.length - 1; i++) {
+      const left = eqn[i]
+      const right = eqn[i + 1]
+      
+      // Handle numeric constants
+      const leftIsNum = typeof left === 'number'
+      const rightIsNum = typeof right === 'number'
+      
+      if (leftIsNum && rightIsNum) continue
+      
+      const leftCoeffs = leftIsNum 
+        ? { coeffs: varNames.map(() => 0), constant: left }
+        : tryExtractLinearCoeffs(left, varNames, vars)
+      
+      const rightCoeffs = rightIsNum
+        ? { coeffs: varNames.map(() => 0), constant: right }
+        : tryExtractLinearCoeffs(right, varNames, vars)
+      
+      if (!leftCoeffs || !rightCoeffs) continue
+      
+      // Constraint: left - right = 0
+      const rowCoeffs = leftCoeffs.coeffs.map((c, j) => c - rightCoeffs.coeffs[j])
+      const rowRhs = rightCoeffs.constant - leftCoeffs.constant
+      
+      // Skip trivial rows (all zeros)
+      if (rowCoeffs.every(c => Math.abs(c) < 1e-12) && Math.abs(rowRhs) < 1e-12) continue
+      
+      rows.push(rowCoeffs)
+      rhs.push(rowRhs)
+    }
+  }
+  
+  if (rows.length === 0) {
+    return { ass: { ...vars }, zij: zidge(eqns, vars), sat: eqnsSatisfied(eqns, vars) }
+  }
+  
+  // Gaussian elimination with partial pivoting
+  const n = varNames.length
+  const m = rows.length
+  const A = rows.map((row, i) => [...row, rhs[i]])
+  
+  let pivotRow = 0
+  const pivotCols = []
+  
+  for (let col = 0; col < n && pivotRow < m; col++) {
+    // Find best pivot
+    let maxVal = Math.abs(A[pivotRow][col])
+    let maxRow = pivotRow
+    for (let row = pivotRow + 1; row < m; row++) {
+      if (Math.abs(A[row][col]) > maxVal) {
+        maxVal = Math.abs(A[row][col])
+        maxRow = row
+      }
+    }
+    
+    if (maxVal < 1e-12) continue
+    
+    [A[pivotRow], A[maxRow]] = [A[maxRow], A[pivotRow]]
+    
+    for (let row = pivotRow + 1; row < m; row++) {
+      const factor = A[row][col] / A[pivotRow][col]
+      for (let j = col; j <= n; j++) {
+        A[row][j] -= factor * A[pivotRow][j]
+      }
+    }
+    
+    pivotCols.push(col)
+    pivotRow++
+  }
+  
+  // Back substitution
+  const solution = new Array(n).fill(null)
+  
+  for (let i = pivotCols.length - 1; i >= 0; i--) {
+    const row = i
+    const col = pivotCols[i]
+    
+    let sum = A[row][n]
+    for (let j = col + 1; j < n; j++) {
+      if (solution[j] !== null) {
+        sum -= A[row][j] * solution[j]
+      } else if (Math.abs(A[row][j]) > 1e-12) {
+        solution[j] = vars[varNames[j]] ?? 1
+        sum -= A[row][j] * solution[j]
+      }
+    }
+    
+    if (Math.abs(A[row][col]) < 1e-12) break
+    solution[col] = sum / A[row][col]
+  }
+  
+  // Check if system is underconstrained (fewer constraints than variables)
+  // If so, return sat=false to let kludgeProp handle it with its heuristics
+  // (kludgeProp preserves seed values for underdetermined systems)
+  if (pivotCols.length < n) {
+    return { ass: { ...vars }, zij: zidge(eqns, vars), sat: false }
+  }
+  
+  const ass = {}
+  for (let j = 0; j < n; j++) {
+    ass[varNames[j]] = solution[j]
+  }
+  
+  const zij = zidge(eqns, ass)
+  const sat = eqnsSatisfied(eqns, ass) && boundsSatisfied(ass, inf, sup)
+  
+  return { ass, zij, sat }
+}
+
+// =============================================================================
+// kludgeProp: Algebraic propagation + special cases
+// =============================================================================
+// This is the original monstrosity that LLMs wrought.
+// Future work: extract special cases into separate solvers.
+
+function kludgeProp(eqns, vars, inf, sup) {
   const required = new Set()
   for (const eqn of eqns) {
     for (const term of eqn) {
@@ -797,7 +975,7 @@ function solvemPrimary(eqns, vars, inf = {}, sup = {}) {
   }
 
   // Fallback: 1D search on root variables
-  if (!eqnsSatisfied(eqns, values, tol)) {
+  if (!eqnsSatisfied(eqns, values)) {
     const definedBy = new Map()
     const copies = []
     for (const eqn of eqns) {
@@ -941,14 +1119,17 @@ function solvemPrimary(eqns, vars, inf = {}, sup = {}) {
     }
   }
 
-  return values
+  const zij = zidge(eqns, values)
+  const sat = eqnsSatisfied(eqns, values) && boundsSatisfied(values, inf, sup)
+  return { ass: values, zij, sat }
 }
 
 // =============================================================================
-// solvemGradient: Gradient descent based solver (from gemini-solver.js)
+// gradientDesc: Gradient descent based solver
 // =============================================================================
+// Currently disabled (SKIP_GRADIENT=true) because it's too slow (200k iterations)
 
-function solvemGradient(eqns, initialVars) {
+function gradientDesc(eqns, initialVars, inf, sup) {
   const MAX_ITERATIONS = 200000
   const LEARN_RATE = 0.005
   const DECAY = 0.95
@@ -1173,19 +1354,20 @@ function solvemGradient(eqns, initialVars) {
   }
   enforceDeps()
 
-  let result = {}
-  varNames.forEach((k, i) => result[k] = values[i])
-  return result
+  const ass = {}
+  varNames.forEach((k, i) => ass[k] = values[i])
+  const zij = zidge(eqns, ass)
+  const sat = eqnsSatisfied(eqns, ass) && boundsSatisfied(ass, inf, sup)
+  return { ass, zij, sat }
 }
 
 // =============================================================================
-// solvem: Kitchen-sink solver - tries multiple solvers
+// solvem: Kitchen-sink solver - tries multiple solvers in sequence
 // =============================================================================
-// Per README future work item 13: Try as many solvers as we can. If any return
-// a satisfying assignment, Bob's your uncle.
+// Try each solver in order. First one to return sat=true wins.
 
 function solvem(eqns, init, infimum = {}, supremum = {}) {
-  // Try primary solver first
+  // Clamp initial values to bounds
   const boundedInit = { ...init }
   for (const [name, val] of Object.entries(boundedInit)) {
     const isNum = typeof val === 'number' && isFinite(val)
@@ -1199,47 +1381,28 @@ function solvem(eqns, init, infimum = {}, supremum = {}) {
     boundedInit[name] = isNum ? clamped : val
   }
 
-  let ass = solvemPrimary(eqns, boundedInit, infimum, supremum)
-  let zij = zidge(eqns, ass)
-  let sat = eqnsSatisfied(eqns, ass) && boundsSatisfied(ass, infimum, supremum)
+  // Solver registry: try each in order, return first satisfying result
+  const SOLVERS = [
+    gaussianElim,   // Fast, exact for linear systems
+    kludgeProp,     // Algebraic propagation + special cases
+    // gradientDesc, // Disabled: too slow (200k iterations)
+  ]
 
-  // If satisfied, return immediately
-  if (sat) {
-    return { ass, zij, sat }
+  let bestResult = null
+
+  for (const solver of SOLVERS) {
+    const result = solver(eqns, boundedInit, infimum, supremum)
+    if (result.sat) return result
+    
+    // Prefer results with actual values over results with nulls
+    const hasNulls = Object.values(result.ass).some(v => v === null || v === undefined)
+    if (!bestResult || !hasNulls) {
+      bestResult = result
+    }
   }
 
-  // DISABLED: gradient descent is too slow (200k iterations)
-  const SKIP_GRADIENT = true
-  if (SKIP_GRADIENT) { return { ass, zij, sat } }
-
-  // Try gradient descent solver as fallback
-  try {
-    const gradientAss = solvemGradient(eqns, boundedInit)
-    const gradientSat = eqnsSatisfied(eqns, gradientAss) && boundsSatisfied(gradientAss, infimum, supremum)
-
-    if (gradientSat) {
-      return {
-        ass: gradientAss,
-        zij: zidge(eqns, gradientAss),
-        sat: true
-      }
-    }
-
-    // Even if gradient solver didn't fully satisfy, check if it's better
-    const primaryResidual = zij.reduce((a, b) => a + (isNaN(b) ? Infinity : b), 0)
-    const gradientZij = zidge(eqns, gradientAss)
-    const gradientResidual = gradientZij.reduce((a, b) => a + (isNaN(b) ? Infinity : b), 0)
-
-    if (gradientResidual < primaryResidual) {
-      ass = gradientAss
-      zij = gradientZij
-      sat = gradientSat
-    }
-  } catch (e) {
-    // Gradient solver failed, stick with primary result
-  }
-
-  return { ass, zij, sat }
+  // No solver found a satisfying assignment, return best attempt
+  return bestResult || { ass: boundedInit, zij: zidge(eqns, boundedInit), sat: false }
 }
 
 // =============================================================================
