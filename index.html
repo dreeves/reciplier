@@ -54,7 +54,7 @@ content="Paste in a recipe and scale it up or down. Also a constraint satisfacti
     hidden
   >
     <div class="help-popover-inner text-sm text-gray-600">
-<h3>Reciplier Help</h3>
+<h3>Reciplier: The Recipe Multiplier</h3>
 <p>
 Basic usage is pretty self-explanatory.
 Paste in a recipe and replace quantities with expressions in curly braces.
@@ -65,17 +65,14 @@ and then at the end of the recipe include a line like
 The things in curly braces are called cells and they get rendered as fields you can edit.
 Change any field and the rest adjust themselves.
 </p>
-<p>
-Check out the example recipes and it will all gradually make sense.
-</p>
 <h3>Advanced Usage</h3>
 <p>
-This is kind of a free-form spreadsheet and constraint solver.
+It turns out this is kind of a free-form spreadsheet and constraint solver.
 You can include equations in cells and Reciplier tries to find an assignment of values to all the variables that satisfies all the equations.
 Like if you include
 <span class="font-mono">{a}^2 + {b}^2 = {c}^2 = {a^2 + b^2 = c^2}</span>
 in the recipe template, you have a nifty interface for finding Pythagorean triples.
-(Nerds: "2x" is short for "2*x" but "x2" is just a variable, not "x*2".)
+(Btw, "2x" is short for "2*x" but "x2" is just a variable, not "x*2".)
 </p>
 <h3>Credits and Colophon</h3>
 <p>
@@ -85,7 +82,7 @@ and then mostly
 <a href="https://codebuff.com/referrals/ref-146ce36c-53e8-435c-a7f6-e180206dd0ee" title="Referral link that gets you (and me, dreev) free credits">Codebuff</a>
 for a while and then a mix of a bunch of things.
 See 
-<a href="https://calca.io" target="_blank" rel="noopener noreferrer">Calca.io</a>
+<a href="https://calca.io" target="_blank">Calca.io</a>
 for an example of some prior art.
       </p>
       <p>
@@ -130,11 +127,13 @@ for an example of some prior art.
   
   <div class="text-center text-gray-400 text-sm mt-4">
     <div class="text-gray-300 text-xs mt-1">
-      v2026.01.21-e
+      v2026.01.21-f
     </div>
   </div>
 
   <!-- TEMPORARY DEBUG PANEL -->
+  <br>&nbsp;<br>
+  <br>&nbsp;<br>
   <!-- Add "open", without quotes, as a boolean attribute on <details> to
        default to expanded rather than collapsed. -->
   <details id="debugPanel" class="debug-panel"> 

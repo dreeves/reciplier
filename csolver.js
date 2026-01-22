@@ -477,7 +477,38 @@ function gaussianElim(eqns, vars, inf, sup) {
 // This is the original monstrosity that LLMs wrought.
 // Future work: extract special cases into separate solvers.
 
-function kludgeProp(eqns, vars, inf, sup) {
+// --- Extracted helper functions (pure, no closure dependencies) ---
+
+// Check if equation is a definition pair: [bareVar, expression]
+function isDefinitionPair(eqn) {
+  return eqn.length === 2 &&
+    typeof eqn[0] === 'string' && isbarevar(eqn[0]) &&
+    typeof eqn[1] === 'string' && !isbarevar(eqn[1])
+}
+
+// Extract unixtime(y, m, d) arguments from an expression
+function unixtimeArgs(expr) {
+  if (typeof expr !== 'string') return null
+  const m = expr.match(/\bunixtime\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\)\s*$/)
+  if (!m) return null
+  return { y: m[1], mo: m[2], d: m[3] }
+}
+
+// Invert unixtime: given seconds since epoch, return {y, mo, d}
+function invertUnixtimeSeconds(seconds) {
+  if (typeof seconds !== 'number' || !isFinite(seconds)) return null
+  const ms = seconds * 1000
+  if (!Number.isFinite(ms)) return null
+  const dt = new Date(ms)
+  const y = dt.getUTCFullYear()
+  const mo = dt.getUTCMonth() + 1
+  const d = dt.getUTCDate()
+  if (!Number.isInteger(y) || !Number.isInteger(mo) || !Number.isInteger(d)) return null
+  return { y, mo, d }
+}
+
+// Find all variables required by equations
+function findRequiredVars(eqns) {
   const required = new Set()
   for (const eqn of eqns) {
     for (const term of eqn) {
@@ -489,6 +520,69 @@ function kludgeProp(eqns, vars, inf, sup) {
       for (const v of varparse(t)) required.add(v)
     }
   }
+  return required
+}
+
+// Find variables that appear in equations with literal numbers (constrained)
+function findConstrainedVars(eqns) {
+  const constrained = new Set()
+  for (const eqn of eqns) {
+    if (eqn.some(e => typeof e === 'number')) {
+      for (const e of eqn) {
+        if (isbarevar(e)) constrained.add(e)
+      }
+    }
+  }
+  return constrained
+}
+
+// Build map of variable -> count of times used as input (not as LHS definition)
+function buildUsesAsInput(eqns) {
+  const usesAsInput = new Map()
+  for (const eqn of eqns) {
+    if (eqn.length < 2) continue
+    for (let i = 0; i < eqn.length; i++) {
+      const term = eqn[i]
+      if (typeof term !== 'string') continue
+      const t = term.trim()
+      if (t === '') continue
+      if (i === 0 && isbarevar(t)) continue
+      for (const v of varparse(t)) {
+        usesAsInput.set(v, (usesAsInput.get(v) || 0) + 1)
+      }
+    }
+  }
+  return usesAsInput
+}
+
+// Find variables pinned to literal values
+function findLiteralPins(eqns) {
+  const literalPinned = new Map()
+  for (const eqn of eqns) {
+    const n = eqn.find(e => typeof e === 'number')
+    if (typeof n !== 'number') continue
+    for (const e of eqn) {
+      if (isbarevar(e) && !literalPinned.has(e)) {
+        literalPinned.set(e, n)
+      }
+    }
+  }
+  return literalPinned
+}
+
+// Sort equations: those with literals first
+function sortEqnsByLiterals(eqns) {
+  return [...eqns].sort((a, b) => {
+    const aHasLiteral = a.some(e => typeof e === 'number')
+    const bHasLiteral = b.some(e => typeof e === 'number')
+    if (aHasLiteral !== bHasLiteral) return aHasLiteral ? -1 : 1
+    return 0
+  })
+}
+
+function kludgeProp(eqns, vars, inf, sup) {
+  // Validate that all required variables are provided
+  const required = findRequiredVars(eqns)
   const missing = [...required].filter(v => !Object.prototype.hasOwnProperty.call(vars, v))
   if (missing.length > 0) {
     throw new Error(`solvem: missing initial vars: ${missing.sort().join(', ')}`)
@@ -507,47 +601,17 @@ function kludgeProp(eqns, vars, inf, sup) {
     return values[v] !== null && values[v] !== undefined
   }
 
-  // Variables appearing with literal numbers are constrained
-  const constrained = new Set()
-  for (const eqn of eqns) {
-    if (eqn.some(e => typeof e === 'number')) {
-      for (const e of eqn) {
-        if (isbarevar(e)) constrained.add(e)
-      }
-    }
-  }
+  // Initialize constraint tracking using extracted helpers
+  const constrained = findConstrainedVars(eqns)
+  const usesAsInput = buildUsesAsInput(eqns)
+  const literalPinned = findLiteralPins(eqns)
 
-  const usesAsInput = new Map()
-  for (const eqn of eqns) {
-    if (eqn.length < 2) continue
-    for (let i = 0; i < eqn.length; i++) {
-      const term = eqn[i]
-      if (typeof term !== 'string') continue
-      const t = term.trim()
-      if (t === '') continue
-      if (i === 0 && isbarevar(t)) continue
-      for (const v of varparse(t)) {
-        usesAsInput.set(v, (usesAsInput.get(v) || 0) + 1)
-      }
-    }
-  }
-
-  // Literal pins
-  const literalPinned = new Map()
-  for (const eqn of eqns) {
-    const n = eqn.find(e => typeof e === 'number')
-    if (typeof n !== 'number') continue
-    for (const e of eqn) {
-      if (isbarevar(e) && !literalPinned.has(e)) {
-        literalPinned.set(e, n)
-      }
-    }
-  }
+  // Apply literal pins to values
   for (const [v, n] of literalPinned) {
     values[v] = n
   }
 
-  // Singletons
+  // Singletons: single-term equations with known values
   const singletons = new Map()
   for (const eqn of eqns) {
     if (eqn.length === 1 && isbarevar(eqn[0]) && isKnown(eqn[0])) {
@@ -590,37 +654,10 @@ function kludgeProp(eqns, vars, inf, sup) {
     return results.every(r => Math.abs(r.value - first) < tolerance)
   }
 
-  function unixtimeArgs(expr) {
-    if (typeof expr !== 'string') return null
-    const m = expr.match(/\bunixtime\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\)\s*$/)
-    if (!m) return null
-    return { y: m[1], mo: m[2], d: m[3] }
-  }
+  // Use extracted helpers (unixtimeArgs, invertUnixtimeSeconds, isDefinitionPair
+  // are now at module level)
 
-  function invertUnixtimeSeconds(seconds) {
-    if (typeof seconds !== 'number' || !isFinite(seconds)) return null
-    const ms = seconds * 1000
-    if (!Number.isFinite(ms)) return null
-    const dt = new Date(ms)
-    const y = dt.getUTCFullYear()
-    const mo = dt.getUTCMonth() + 1
-    const d = dt.getUTCDate()
-    if (!Number.isInteger(y) || !Number.isInteger(mo) || !Number.isInteger(d)) return null
-    return { y, mo, d }
-  }
-
-  function isDefinitionPair(eqn) {
-    return eqn.length === 2 &&
-      typeof eqn[0] === 'string' && isbarevar(eqn[0]) &&
-      typeof eqn[1] === 'string' && !isbarevar(eqn[1])
-  }
-
-  const sortedEqns = [...eqns].sort((a, b) => {
-    const aHasLiteral = a.some(e => typeof e === 'number')
-    const bHasLiteral = b.some(e => typeof e === 'number')
-    if (aHasLiteral !== bHasLiteral) return aHasLiteral ? -1 : 1
-    return 0
-  })
+  const sortedEqns = sortEqnsByLiterals(eqns)
 
   function propagateSatisfiedDefinitions() {
     let changed = false

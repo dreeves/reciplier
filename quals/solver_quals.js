@@ -2176,6 +2176,163 @@ function runAllSolverQuals(ctx) {
     check('solvem: unit cm=200000', rep.ass.cm, 200000, 1e-9)
   })()
 
+  // ==========================================================================
+  // Product scaling edge cases (w*h pattern in kludgeProp)
+  // ==========================================================================
+
+  // Product scaling from zero: when current product is 0, should use sqrt
+  ;(() => {
+    const eqns = [
+      ['w*h', 'A'],
+      ['A', 100],
+    ]
+    const rep = solvem(eqns, { w: 0, h: 0, A: 100 })
+    check('solvem: product scaling from zero (sat)', rep.sat, true)
+    check('solvem: product scaling from zero w*h=100', rep.ass.w * rep.ass.h, 100, 1e-6)
+  })()
+
+  // Product scaling preserves aspect ratio
+  ;(() => {
+    const eqns = [
+      ['w*h', 'A'],
+      ['A', 200],
+    ]
+    const rep = solvem(eqns, { w: 5, h: 10, A: 200 })
+    check('solvem: product scaling aspect (sat)', rep.sat, true)
+    check('solvem: product scaling w*h=200', rep.ass.w * rep.ass.h, 200, 1e-6)
+    // Aspect ratio should be preserved (h/w = 2)
+    check('solvem: product scaling aspect ratio', rep.ass.h / rep.ass.w, 2, 1e-6)
+  })()
+
+  // Product with one variable pinned
+  ;(() => {
+    const eqns = [
+      ['w', 8],
+      ['w*h', 'A'],
+      ['A', 40],
+    ]
+    const rep = solvem(eqns, { w: 8, h: 1, A: 40 })
+    check('solvem: product one pinned (sat)', rep.sat, true)
+    check('solvem: product one pinned h=5', rep.ass.h, 5, 1e-9)
+  })()
+
+  // ==========================================================================
+  // Diamond dependency propagation (a→b, a→c, b→d, c→d)
+  // ==========================================================================
+
+  ;(() => {
+    const eqns = [
+      ['a', 10],
+      ['b', '2*a'],
+      ['c', '3*a'],
+      ['d', 'b + c'],
+    ]
+    const rep = solvem(eqns, { a: 10, b: 1, c: 1, d: 1 })
+    check('solvem: diamond dependency (sat)', rep.sat, true)
+    check('solvem: diamond b=20', rep.ass.b, 20, 1e-9)
+    check('solvem: diamond c=30', rep.ass.c, 30, 1e-9)
+    check('solvem: diamond d=50', rep.ass.d, 50, 1e-9)
+  })()
+
+  // Diamond with constraint at bottom
+  ;(() => {
+    const eqns = [
+      ['a'],
+      ['b', '2*a'],
+      ['c', '3*a'],
+      ['d', 'b + c', 100],
+    ]
+    const rep = solvem(eqns, { a: 1, b: 1, c: 1, d: 100 })
+    check('solvem: diamond reverse (sat)', rep.sat, true)
+    check('solvem: diamond reverse a=20', rep.ass.a, 20, 1e-9)
+    check('solvem: diamond reverse b=40', rep.ass.b, 40, 1e-9)
+    check('solvem: diamond reverse c=60', rep.ass.c, 60, 1e-9)
+  })()
+
+  // ==========================================================================
+  // Discontinuity detection (functions with jumps/asymptotes)
+  // ==========================================================================
+
+  // Division approaching zero (1/x near x=0)
+  ;(() => {
+    const eqns = [
+      ['1/x', 100],
+    ]
+    const rep = solvem(eqns, { x: 1 })
+    check('solvem: 1/x=100 (sat)', rep.sat, true)
+    check('solvem: 1/x=100 x=0.01', rep.ass.x, 0.01, 1e-9)
+  })()
+
+  // Finding root across discontinuity
+  ;(() => {
+    const eqns = [
+      ['x', 2],
+      ['y', '1/x'],
+    ]
+    const rep = solvem(eqns, { x: 2, y: 1 })
+    check('solvem: y=1/x (sat)', rep.sat, true)
+    check('solvem: y=1/x y=0.5', rep.ass.y, 0.5, 1e-9)
+  })()
+
+  // ==========================================================================
+  // Singular/near-singular matrix handling (gaussianElim edge cases)
+  // ==========================================================================
+
+  // Linearly dependent equations (infinite solutions - underdetermined)
+  ;(() => {
+    const eqns = [
+      ['x + y', 10],
+      ['2*x + 2*y', 20],  // Same constraint, just doubled
+    ]
+    const rep = solvem(eqns, { x: 3, y: 7 })
+    check('solvem: dependent eqns (sat)', rep.sat, true)
+    check('solvem: dependent eqns sum=10', rep.ass.x + rep.ass.y, 10, 1e-9)
+  })()
+
+  // Nearly singular (ill-conditioned) - coefficients very close
+  ;(() => {
+    const eqns = [
+      ['x + y', 10],
+      ['x + 1.0001*y', 10.0005],
+    ]
+    const rep = solvem(eqns, { x: 5, y: 5 })
+    check('solvem: ill-conditioned (sat)', rep.sat, true)
+    check('solvem: ill-conditioned x+y=10', rep.ass.x + rep.ass.y, 10, 0.01)
+  })()
+
+  // Three equations, two dependent
+  ;(() => {
+    const eqns = [
+      ['x', 5],
+      ['y', 3],
+      ['x + y', 8],  // Redundant but consistent
+    ]
+    const rep = solvem(eqns, { x: 0, y: 0 })
+    check('solvem: redundant constraint (sat)', rep.sat, true)
+    check('solvem: redundant x=5', rep.ass.x, 5, 1e-9)
+    check('solvem: redundant y=3', rep.ass.y, 3, 1e-9)
+  })()
+
+  // ==========================================================================
+  // Strict bounds with epsilon handling
+  // ==========================================================================
+
+  // Strict lower bound: x > 0, solve x^2 = 0.0001
+  ;(() => {
+    const eqns = [['x^2', 0.0001]]
+    const rep = solvem(eqns, { x: 0.5 }, { x: 0 }, {})  // x > 0 (strict via epsilon)
+    check('solvem: strict lower bound (sat)', rep.sat, true)
+    check('solvem: strict lower x=0.01', rep.ass.x, 0.01, 1e-6)
+  })()
+
+  // Strict upper bound: x < 0, solve x^2 = 4
+  ;(() => {
+    const eqns = [['x^2', 4]]
+    const rep = solvem(eqns, { x: -1 }, {}, { x: 0 })  // x < 0
+    check('solvem: strict upper bound (sat)', rep.sat, true)
+    check('solvem: strict upper x=-2', rep.ass.x, -2, 1e-9)
+  })()
+
   console.log('\n=== Summary ===')
   console.log(`${results.passed} passed, ${results.failed} failed`)
   if (results.failed > 0) {
