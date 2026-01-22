@@ -298,8 +298,7 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
   updateSliderDisplay()
 }
 
-// TODO: ugh, hundreds of occurrences of "value", many but not all of which
-// should be "cval"
+// TODO: oof, many occurrences of "value" should probably be "cval"
 
 function markInvalidInput(input, cellId, message) {
   input.classList.add('invalid')
@@ -432,8 +431,9 @@ function createCornerPin(input) {
   const focusOnlyClass = !INDICATOR_SHOW_ALWAYS.cornerpin ? ' focus-only' : ''
   pin.className = 'corner-pin' + (isPinned ? ' pinned' : '') + focusOnlyClass
   pin.textContent = isPinned ? '●' : '📌'
-  // TODO: vet UI copy (Latin placeholder)
-  pin.title = isPinned ? 'Preme ut liberes (valorem mutabilem redde)' : 'Preme ut figes (valorem fixum serva)'
+  pin.title = isPinned ? 
+    'Pinned! This field only changes if you edit it.' : 
+    'Unpinned. Click to pin it.'
   // Apply dynamic size (responsive)
   const size = getResponsivePinSize()
   const fontSize = Math.max(8, Math.round(size * 0.67))

@@ -2,7 +2,9 @@
 Quals (not tests).
 
 Top-level runner that executes:
-- solver quals (Node)
+- utility quals (matheval, reciplogic utilities)
+- parser quals (reciparse.js)
+- solver quals (csolver.js)
 - UI quals (Puppeteer)
 */
 
@@ -14,7 +16,10 @@ function runNode(scriptRelPath) {
 	return spawnSync(process.execPath, [scriptAbsPath], { stdio: 'inherit' })
 }
 
+const util = runNode('util_quals.js')
+const parser = runNode('parser_quals.js')
 const solver = runNode('solver_quals.js')
 const ui = runNode('ui_quals.js')
 
-process.exitCode = (solver.status === 0 && ui.status === 0) ? 0 : 1
+const allPassed = [util, parser, solver, ui].every(r => r.status === 0)
+process.exitCode = allPassed ? 0 : 1

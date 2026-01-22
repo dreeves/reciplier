@@ -1920,6 +1920,262 @@ function runAllSolverQuals(ctx) {
     check('solvem: bmi=22.86', rep.ass.bmi, 70 / (1.75 * 1.75), 0.01)
   })()
 
+  // ==========================================================================
+  // Additional edge case quals
+  // ==========================================================================
+
+  // Reciprocal relationship: xy = 1
+  ;(() => {
+    const eqns = [
+      ['x', 4],
+      ['x*y', 1],
+    ]
+    const rep = solvem(eqns, { x: 4, y: 1 })
+    check('solvem: reciprocal (sat)', rep.sat, true)
+    check('solvem: reciprocal y=0.25', rep.ass.y, 0.25, 1e-9)
+  })()
+
+  // Logarithmic relationship (implicit via exp)
+  ;(() => {
+    const eqns = [
+      ['x', 2],
+      ['y', 'exp(x)'],
+    ]
+    const rep = solvem(eqns, { x: 2, y: 1 })
+    check('solvem: exp (sat)', rep.sat, true)
+    check('solvem: exp y=e^2', rep.ass.y, Math.exp(2), 1e-6)
+  })()
+
+  // Multiple sqrt relationships
+  ;(() => {
+    const eqns = [
+      ['a', 16],
+      ['b', 'sqrt(a)'],
+      ['c', 'sqrt(b)'],
+    ]
+    const rep = solvem(eqns, { a: 16, b: 1, c: 1 })
+    check('solvem: nested sqrt (sat)', rep.sat, true)
+    check('solvem: nested sqrt b=4', rep.ass.b, 4, 1e-9)
+    check('solvem: nested sqrt c=2', rep.ass.c, 2, 1e-9)
+  })()
+
+  // Absolute value constraint
+  ;(() => {
+    const eqns = [
+      ['x', -5],
+      ['y', 'abs(x)'],
+    ]
+    const rep = solvem(eqns, { x: -5, y: 1 })
+    check('solvem: abs (sat)', rep.sat, true)
+    check('solvem: abs y=5', rep.ass.y, 5, 1e-9)
+  })()
+
+  // Floor function
+  ;(() => {
+    const eqns = [
+      ['x', 3.7],
+      ['y', 'floor(x)'],
+    ]
+    const rep = solvem(eqns, { x: 3.7, y: 1 })
+    check('solvem: floor (sat)', rep.sat, true)
+    check('solvem: floor y=3', rep.ass.y, 3, 1e-9)
+  })()
+
+  // Ceiling function
+  ;(() => {
+    const eqns = [
+      ['x', 3.2],
+      ['y', 'ceil(x)'],
+    ]
+    const rep = solvem(eqns, { x: 3.2, y: 1 })
+    check('solvem: ceil (sat)', rep.sat, true)
+    check('solvem: ceil y=4', rep.ass.y, 4, 1e-9)
+  })()
+
+  // Round function
+  ;(() => {
+    const eqns = [
+      ['x', 3.5],
+      ['y', 'round(x)'],
+    ]
+    const rep = solvem(eqns, { x: 3.5, y: 1 })
+    check('solvem: round (sat)', rep.sat, true)
+    check('solvem: round y=4', rep.ass.y, 4, 1e-9)
+  })()
+
+  // Min/max functions
+  ;(() => {
+    const eqns = [
+      ['a', 3],
+      ['b', 7],
+      ['c', 'min(a, b)'],
+      ['d', 'max(a, b)'],
+    ]
+    const rep = solvem(eqns, { a: 3, b: 7, c: 1, d: 1 })
+    check('solvem: min/max (sat)', rep.sat, true)
+    check('solvem: min c=3', rep.ass.c, 3, 1e-9)
+    check('solvem: max d=7', rep.ass.d, 7, 1e-9)
+  })()
+
+  // Circular dependency with solution
+  ;(() => {
+    const eqns = [
+      ['a', 'b + 1'],
+      ['b', 'c + 1'],
+      ['c', 0],
+    ]
+    const rep = solvem(eqns, { a: 1, b: 1, c: 0 })
+    check('solvem: circular chain (sat)', rep.sat, true)
+    check('solvem: circular a=2', rep.ass.a, 2, 1e-9)
+    check('solvem: circular b=1', rep.ass.b, 1, 1e-9)
+  })()
+
+  // System with negative numbers
+  ;(() => {
+    const eqns = [
+      ['x', -3],
+      ['y', '-2*x'],
+      ['z', 'x + y'],
+    ]
+    const rep = solvem(eqns, { x: -3, y: 1, z: 1 })
+    check('solvem: negatives (sat)', rep.sat, true)
+    check('solvem: negatives y=6', rep.ass.y, 6, 1e-9)
+    check('solvem: negatives z=3', rep.ass.z, 3, 1e-9)
+  })()
+
+  // Implicit mult with parens: 2(x+1) = 10
+  ;(() => {
+    const eqns = [
+      ['2(x+1)', 10],
+    ]
+    const rep = solvem(eqns, { x: 1 })
+    check('solvem: implicit paren mult (sat)', rep.sat, true)
+    check('solvem: implicit paren x=4', rep.ass.x, 4, 1e-9)
+  })()
+
+  // Area/circumference of circle
+  ;(() => {
+    const eqns = [
+      ['r', 5],
+      ['area', '3.14159 * r^2'],
+      ['circ', '2 * 3.14159 * r'],
+    ]
+    const rep = solvem(eqns, { r: 5, area: 1, circ: 1 })
+    check('solvem: circle (sat)', rep.sat, true)
+    check('solvem: circle area', rep.ass.area, Math.PI * 25, 0.01)
+    check('solvem: circle circ', rep.ass.circ, Math.PI * 10, 0.01)
+  })()
+
+  // Compound interest: A = P(1 + r)^t
+  ;(() => {
+    const eqns = [
+      ['P', 1000],
+      ['r', 0.05],
+      ['t', 3],
+      ['A', 'P * (1 + r)^t'],
+    ]
+    const rep = solvem(eqns, { P: 1000, r: 0.05, t: 3, A: 1 })
+    check('solvem: compound interest (sat)', rep.sat, true)
+    check('solvem: compound A=1157.625', rep.ass.A, 1000 * Math.pow(1.05, 3), 0.01)
+  })()
+
+  // Speed/distance/time with derived values
+  ;(() => {
+    const eqns = [
+      ['d', 100],
+      ['t', 2],
+      ['s', 'd/t'],
+      ['d2', 's*3'],  // how far in 3 hours at same speed
+    ]
+    const rep = solvem(eqns, { d: 100, t: 2, s: 1, d2: 1 })
+    check('solvem: speed/dist/time (sat)', rep.sat, true)
+    check('solvem: speed s=50', rep.ass.s, 50, 1e-9)
+    check('solvem: speed d2=150', rep.ass.d2, 150, 1e-9)
+  })()
+
+  // Fibonacci-like: f3 = f1 + f2
+  ;(() => {
+    const eqns = [
+      ['f1', 1],
+      ['f2', 1],
+      ['f3', 'f1 + f2'],
+      ['f4', 'f2 + f3'],
+      ['f5', 'f3 + f4'],
+    ]
+    const rep = solvem(eqns, { f1: 1, f2: 1, f3: 1, f4: 1, f5: 1 })
+    check('solvem: fib chain (sat)', rep.sat, true)
+    check('solvem: fib f3=2', rep.ass.f3, 2, 1e-9)
+    check('solvem: fib f4=3', rep.ass.f4, 3, 1e-9)
+    check('solvem: fib f5=5', rep.ass.f5, 5, 1e-9)
+  })()
+
+  // Harmonic mean
+  ;(() => {
+    const eqns = [
+      ['a', 2],
+      ['b', 6],
+      ['h', '2*a*b/(a+b)'],
+    ]
+    const rep = solvem(eqns, { a: 2, b: 6, h: 1 })
+    check('solvem: harmonic mean (sat)', rep.sat, true)
+    check('solvem: harmonic h=3', rep.ass.h, 3, 1e-9)
+  })()
+
+  // Geometric mean
+  ;(() => {
+    const eqns = [
+      ['a', 4],
+      ['b', 9],
+      ['g', 'sqrt(a*b)'],
+    ]
+    const rep = solvem(eqns, { a: 4, b: 9, g: 1 })
+    check('solvem: geometric mean (sat)', rep.sat, true)
+    check('solvem: geometric g=6', rep.ass.g, 6, 1e-9)
+  })()
+
+  // Quadratic formula verification: roots of x^2 - 5x + 6 = 0
+  ;(() => {
+    const eqns = [
+      ['a', 1],
+      ['b', -5],
+      ['c', 6],
+      ['disc', 'b^2 - 4*a*c'],
+      ['r1', '(-b + sqrt(disc))/(2*a)'],
+      ['r2', '(-b - sqrt(disc))/(2*a)'],
+    ]
+    const rep = solvem(eqns, { a: 1, b: -5, c: 6, disc: 1, r1: 1, r2: 1 })
+    check('solvem: quadratic formula (sat)', rep.sat, true)
+    check('solvem: quadratic disc=1', rep.ass.disc, 1, 1e-9)
+    check('solvem: quadratic r1=3', rep.ass.r1, 3, 1e-9)
+    check('solvem: quadratic r2=2', rep.ass.r2, 2, 1e-9)
+  })()
+
+  // System with zero values
+  ;(() => {
+    const eqns = [
+      ['x', 0],
+      ['y', 'x + 5'],
+      ['z', 'x * y'],
+    ]
+    const rep = solvem(eqns, { x: 0, y: 1, z: 1 })
+    check('solvem: zero values (sat)', rep.sat, true)
+    check('solvem: zero y=5', rep.ass.y, 5, 1e-9)
+    check('solvem: zero z=0', rep.ass.z, 0, 1e-9)
+  })()
+
+  // Unit conversion chain: km -> m -> cm
+  ;(() => {
+    const eqns = [
+      ['km', 2],
+      ['m', 'km * 1000'],
+      ['cm', 'm * 100'],
+    ]
+    const rep = solvem(eqns, { km: 2, m: 1, cm: 1 })
+    check('solvem: unit chain (sat)', rep.sat, true)
+    check('solvem: unit m=2000', rep.ass.m, 2000, 1e-9)
+    check('solvem: unit cm=200000', rep.ass.cm, 200000, 1e-9)
+  })()
+
   console.log('\n=== Summary ===')
   console.log(`${results.passed} passed, ${results.failed} failed`)
   if (results.failed > 0) {

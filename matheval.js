@@ -13,9 +13,9 @@ function preval(expr) {
 
   let js = expr
 
-  // Implicit multiplication: number followed by letter (but not inside 
-  // identifiers). Eg, 2x -> 2*x, but x2a stays x2a
-  js = js.replace(/(?<![a-zA-Z_])(\d+\.?\d*)\s*([a-zA-Z_])/g, '$1*$2')
+  // Implicit multiplication: number followed by letter or open paren (but not
+  // inside identifiers). Eg, 2x -> 2*x, 2(x+1) -> 2*(x+1), but x2a stays x2a
+  js = js.replace(/(?<![a-zA-Z_])(\d+\.?\d*)\s*([a-zA-Z_(])/g, '$1*$2')
 
   // Math functions
   js = js.replace(

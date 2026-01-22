@@ -561,6 +561,18 @@ function kludgeProp(eqns, vars, inf, sup) {
   let solvedThisPass = new Set()
   let solvedFromStableThisPass = new Set()
 
+  // Helper to mark a variable as solved and update all tracking sets
+  // This pattern was repeated ~10 times in the original code
+  function markSolved(v, newVal, opts = {}) {
+    const { isTrustworthy = false, isStable = false, isStableNonSingleton = false, eqnLen = 2 } = opts
+    values[v] = newVal
+    solvedThisPass.add(v)
+    if (isTrustworthy || isStable) solvedFromStableThisPass.add(v)
+    if (isTrustworthy) trustworthy.add(v)
+    const promoteToStable = isStable && (isTrustworthy || (eqnLen === 2 && isStableNonSingleton) || constrained.size === 0)
+    if (promoteToStable) stableDerived.add(v)
+  }
+
   function isStable(v) {
     if (trustworthy.has(v)) return true
     if (stableDerived.has(v)) return true
@@ -737,19 +749,13 @@ function kludgeProp(eqns, vars, inf, sup) {
           if (literalPinned.has(expr)) continue
           if (!eqnHasLiteral && constrained.has(expr) && isKnown(expr) && values[expr] !== target) continue
           if (!isKnown(expr) || values[expr] !== target) {
-            values[expr] = target
+            markSolved(expr, target, { isTrustworthy, isStable: targetIsStable, isStableNonSingleton: targetStableNonSingleton, eqnLen: eqn.length })
             changed = true
-            solvedThisPass.add(expr)
-            if (isTrustworthy || targetIsStable) solvedFromStableThisPass.add(expr)
-            if (isTrustworthy) trustworthy.add(expr)
-            if (targetIsStable && (isTrustworthy || (eqn.length === 2 && targetStableNonSingleton) || constrained.size === 0)) stableDerived.add(expr)
           }
-          if (targetIsStable && isKnown(expr) && values[expr] === target) {
-            if (!stableDerived.has(expr)) {
-              if (isTrustworthy || (eqn.length === 2 && targetStableNonSingleton) || constrained.size === 0) {
-                stableDerived.add(expr)
-                changed = true
-              }
+          if (targetIsStable && isKnown(expr) && values[expr] === target && !stableDerived.has(expr)) {
+            if (isTrustworthy || (eqn.length === 2 && targetStableNonSingleton) || constrained.size === 0) {
+              stableDerived.add(expr)
+              changed = true
             }
           }
           continue
@@ -762,12 +768,8 @@ function kludgeProp(eqns, vars, inf, sup) {
         if (unknowns.length === 1) {
           const solvedVal = solveFor(expr, unknowns[0], target, values, inf[unknowns[0]], sup[unknowns[0]])
           if (solvedVal !== null) {
-            values[unknowns[0]] = solvedVal
+            markSolved(unknowns[0], solvedVal, { isTrustworthy, isStable: targetIsStable, isStableNonSingleton: targetStableNonSingleton, eqnLen: eqn.length })
             changed = true
-            solvedThisPass.add(unknowns[0])
-            if (isTrustworthy || targetIsStable) solvedFromStableThisPass.add(unknowns[0])
-            if (isTrustworthy) trustworthy.add(unknowns[0])
-            if (targetIsStable && (isTrustworthy || (eqn.length === 2 && targetStableNonSingleton) || constrained.size === 0)) stableDerived.add(unknowns[0])
           }
         } else if (unknowns.length === 0 && (isTrustworthy || targetIsStable || (eqn.length === 2 && !eqnSatisfiedNow))) {
           // Handle unixtime inversion
@@ -784,28 +786,11 @@ function kludgeProp(eqns, vars, inf, sup) {
                 try {
                   const check = unixtime(inv.y, inv.mo, inv.d)
                   if (check === target) {
-                    values[yv] = inv.y
-                    values[mov] = inv.mo
-                    values[dv] = inv.d
+                    const opts = { isTrustworthy, isStable: targetIsStable, isStableNonSingleton: targetStableNonSingleton, eqnLen: eqn.length }
+                    markSolved(yv, inv.y, opts)
+                    markSolved(mov, inv.mo, opts)
+                    markSolved(dv, inv.d, opts)
                     changed = true
-                    solvedThisPass.add(yv)
-                    solvedThisPass.add(mov)
-                    solvedThisPass.add(dv)
-                    if (isTrustworthy || targetIsStable) {
-                      solvedFromStableThisPass.add(yv)
-                      solvedFromStableThisPass.add(mov)
-                      solvedFromStableThisPass.add(dv)
-                    }
-                    if (isTrustworthy) {
-                      trustworthy.add(yv)
-                      trustworthy.add(mov)
-                      trustworthy.add(dv)
-                    }
-                    if (targetIsStable && (isTrustworthy || (eqn.length === 2 && targetStableNonSingleton) || constrained.size === 0)) {
-                      stableDerived.add(yv)
-                      stableDerived.add(mov)
-                      stableDerived.add(dv)
-                    }
                     continue
                   }
                 } catch (e) {}
@@ -843,23 +828,10 @@ function kludgeProp(eqns, vars, inf, sup) {
                   }
 
                   if (newA !== null && newB !== null) {
-                    values[a] = newA
-                    values[b] = newB
+                    const opts = { isTrustworthy, isStable: targetIsStable, isStableNonSingleton: targetStableNonSingleton, eqnLen: eqn.length }
+                    markSolved(a, newA, opts)
+                    markSolved(b, newB, opts)
                     changed = true
-                    solvedThisPass.add(a)
-                    solvedThisPass.add(b)
-                    if (isTrustworthy || targetIsStable) {
-                      solvedFromStableThisPass.add(a)
-                      solvedFromStableThisPass.add(b)
-                    }
-                    if (isTrustworthy) {
-                      trustworthy.add(a)
-                      trustworthy.add(b)
-                    }
-                    if (targetIsStable && (isTrustworthy || (eqn.length === 2 && targetStableNonSingleton) || constrained.size === 0)) {
-                      stableDerived.add(a)
-                      stableDerived.add(b)
-                    }
                     continue
                   }
                 }
@@ -885,12 +857,8 @@ function kludgeProp(eqns, vars, inf, sup) {
             }
           }
           if (bestVar !== null) {
-            values[bestVar] = bestVal
+            markSolved(bestVar, bestVal, { isTrustworthy, isStable: targetIsStable, isStableNonSingleton: targetStableNonSingleton, eqnLen: eqn.length })
             changed = true
-            solvedThisPass.add(bestVar)
-            if (isTrustworthy || targetIsStable) solvedFromStableThisPass.add(bestVar)
-            if (isTrustworthy) trustworthy.add(bestVar)
-            if (targetIsStable && (isTrustworthy || (eqn.length === 2 && targetStableNonSingleton) || constrained.size === 0)) stableDerived.add(bestVar)
           }
         }
       }
@@ -899,18 +867,9 @@ function kludgeProp(eqns, vars, inf, sup) {
     if (!changed) break
   }
 
-  // TODO: It makes little sense for the following to be a whole special case,
-  // right? One of the core algorithms that solvem uses should be a binary 
-  // search on each variable, one at a time, holding the other variables fixed.
-  // If one of the cells has "1/phi = phi - 1" then phi is just a variable whose
-  // whose satisfying assignment can be found by binary search. So I'm guessing
-  // the code in the following loop is a huge DRY violation.
-  // (Incredibly frustrating how coding assistants will just slap on another 
-  // layer of code to solve each issue you give it, instead of doing the elegant
-  // generalization.)
-
-  // Handle equations where both sides depend on the same single variable
+  // Handle self-referential equations where both sides depend on the same variable
   // Example: [['1/phi', 'phi - 1']] should solve to phi = golden ratio
+  // This is just solving (e1 - e2) = 0 for the shared variable
   for (const eqn of eqns) {
     if (checkEquation(eqn)) continue
     if (eqn.length !== 2) continue
@@ -930,42 +889,12 @@ function kludgeProp(eqns, vars, inf, sup) {
     const v = v1
     if (constrained.has(v) || trustworthy.has(v)) continue
 
-    // Both expressions depend on the same single variable
-    // Solve e1 - e2 = 0 for v using bisection on positive domain first
+    // Solve (e1 - e2) = 0 for v
+    // Try with lower bound of 0 first to prefer positive roots (common case)
     const diffExpr = `(${e1}) - (${e2})`
-
-    function evalDiff(x) {
-      const test = { ...values, [v]: x }
-      const r = vareval(diffExpr, test)
-      return r.error ? null : r.value
-    }
-
-    // Try to find a bracket in the positive domain
-    let solvedVal = null
-    const positiveBrackets = [
-      [0.001, 1], [1, 10], [0.1, 2], [0.01, 100], [0.5, 5]
-    ]
-    for (const [lo, hi] of positiveBrackets) {
-      const fLo = evalDiff(lo)
-      const fHi = evalDiff(hi)
-      if (fLo === null || fHi === null) continue
-      if (fLo * fHi > 0) continue  // Same sign, no root in interval
-
-      // Bisection search
-      let a = lo, b = hi
-      for (let i = 0; i < 60; i++) {
-        const mid = (a + b) / 2
-        const fMid = evalDiff(mid)
-        if (fMid === null) break
-        if (Math.abs(fMid) < 1e-10) { a = b = mid; break }
-        if (fLo * fMid < 0) b = mid
-        else a = mid
-      }
-      solvedVal = (a + b) / 2
-      break
-    }
-
-    // Fallback to solveFor if no positive root found
+    const lowerBound = inf[v] !== undefined ? inf[v] : 0
+    let solvedVal = solveFor(diffExpr, v, 0, values, lowerBound, sup[v])
+    // Fallback without lower bound if that didn't work
     if (solvedVal === null) {
       solvedVal = solveFor(diffExpr, v, 0, values, inf[v], sup[v])
     }
@@ -1010,108 +939,77 @@ function kludgeProp(eqns, vars, inf, sup) {
       rootCounts.set(root, (rootCounts.get(root) || 0) + 1)
     }
 
+    // Helper: propagate values from root and compute residual
+    // This was duplicated twice in the original code
+    function propagateAndResidual(rootVal, root) {
+      const test = { ...values, [root]: rootVal }
+
+      // Propagate definedBy expressions
+      for (const [v, { expr }] of definedBy) {
+        const r = vareval(expr, test)
+        if (!r.error && isFinite(r.value)) test[v] = r.value
+      }
+
+      // Copy linked variables
+      for (const [dest, src] of copies) {
+        const v = test[src]
+        if (isFinite(v)) test[dest] = v
+      }
+
+      // Find best values for bare var heads
+      for (const eqn of eqns) {
+        if (eqn.length < 2) continue
+        const head = eqn[0]
+        if (typeof head !== 'string' || !isbarevar(head)) continue
+        if (head === root || constrained.has(head)) continue
+
+        let bestVal = null
+        let bestScore = -1
+        for (let i = 1; i < eqn.length; i++) {
+          const e = eqn[i]
+          if (typeof e === 'number') { bestVal = e; bestScore = 2; break }
+          const r = vareval(e, test)
+          if (r.error || !isFinite(r.value)) continue
+          const vars = varparse(e)
+          const constrainedOnly = [...vars].every(v => constrained.has(v))
+          const score = constrainedOnly ? 1 : 0
+          if (score > bestScore) { bestScore = score; bestVal = r.value }
+        }
+        if (bestVal !== null) test[head] = bestVal
+      }
+
+      // Compute residual
+      let residual = 0
+      for (const eqn of eqns) {
+        if (eqn.length < 2) continue
+        const results = eqn.map(e => {
+          if (typeof e === 'number') return e
+          const r = vareval(e, test)
+          return r.error ? NaN : r.value
+        })
+        if (results.some(r => !isFinite(r))) continue
+        const target = results.find(r => isFinite(r))
+        for (const r of results) residual += (r - target) ** 2
+      }
+
+      return { test, residual }
+    }
+
     for (const [root, count] of rootCounts) {
       if (count < 2) continue
 
       let lo = 0.001, hi = 1000
       for (let iter = 0; iter < 50; iter++) {
         const mid = (lo + hi) / 2
-        const testValues = { ...values, [root]: mid }
-
-        for (const [v, { expr }] of definedBy) {
-          const r = vareval(expr, testValues)
-          if (!r.error && isFinite(r.value)) {
-            testValues[v] = r.value
-          }
-        }
-
-        for (const [dest, src] of copies) {
-          const v = testValues[src]
-          if (isFinite(v)) testValues[dest] = v
-        }
-
-        for (const eqn of eqns) {
-          if (eqn.length < 2) continue
-          const head = eqn[0]
-          if (typeof head !== 'string' || !isbarevar(head)) continue
-          if (head === root) continue
-          if (constrained.has(head)) continue
-
-          let bestVal = null
-          let bestScore = -1
-          for (let i = 1; i < eqn.length; i++) {
-            const e = eqn[i]
-            if (typeof e === 'number') { bestVal = e; bestScore = 2; break }
-            const r = vareval(e, testValues)
-            if (r.error || !isFinite(r.value)) continue
-            const vars = varparse(e)
-            const constrainedOnly = [...vars].every(v => constrained.has(v))
-            const score = constrainedOnly ? 1 : 0
-            if (score > bestScore) { bestScore = score; bestVal = r.value }
-          }
-          if (bestVal !== null) testValues[head] = bestVal
-        }
+        const { test: testValues, residual } = propagateAndResidual(mid, root)
 
         if (eqnsSatisfied(eqns, testValues, tol)) {
           Object.assign(values, testValues)
           break
         }
 
-        let residual = 0
-        for (const eqn of eqns) {
-          if (eqn.length < 2) continue
-          const results = eqn.map(e => {
-            if (typeof e === 'number') return e
-            const r = vareval(e, testValues)
-            return r.error ? NaN : r.value
-          })
-          if (results.some(r => !isFinite(r))) continue
-          const target = results.find(r => isFinite(r))
-          for (const r of results) residual += (r - target) ** 2
-        }
-
         const probeDelta = (hi - lo) * 1e-4 + 1e-6
-        const testHi = { ...values, [root]: mid + probeDelta }
-        for (const [v, { expr }] of definedBy) {
-          const r = vareval(expr, testHi)
-          if (!r.error && isFinite(r.value)) testHi[v] = r.value
-        }
-        for (const [dest, src] of copies) {
-          const v = testHi[src]
-          if (isFinite(v)) testHi[dest] = v
-        }
-        for (const eqn of eqns) {
-          if (eqn.length < 2) continue
-          const head = eqn[0]
-          if (typeof head !== 'string' || !isbarevar(head)) continue
-          if (head === root) continue
-          if (constrained.has(head)) continue
-          let bestVal = null
-          let bestScore = -1
-          for (let i = 1; i < eqn.length; i++) {
-            const e = eqn[i]
-            if (typeof e === 'number') { bestVal = e; bestScore = 2; break }
-            const r = vareval(e, testHi)
-            if (r.error || !isFinite(r.value)) continue
-            const vars = varparse(e)
-            const constrainedOnly = [...vars].every(v => constrained.has(v))
-            const score = constrainedOnly ? 1 : 0
-            if (score > bestScore) { bestScore = score; bestVal = r.value }
-          }
-          if (bestVal !== null) testHi[head] = bestVal
-        }
-        let residualHi = 0
-        for (const eqn of eqns) {
-          if (eqn.length < 2) continue
-          const results = eqn.map(e => {
-            if (typeof e === 'number') return e
-            const r = vareval(e, testHi)
-            return r.error ? NaN : r.value
-          })
-          if (results.some(r => !isFinite(r))) continue
-          const target = results.find(r => isFinite(r))
-          for (const r of results) residualHi += (r - target) ** 2
-        }
+        const { residual: residualHi } = propagateAndResidual(mid + probeDelta, root)
 
         if (residualHi < residual) lo = mid
         else hi = mid
