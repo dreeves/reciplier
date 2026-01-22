@@ -223,7 +223,7 @@ function renderRecipe() {
   // Attach event handlers to inputs
   output.querySelectorAll('input.recipe-field').forEach(input => {
     input.addEventListener('input', handleFieldInput)
-    // input.addEventListener('blur', handleFieldBlur)
+    input.addEventListener('blur', handleFieldBlur)
     input.addEventListener('keypress', handleFieldKeypress)
     attachPegTrigger(input)
   })
@@ -316,18 +316,23 @@ function clearInvalidInput(cellId) {
 function handleFieldInput(e) {
   const input = e.target
   const cellId = input.dataset.cellId
-  const newValue = toNum(input.value)
+  const cell = state.cells.find(c => c.id === cellId)
+  if (!cell) return
 
-  // Invalid number format - just mark invalid, don't change state
+  let newValue = toNum(input.value)
+
   if (!isFiniteNumber(newValue)) {
-    markInvalidInput(input, cellId, `Syntax error: only numbers allowed`)
-    return
+    // Try evaluating as a constant expression (no variables allowed)
+    const result = vareval(input.value, {})
+    if (!result.error && isFiniteNumber(result.value)) {
+      newValue = result.value
+    } else {
+      markInvalidInput(input, cellId, `Invalid expression`)
+      return
+    }
   }
 
   clearInvalidInput(cellId)
-
-  const cell = state.cells.find(c => c.id === cellId)
-  if (!cell) return
   cell.cval = newValue
 
   const solveResult = solveAndApply({
@@ -338,6 +343,15 @@ function handleFieldInput(e) {
 
   syncAfterSolve(solveResult.invalidCellIds, input)
   updateUrl()
+}
+
+function handleFieldBlur(e) {
+  const input = e.target
+  const cellId = input.dataset.cellId
+  const cell = state.cells.find(c => c.id === cellId)
+  if (!cell) return
+  if (state.invalidInputCellIds.has(cellId)) return
+  input.value = formatNum(cell.cval)
 }
 
 function handleFieldKeypress(e) {

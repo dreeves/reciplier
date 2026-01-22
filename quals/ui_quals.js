@@ -921,8 +921,7 @@ async function main() {
     const invalidExplainHidden = await page.$eval('#invalidExplainBanner', el => !!el.hidden)
     assert.equal(invalidExplainHidden, false)
     const invalidExplainText = await page.$eval('#invalidExplainBanner', el => el.textContent || '')
-    assert.ok(/syntax error/i.test(invalidExplainText))
-    assert.ok(/only numbers allowed/i.test(invalidExplainText))
+    assert.ok(/invalid expression/i.test(invalidExplainText), `Expected 'Invalid expression' in banner, got: ${invalidExplainText}`)
 
     // Qual: invalid numeric input should not snap back (during typing)
     const invalidExplainXValue = await getInputValue(page, 'input.recipe-field[data-label="x"]')
@@ -1577,6 +1576,77 @@ async function main() {
     await setInputValue(page, 'input.recipe-field[data-label="a"]', '9')
     const urlAfterEdit = await page.evaluate(() => location.search)
     assert.ok(urlAfterEdit.includes('a=9'), `URL should contain a=9 after edit, got ${urlAfterEdit}`)
+
+    // Qual: URL state persists after page reload
+    await page.goto(`${baseUrl}?recipe=pyzza&x=2.5`)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const xBeforeReload = await page.evaluate(() => state.solve?.ass?.x)
+    assert.ok(Math.abs(xBeforeReload - 2.5) < 0.001, `x should be 2.5 before reload, got ${xBeforeReload}`)
+    
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    
+    const xAfterReload = await page.evaluate(() => state.solve?.ass?.x)
+    const dropdownAfterReload = await page.$eval('#recipeSelect', el => el.value)
+    const urlAfterReload = await page.evaluate(() => location.search)
+    
+    assert.ok(Math.abs(xAfterReload - 2.5) < 0.001, `x should persist as 2.5 after reload, got ${xAfterReload}`)
+    assert.equal(dropdownAfterReload, 'pyzza', 'Dropdown should still show pyzza after reload')
+    assert.ok(urlAfterReload.includes('recipe=pyzza'), `URL should still contain recipe=pyzza after reload, got ${urlAfterReload}`)
+    assert.ok(urlAfterReload.includes('x=2.5'), `URL should still contain x=2.5 after reload, got ${urlAfterReload}`)
+
+    // =========================================================================
+    // Arithmetic in Fields Quals ([ARI] feature)
+    // =========================================================================
+
+    // Qual: typing constant arithmetic expression shows expression until blur
+    await page.goto(baseUrl)
+    await page.select('#recipeSelect', 'pyzza')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="a"]', '2+1')
+    await new Promise(r => setTimeout(r, 50))
+    const ariBeforeBlur = await getInputValue(page, 'input.recipe-field[data-label="a"]')
+    assert.equal(ariBeforeBlur, '2+1', 'Expression should stay visible before blur')
+    const ariInvalidBeforeBlur = await page.$eval('input.recipe-field[data-label="a"]', el => el.classList.contains('invalid'))
+    assert.equal(ariInvalidBeforeBlur, false, 'Field should not be invalid while typing expression')
+    
+    // Qual: on blur, expression is replaced with evaluated result
+    await blurSelector(page, 'input.recipe-field[data-label="a"]')
+    const ariAVal = await getInputValue(page, 'input.recipe-field[data-label="a"]')
+    assert.equal(ariAVal, '3', 'After blur, "2+1" should evaluate to 3')
+    const ariAInvalid = await page.$eval('input.recipe-field[data-label="a"]', el => el.classList.contains('invalid'))
+    assert.equal(ariAInvalid, false, 'Field should not be invalid after arithmetic expression')
+
+    // Qual: typing expression with variables is rejected (constants only)
+    await page.select('#recipeSelect', 'pyzza')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="a"]', 'b+1')
+    await new Promise(r => setTimeout(r, 100))
+    const ariVarExprInvalid = await page.$eval('input.recipe-field[data-label="a"]', el => el.classList.contains('invalid'))
+    assert.equal(ariVarExprInvalid, true, 'Expression with variables should be invalid')
+
+    // Qual: invalid expression shows error
+    await page.select('#recipeSelect', 'pyzza')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="a"]', '2++3')
+    await new Promise(r => setTimeout(r, 100))
+    
+    const ariInvalidExprInvalid = await page.$eval('input.recipe-field[data-label="a"]', el => el.classList.contains('invalid'))
+    assert.equal(ariInvalidExprInvalid, true, 'Invalid expression should mark field invalid')
+
+    // Qual: sqrt and other math functions work in field input
+    await page.select('#recipeSelect', 'pyzza')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await setInputValue(page, 'input.recipe-field[data-label="a"]', 'sqrt(9)')
+    const ariSqrtVal = await getInputValue(page, 'input.recipe-field[data-label="a"]')
+    assert.equal(ariSqrtVal, '3', 'Typing "sqrt(9)" in field should evaluate to 3')
+
+    // Qual: plain numbers still work (fast path)
+    await page.select('#recipeSelect', 'pyzza')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await setInputValue(page, 'input.recipe-field[data-label="a"]', '7')
+    const ariPlainVal = await getInputValue(page, 'input.recipe-field[data-label="a"]')
+    assert.equal(ariPlainVal, '7', 'Plain number input should still work')
 
     console.log('All quals passed.')
   } catch (e) {
