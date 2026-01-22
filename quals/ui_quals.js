@@ -22,7 +22,8 @@ async function waitForNextFrame(page) {
 }
 
 async function setInputValue(page, selector, value) {
-  const el = await page.waitForSelector(selector, { visible: true })
+  const el = await page.waitForSelector(selector)
+  await el.evaluate(e => e.scrollIntoView({ block: 'center' }))
   await el.click({ clickCount: 3 })
   await page.keyboard.type(String(value))
   await el.evaluate(e => e.blur())
@@ -416,6 +417,8 @@ async function main() {
       window.__sliderInputs = 0
       const slider = document.querySelector('input.slider-input[data-var-name="x"]')
       slider.addEventListener('input', () => { window.__sliderInputs += 1 })
+      // Scroll slider into view so mouse events work
+      slider.scrollIntoView({ block: 'center' })
     })
     const sliderHandle = await page.$('input.slider-input[data-var-name="x"]')
     const sliderBox = await sliderHandle.boundingBox()
@@ -883,7 +886,8 @@ async function main() {
     const testFieldsBefore = await page.$$eval('input.recipe-field', els => els.map(e => e.value))
     assert.equal(testFieldsBefore.length >= 2, true)
 
-    await setInputValue(page, 'input.recipe-field:nth-of-type(2)', '0.5')
+    // Use data-label selector instead of nth-of-type (which breaks when inputs are wrapped)
+    await setInputValue(page, 'input.recipe-field[data-label="x/2"]', '0.5')
 
     await page.waitForFunction(() => {
       if (typeof state === 'undefined') return false

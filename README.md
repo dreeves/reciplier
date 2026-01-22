@@ -679,6 +679,15 @@ work because it's constrained to be similar to a 3-4-5 triangle. Which is fine
 but we should find a way to make the problem more transparent to the user. See
 also [SEE].
 
+* [TVR] Sometimes, as in the Beeminder commitment dial with goal date, goal
+value, and goal rate, we want to say that exactly 1 out of 3 cells needs to be
+frozen. The status quo in Beeminderland is that clicking to edit a pegged cell
+makes it automatically unpeg itself and one of the other two cells (with no way
+to choose which) becomes pegged instead. I don't love that. It feels
+insufficiently anti-magical. But having the UI complain at you for entering
+values incompatible with the constraints might be annoying. I suspect there's a
+best-of-all-worlds solution but I haven't found it yet.
+
 
 ## Latest half-baked ideas for cell syntax
 

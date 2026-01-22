@@ -1,10 +1,69 @@
 // =============================================================================
-// Configuration
+// Configuration Defaults
+// =============================================================================
+// Edit these values to change the default behavior of the debug/config panel.
+// All runtime config variables are initialized from these defaults.
+
+const CONFIG_DEFAULTS = {
+// --- Trigger Modes ---
+// Which triggers are active by default for pegging/freezing fields.
+// Invisible: 'dblclick', 'tripleclick', 'longpress', 'borderclick', 'modclick', 'rightclick'
+// Visual: 'cornerpin', 'edgedots', 'brackets', 'hoverglow'
+triggerModes: ['longpress', 'cornerpin'],
+
+// --- Edge Threshold ---
+// Pixel distance from field edge that counts as "border click" or "hover glow"
+borderClickThresholdPx: 5,
+
+// --- Pin Size ---
+// Base size of corner pins in pixels (desktop). On mobile (<768px), capped at 14px.
+cornerPinSizePx: 14,
+
+// --- Timing ---
+// Long-press duration to trigger peg (ms)
+longpressDelayMs: 400,
+// Triple-click timeout window (ms)
+tripleclickTimeoutMs: 500,
+
+// --- Indicator Visibility ---
+// true = always show, false = only show on focus
+indicatorShowAlways: {
+  background: true,   // Blue background for pegged fields
+  cornerpin: false,   // Corner pin emoji
+  edgedots: false,    // Edge dots
+  brackets: false,     // Corner brackets
+},
+
+// --- Responsive Breakpoint ---
+// Screen width below which mobile pin size cap applies
+mobileBreakpointPx: 768,
+// Maximum pin size on mobile screens
+mobilePinMaxSizePx: 14,
+
+// --- Debug Panel ---
+// Whether the debug panel starts collapsed (true) or expanded (false)
+debugPanelStartsCollapsed: false
+}
+
+// =============================================================================
+// Runtime Configuration (initialized from defaults)
 // =============================================================================
 
-// Trigger mode for pegging/freezing fields: 'longpress', 'dblclick', 'tripleclick'
-const TRIGGER_MODE = 'longpress'
-const LONGPRESS_DELAY_MS = 400
+let TRIGGER_MODES = new Set(CONFIG_DEFAULTS.triggerModes)
+let BORDER_CLICK_THRESHOLD_PX = CONFIG_DEFAULTS.borderClickThresholdPx
+let CORNER_PIN_SIZE_PX = CONFIG_DEFAULTS.cornerPinSizePx
+const LONGPRESS_DELAY_MS = CONFIG_DEFAULTS.longpressDelayMs
+const TRIPLECLICK_TIMEOUT_MS = CONFIG_DEFAULTS.tripleclickTimeoutMs
+
+let INDICATOR_SHOW_ALWAYS = { ...CONFIG_DEFAULTS.indicatorShowAlways }
+
+const MOBILE_BREAKPOINT = CONFIG_DEFAULTS.mobileBreakpointPx
+let lastWasMobile = window.innerWidth < MOBILE_BREAKPOINT
+
+function getResponsivePinSize() {
+  const isMobile = window.innerWidth < MOBILE_BREAKPOINT
+  return isMobile ? Math.min(CONFIG_DEFAULTS.mobilePinMaxSizePx, CORNER_PIN_SIZE_PX) : CORNER_PIN_SIZE_PX
+}
 
 // =============================================================================
 // Main Parse and Render Functions
@@ -114,7 +173,8 @@ function renderRecipe() {
       const disabledAttr = disableInputs ? ' disabled' : ''
 
       const label = cell.ceqn.length > 0 ? cell.ceqn[0].trim() : ''
-      const inputHtml = `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''} ${isInvalid ? 'invalid' : ''}" data-label="${label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}"${disabledAttr}>`
+      const focusOnlyBgClass = !INDICATOR_SHOW_ALWAYS.background ? 'focus-only-bg' : ''
+      const inputHtml = `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''} ${isInvalid ? 'invalid' : ''} ${focusOnlyBgClass}" data-label="${label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}"${disabledAttr}>`
       const placeholder = `@@RECIPLIER_CELL_${cell.id}@@`
       placeholders.set(placeholder, inputHtml)
       markdownText += placeholder
@@ -317,6 +377,218 @@ function handleFieldDoubleClick(e) {
   toggleCellPeg(e.target)
 }
 
+// --- Border-click trigger ---
+function isClickNearBorder(e) {
+  const input = e.target
+  const rect = input.getBoundingClientRect()
+  const t = BORDER_CLICK_THRESHOLD_PX
+  
+  const distFromLeft = e.clientX - rect.left
+  const distFromRight = rect.right - e.clientX
+  const distFromTop = e.clientY - rect.top
+  const distFromBottom = rect.bottom - e.clientY
+  
+  return distFromLeft < t || distFromRight < t || distFromTop < t || distFromBottom < t
+}
+
+function handleFieldClick(e) {
+  if (isClickNearBorder(e)) {
+    e.preventDefault()
+    toggleCellPeg(e.target)
+  }
+}
+
+function handleFieldMouseMove(e) {
+  const input = e.target
+  if (isClickNearBorder(e)) {
+    input.style.cursor = 'pointer'
+  } else {
+    input.style.cursor = ''
+  }
+}
+
+function handleFieldMouseLeave(e) {
+  e.target.style.cursor = ''
+}
+
+// --- Corner Pin trigger ---
+function createCornerPin(input) {
+  const pin = document.createElement('span')
+  const isPinned = state.fixedCellIds.has(input.dataset.cellId)
+  const focusOnlyClass = !INDICATOR_SHOW_ALWAYS.cornerpin ? ' focus-only' : ''
+  pin.className = 'corner-pin' + (isPinned ? ' pinned' : '') + focusOnlyClass
+  pin.textContent = isPinned ? '●' : '📌'
+  // TODO: vet UI copy (Latin placeholder)
+  pin.title = isPinned ? 'Preme ut liberes (valorem mutabilem redde)' : 'Preme ut figes (valorem fixum serva)'
+  // Apply dynamic size (responsive)
+  const size = getResponsivePinSize()
+  const fontSize = Math.max(8, Math.round(size * 0.67))
+  pin.style.width = size + 'px'
+  pin.style.height = size + 'px'
+  pin.style.fontSize = fontSize + 'px'
+  pin.style.lineHeight = size + 'px'
+  pin.style.top = (-size / 3) + 'px'
+  pin.style.right = (-size / 3) + 'px'
+  pin.addEventListener('click', (e) => {
+    e.stopPropagation()
+    toggleCellPeg(input)
+  })
+  return pin
+}
+
+// --- Edge Dots trigger ---
+function createEdgeDots(input) {
+  const dots = []
+  const positions = ['top', 'right', 'bottom', 'left']
+  const isPinned = state.fixedCellIds.has(input.dataset.cellId)
+  const focusOnlyClass = !INDICATOR_SHOW_ALWAYS.edgedots ? ' focus-only' : ''
+  
+  for (const pos of positions) {
+    const dot = document.createElement('span')
+    dot.className = 'edge-dot ' + pos + (isPinned ? ' pinned' : '') + focusOnlyClass
+    dot.addEventListener('click', (e) => {
+      e.stopPropagation()
+      toggleCellPeg(input)
+      const nowPinned = state.fixedCellIds.has(input.dataset.cellId)
+      dots.forEach(d => d.classList.toggle('pinned', nowPinned))
+    })
+    dots.push(dot)
+  }
+  return dots
+}
+
+// --- Corner Brackets trigger ---
+function createCornerBrackets(input) {
+  const brackets = []
+  const corners = [
+    { pos: 'top-left', char: '⌜' },
+    { pos: 'top-right', char: '⌝' },
+    { pos: 'bottom-left', char: '⌞' },
+    { pos: 'bottom-right', char: '⌟' }
+  ]
+  const isPinned = state.fixedCellIds.has(input.dataset.cellId)
+  const focusOnlyClass = !INDICATOR_SHOW_ALWAYS.brackets ? ' focus-only' : ''
+  
+  for (const corner of corners) {
+    const bracket = document.createElement('span')
+    bracket.className = 'corner-bracket ' + corner.pos + (isPinned ? ' pinned' : '') + focusOnlyClass
+    bracket.textContent = corner.char
+    bracket.addEventListener('click', (e) => {
+      e.stopPropagation()
+      toggleCellPeg(input)
+      const nowPinned = state.fixedCellIds.has(input.dataset.cellId)
+      brackets.forEach(b => b.classList.toggle('pinned', nowPinned))
+    })
+    brackets.push(bracket)
+  }
+  return brackets
+}
+
+// --- Hover Glow trigger ---
+function getClosestEdge(e, input) {
+  const rect = input.getBoundingClientRect()
+  const t = BORDER_CLICK_THRESHOLD_PX
+  
+  const distFromLeft = e.clientX - rect.left
+  const distFromRight = rect.right - e.clientX
+  const distFromTop = e.clientY - rect.top
+  const distFromBottom = rect.bottom - e.clientY
+  
+  const distances = [
+    { edge: 'left', dist: distFromLeft },
+    { edge: 'right', dist: distFromRight },
+    { edge: 'top', dist: distFromTop },
+    { edge: 'bottom', dist: distFromBottom }
+  ]
+  
+  const closest = distances.reduce((min, curr) => curr.dist < min.dist ? curr : min)
+  return closest.dist < t ? closest.edge : null
+}
+
+function clearHoverGlow(input) {
+  input.classList.remove('hoverglow-left', 'hoverglow-right', 'hoverglow-top', 'hoverglow-bottom')
+}
+
+function handleHoverGlowMouseMove(e) {
+  const input = e.target
+  clearHoverGlow(input)
+  const edge = getClosestEdge(e, input)
+  if (edge) {
+    input.classList.add('hoverglow-' + edge)
+    input.style.cursor = 'pointer'
+  } else {
+    input.style.cursor = ''
+  }
+}
+
+function handleHoverGlowMouseLeave(e) {
+  const input = e.target
+  clearHoverGlow(input)
+  input.style.cursor = ''
+}
+
+function handleHoverGlowClick(e) {
+  // Skip if borderclick is also active (it handles edge clicks)
+  if (TRIGGER_MODES.has('borderclick')) return
+  
+  const input = e.target
+  const edge = getClosestEdge(e, input)
+  if (edge) {
+    e.preventDefault()
+    toggleCellPeg(input)
+  }
+}
+
+// --- Triple-click trigger ---
+let tripleclickCount = 0
+let tripleclickTimer = null
+let tripleclickTarget = null
+
+function handleFieldTripleClick(e) {
+  const input = e.target
+  
+  // Reset if clicking a different target
+  if (tripleclickTarget !== input) {
+    tripleclickCount = 0
+    tripleclickTarget = input
+  }
+  
+  tripleclickCount++
+  
+  // Clear existing timer
+  if (tripleclickTimer) {
+    clearTimeout(tripleclickTimer)
+  }
+  
+  // Reset count after timeout
+  tripleclickTimer = setTimeout(() => {
+    tripleclickCount = 0
+    tripleclickTarget = null
+  }, TRIPLECLICK_TIMEOUT_MS)
+  
+  if (tripleclickCount === 3) {
+    tripleclickCount = 0
+    tripleclickTarget = null
+    clearTimeout(tripleclickTimer)
+    tripleclickTimer = null
+    toggleCellPeg(input)
+  }
+}
+
+// --- Modifier-click trigger ---
+function handleFieldModClick(e) {
+  if (e.shiftKey || e.ctrlKey || e.metaKey) {
+    e.preventDefault()
+    toggleCellPeg(e.target)
+  }
+}
+
+// --- Right-click trigger ---
+function handleFieldRightClick(e) {
+  e.preventDefault()
+  toggleCellPeg(e.target)
+}
+
 // --- Long-press trigger ---
 let longpressTimer = null
 let longpressTarget = null
@@ -345,17 +617,62 @@ function handleFieldPointerEnd(e) {
   longpressTarget = null
 }
 
-// --- Attach triggers based on mode ---
+// --- Attach triggers based on active modes ---
 function attachPegTrigger(input) {
-  if (TRIGGER_MODE === 'dblclick') {
+  // Check if we need a wrapper for visual modes
+  const needsWrapper = TRIGGER_MODES.has('cornerpin') || 
+                       TRIGGER_MODES.has('edgedots') || 
+                       TRIGGER_MODES.has('brackets')
+  
+  let wrapper = null
+  if (needsWrapper) {
+    wrapper = document.createElement('span')
+    wrapper.className = 'field-wrapper'
+    input.parentNode.insertBefore(wrapper, input)
+    wrapper.appendChild(input)
+  }
+
+  if (TRIGGER_MODES.has('dblclick')) {
     input.addEventListener('dblclick', handleFieldDoubleClick)
-  } else if (TRIGGER_MODE === 'longpress') {
+  }
+  if (TRIGGER_MODES.has('longpress')) {
     input.addEventListener('pointerdown', handleFieldPointerDown)
     input.addEventListener('pointerup', handleFieldPointerEnd)
     input.addEventListener('pointerleave', handleFieldPointerEnd)
     input.addEventListener('pointercancel', handleFieldPointerEnd)
-  } else {
-    throw new Error(`Unknown TRIGGER_MODE: ${TRIGGER_MODE}`)
+  }
+  if (TRIGGER_MODES.has('borderclick')) {
+    input.addEventListener('click', handleFieldClick)
+    input.addEventListener('mousemove', handleFieldMouseMove)
+    input.addEventListener('mouseleave', handleFieldMouseLeave)
+  }
+  if (TRIGGER_MODES.has('tripleclick')) {
+    input.addEventListener('click', handleFieldTripleClick)
+  }
+  if (TRIGGER_MODES.has('modclick')) {
+    input.addEventListener('click', handleFieldModClick)
+  }
+  if (TRIGGER_MODES.has('rightclick')) {
+    input.addEventListener('contextmenu', handleFieldRightClick)
+  }
+  
+  // Visual trigger modes
+  if (TRIGGER_MODES.has('cornerpin') && wrapper) {
+    const pin = createCornerPin(input)
+    wrapper.appendChild(pin)
+  }
+  if (TRIGGER_MODES.has('edgedots') && wrapper) {
+    const dots = createEdgeDots(input)
+    dots.forEach(dot => wrapper.appendChild(dot))
+  }
+  if (TRIGGER_MODES.has('brackets') && wrapper) {
+    const brackets = createCornerBrackets(input)
+    brackets.forEach(bracket => wrapper.appendChild(bracket))
+  }
+  if (TRIGGER_MODES.has('hoverglow')) {
+    input.addEventListener('mousemove', handleHoverGlowMouseMove)
+    input.addEventListener('mouseleave', handleHoverGlowMouseLeave)
+    input.addEventListener('click', handleHoverGlowClick)
   }
 }
 
@@ -414,6 +731,94 @@ function showNotification(message) {
 // Initialization
 // =============================================================================
 
+function initDebugPanel() {
+  const panel = $('debugPanel')
+  if (!panel) return
+
+  // Set initial collapsed state from config (panel has 'open' by default in HTML)
+  if (CONFIG_DEFAULTS.debugPanelStartsCollapsed) {
+    panel.removeAttribute('open')
+  }
+
+  // Set initial checkbox states from TRIGGER_MODES
+  panel.querySelectorAll('input[data-trigger-mode]').forEach(checkbox => {
+    checkbox.checked = TRIGGER_MODES.has(checkbox.dataset.triggerMode)
+  })
+
+  // Set initial checkbox states for indicator visibility
+  panel.querySelectorAll('input[data-indicator-visibility]').forEach(checkbox => {
+    const indicator = checkbox.dataset.indicatorVisibility
+    checkbox.checked = INDICATOR_SHOW_ALWAYS[indicator]
+  })
+
+  const thresholdInput = $('borderThreshold')
+  const thresholdValue = $('borderThresholdValue')
+  if (thresholdInput) {
+    thresholdInput.value = BORDER_CLICK_THRESHOLD_PX
+    if (thresholdValue) thresholdValue.textContent = BORDER_CLICK_THRESHOLD_PX
+  }
+
+  const pinSizeInput = $('pinSize')
+  const pinSizeValue = $('pinSizeValue')
+  if (pinSizeInput) {
+    pinSizeInput.value = CORNER_PIN_SIZE_PX
+    if (pinSizeValue) pinSizeValue.textContent = CORNER_PIN_SIZE_PX
+  }
+
+  // Handle trigger mode checkbox changes
+  panel.querySelectorAll('input[data-trigger-mode]').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      const mode = e.target.dataset.triggerMode
+      if (e.target.checked) {
+        TRIGGER_MODES.add(mode)
+      } else {
+        TRIGGER_MODES.delete(mode)
+      }
+      renderRecipe()
+    })
+  })
+
+  // Handle indicator visibility checkbox changes
+  panel.querySelectorAll('input[data-indicator-visibility]').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      const indicator = e.target.dataset.indicatorVisibility
+      INDICATOR_SHOW_ALWAYS[indicator] = e.target.checked
+      renderRecipe()
+    })
+  })
+
+  // Handle border threshold changes
+  if (thresholdInput) {
+    thresholdInput.addEventListener('input', (e) => {
+      BORDER_CLICK_THRESHOLD_PX = parseInt(e.target.value, 10)
+      if (thresholdValue) thresholdValue.textContent = BORDER_CLICK_THRESHOLD_PX
+    })
+  }
+
+  // Handle pin size changes
+  if (pinSizeInput) {
+    pinSizeInput.addEventListener('input', (e) => {
+      CORNER_PIN_SIZE_PX = parseInt(e.target.value, 10)
+      if (pinSizeValue) pinSizeValue.textContent = CORNER_PIN_SIZE_PX
+      // Re-render to update pin sizes
+      if (TRIGGER_MODES.has('cornerpin')) {
+        renderRecipe()
+      }
+    })
+  }
+
+  // Handle responsive pin size on window resize
+  window.addEventListener('resize', () => {
+    const isMobile = window.innerWidth < MOBILE_BREAKPOINT
+    if (isMobile !== lastWasMobile) {
+      lastWasMobile = isMobile
+      if (TRIGGER_MODES.has('cornerpin')) {
+        renderRecipe()
+      }
+    }
+  })
+}
+
 function init() {
   // Populate dropdown
   const select = $('recipeSelect')
@@ -428,6 +833,9 @@ function init() {
   $('recipeTextarea').addEventListener('input',  handleTextareaInput)
   $('recipeSelect')  .addEventListener('change', handleRecipeChange)
   $('copyButton')    .addEventListener('click',  handleCopyToClipboard)
+
+  // Initialize debug panel
+  initDebugPanel()
   const sliderPanel = $('sliderPanel')
   if (sliderPanel) {
     sliderPanel.addEventListener('input', handleSliderInput)

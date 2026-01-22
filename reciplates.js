@@ -47,6 +47,11 @@ Roll out dough into a right triangle with legs of length a={a = 3x} and b={b = 4
 Then eat it.
 
 Sanity check: {a}^2 + {b}^2 = {a^2} + {b^2} = {a^2 + b^2 = c^2}
+
+### Above enforces a 3-4-5 ratio; here's one that doesn't:
+
+{A}^2 + {B}^2 = {C}^2
+<!-- {A^2 + B^2 = C^2} -->
 `,
 // -----------------------------------------------------------------------------
 cookies: `\
