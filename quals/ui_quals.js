@@ -1534,6 +1534,50 @@ async function main() {
     const expectedPhi = (1 + Math.sqrt(5)) / 2
     assert.ok(Math.abs(goldenRatioPhi - expectedPhi) < 0.001, `golden ratio phi should be ~1.618, got ${goldenRatioPhi}`)
 
+    // =========================================================================
+    // URL State Management Quals ([LNK] feature)
+    // =========================================================================
+
+    // Qual: URL with ?recipe=crepes loads crepes template
+    const baseUrl = fileUrl(path.join(__dirname, '..', 'index.html'))
+    await page.goto(`${baseUrl}?recipe=crepes`)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const urlRecipeText = await page.evaluate(() => state.recipeText)
+    const urlRecipeDropdown = await page.$eval('#recipeSelect', el => el.value)
+    assert.equal(urlRecipeDropdown, 'crepes', 'URL ?recipe=crepes should select crepes in dropdown')
+    assert.ok(urlRecipeText.includes('crepes'), 'URL ?recipe=crepes should load crepes template')
+
+    // Qual: URL with ?recipe=pyzza&x=2 loads pyzza with x=2 override
+    await page.goto(`${baseUrl}?recipe=pyzza&x=2`)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const urlPyzzaX = await page.evaluate(() => state.solve?.ass?.x)
+    assert.ok(Math.abs(urlPyzzaX - 2) < 0.001, `URL ?recipe=pyzza&x=2 should set x=2, got ${urlPyzzaX}`)
+    const urlPyzzaA = await getInputValue(page, 'input.recipe-field[data-label="a"]')
+    assert.equal(urlPyzzaA, '6', 'URL ?recipe=pyzza&x=2 should scale a to 6')
+
+    // Qual: URL with ?rawcipe= loads compressed custom template
+    const customTemplate = '{x} {y = 2x}'
+    const compressed = await page.evaluate((t) => LZString.compressToEncodedURIComponent(t), customTemplate)
+    await page.goto(`${baseUrl}?rawcipe=${compressed}`)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const rawcipeText = await page.evaluate(() => state.recipeText)
+    assert.equal(rawcipeText, customTemplate, 'URL ?rawcipe= should load custom template')
+    const rawcipeDropdown = await page.$eval('#recipeSelect', el => el.value)
+    assert.equal(rawcipeDropdown, 'custom', 'URL ?rawcipe= should select custom in dropdown')
+
+    // Qual: URL updates when recipe is selected
+    await page.goto(baseUrl)
+    await page.waitForSelector('#recipeSelect', { visible: true })
+    await page.select('#recipeSelect', 'pyzza')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const urlAfterSelect = await page.evaluate(() => location.search)
+    assert.ok(urlAfterSelect.includes('recipe=pyzza'), `URL should contain recipe=pyzza after selection, got ${urlAfterSelect}`)
+
+    // Qual: URL updates when field value changes
+    await setInputValue(page, 'input.recipe-field[data-label="a"]', '9')
+    const urlAfterEdit = await page.evaluate(() => location.search)
+    assert.ok(urlAfterEdit.includes('a=9'), `URL should contain a=9 after edit, got ${urlAfterEdit}`)
+
     console.log('All quals passed.')
   } catch (e) {
     if (pageConsoleLogs.length > 0) {

@@ -582,8 +582,10 @@ for it. Also print the constraint satisfaction problem in Mathematica syntax so
 I can confirm if it's really true that there's no solution. For example:
 Solve[{c == 50, a == 3x, b == 4x, 25 == a^2 + b^2 == c^2}, {c, a, b, x}]
 
-
-## Future Work
+* [DCF] Double-clicking to freeze/unfreeze is terrible. For one thing, I
+double-click cells by muscle memory to highlight the current contents of a field
+in order to overwrite it. Worse, if you don't happen to ever double-click a cell
+then freezing/unfreezing is totally undiscoverable.
 
 * [LNK] Direct links to recipes. When you select a recipe template from the
 dropdown, update the query string like "reciplier.dreev.es/?recipe=crepes" using
@@ -593,16 +595,19 @@ thing with lz-string in real time like
 Also, as the user edits fields, append the cvals to the URL as well, like
 "reciplier.dreev.es/?recipe=pyzza&x=3&a=9&b=12&c=15".
 
+
+## Future Work
+
+* [ARI] Support arithmetic in the fields, not just the template. Should be a
+straightforward call to vareval? Needs lots of quals for this, including typing
+expressions that refer to other variables. Also what should happen if you have a
+cell {x} and you type "x" into it. Maybe "circular reference error"?
+
 * [CRT] Crowdsource templates. If the template text area doesn't match one of
 the existing reciplates (the dropdown shows "Custom Template" in this case) then
 a buttom becomes clickable that opens a popup that prompts the user to submit
 their template to be considered for inclusion in the dropdown. Prompt the user
-for a name for their recipe too.
-
-* [DCF] Double-clicking to freeze/unfreeze is terrible. For one thing, I
-double-click cells by muscle memory to highlight the current contents of a field
-in order to overwrite it. Worse, if you don't happen to ever double-click a cell
-then freezing/unfreezing is totally undiscoverable.
+for a name for their recipe too. This involves adding a back end maybe.
 
 * [SEE] Thinking out loud about going more anti-magic: Currently when you edit a
 field the system just tries changing other variables until something works.
@@ -610,6 +615,10 @@ That's pretty magical. What if instead you could see other fields kind of cross
 themselves out and show the new values implied by your edit? Or, like, if more
 than one cell can change to accommodate your edit you're forced to explicitly
 freeze cells until that's no longer the case?
+
+* [VAR] Relatedly, should we make it easy to see the current assignment of
+values to variables? Or should you just include something like 
+`Variables: a={a}, b={b}, ...` in the reciplate if you want to see that?
 
 * [MTH] Make it easy to add any new math functions or other utilities that we
 want available for defining cells. Like how we currently have `unixtime()`.
@@ -623,8 +632,7 @@ about defining new functions and constants. Just an idea for now.
 
 * [ERB] Then could we support something like {goal_units := "kg"} and then ... I
 guess that's turning this thing into a whole templating engine like ERB.
-
-* [ARI] Support arithmetic in the fields, not just the template.
+Probably the wrong direction for this tool.
 
 * [SPN] Show a spinner or something while searching for a solution. (Not
 currently necessary; could be in the future with fancier solvers.)

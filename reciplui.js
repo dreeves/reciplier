@@ -127,16 +127,15 @@ function insertCriticalErrorBanners(rendered, errorAssignments) {
 
 const markdownRenderer = markdownit({ html: true, breaks: true })
 
-function updateRecipeDropdown() {
-  // Check if current text matches any recipe
-  let matchingKey = 'custom'
+function getRecipeKeyForText(text) {
   for (const key in reciplates) {
-    if (reciplates[key] === state.recipeText) {
-      matchingKey = key
-      break
-    }
+    if (reciplates[key] === text) return key
   }
-  $('recipeSelect').value = matchingKey
+  return null
+}
+
+function updateRecipeDropdown() {
+  $('recipeSelect').value = getRecipeKeyForText(state.recipeText) || 'custom'
 }
 
 function renderRecipe() {
@@ -338,6 +337,7 @@ function handleFieldInput(e) {
   })
 
   syncAfterSolve(solveResult.invalidCellIds, input)
+  updateUrl()
 }
 
 function handleFieldKeypress(e) {
@@ -685,6 +685,7 @@ function handleRecipeChange() {
     parseRecipe()
     updateRecipeDropdown()
     renderRecipe()
+    updateUrl()
   }
 }
 
@@ -693,6 +694,7 @@ function handleTextareaInput(e) {
   parseRecipe()
   updateRecipeDropdown()
   renderRecipe()
+  updateUrl()
 }
 
 // =============================================================================
@@ -819,6 +821,94 @@ function initDebugPanel() {
   })
 }
 
+// =============================================================================
+// URL State Management (Direct Links to Recipes)
+// =============================================================================
+
+let urlUpdateEnabled = true
+
+function updateUrl() {
+  if (!urlUpdateEnabled) return
+  if (typeof LZString === 'undefined') return
+  
+  const params = new URLSearchParams()
+  
+  const recipeKey = getRecipeKeyForText(state.recipeText)
+  if (recipeKey && recipeKey !== 'custom') {
+    params.set('recipe', recipeKey)
+  } else if (state.recipeText.trim()) {
+    const compressed = LZString.compressToEncodedURIComponent(state.recipeText)
+    params.set('rawcipe', compressed)
+  }
+  
+  if (state.solve && state.solve.ass) {
+    const vars = Object.keys(state.solve.ass).sort()
+    for (const v of vars) {
+      const val = state.solve.ass[v]
+      if (isFiniteNumber(val)) {
+        params.set(v, formatNum(val))
+      }
+    }
+  }
+  
+  const queryString = params.toString()
+  const newUrl = queryString ? `${location.pathname}?${queryString}` : location.pathname
+  history.replaceState(null, '', newUrl)
+}
+
+function loadFromUrl() {
+  const params = new URLSearchParams(location.search)
+  
+  const recipeKey = params.get('recipe')
+  const rawcipe = params.get('rawcipe')
+  
+  let recipeText = null
+  let selectedKey = null
+  
+  if (recipeKey && reciplates.hasOwnProperty(recipeKey)) {
+    recipeText = reciplates[recipeKey]
+    selectedKey = recipeKey
+  } else if (rawcipe && typeof LZString !== 'undefined') {
+    const decompressed = LZString.decompressFromEncodedURIComponent(rawcipe)
+    if (decompressed) {
+      recipeText = decompressed
+      selectedKey = 'custom'
+    }
+  }
+  
+  if (recipeText === null) return false
+  
+  const varOverrides = {}
+  for (const [key, value] of params) {
+    if (key === 'recipe' || key === 'rawcipe') continue
+    const num = toNum(value)
+    if (isFiniteNumber(num)) {
+      varOverrides[key] = num
+    }
+  }
+  
+  urlUpdateEnabled = false
+  
+  state.recipeText = recipeText
+  $('recipeTextarea').value = recipeText
+  if (selectedKey) $('recipeSelect').value = selectedKey
+  
+  parseRecipe()
+  
+  if (Object.keys(varOverrides).length > 0) {
+    solveAndApply({ seedOverrides: varOverrides })
+    recomputeCellCvals(state.cells, state.solve.ass, state.fixedCellIds)
+  }
+  
+  updateRecipeDropdown()
+  renderRecipe()
+  
+  urlUpdateEnabled = true
+  updateUrl()
+  
+  return true
+}
+
 function init() {
   // Populate dropdown
   const select = $('recipeSelect')
@@ -869,13 +959,16 @@ function init() {
     setHelpOpen(false)
   })
   
-  // Load first recipe
-  const firstKey = Object.keys(recipeDropdown)[0]
-  if (reciplates[firstKey]) {
-    state.recipeText = reciplates[firstKey]
-    $('recipeTextarea').value = state.recipeText
-    parseRecipe()
-    updateRecipeDropdown()
-    renderRecipe()
+  // Try to load from URL first, otherwise load first recipe
+  if (!loadFromUrl()) {
+    const firstKey = Object.keys(recipeDropdown)[0]
+    if (reciplates[firstKey]) {
+      state.recipeText = reciplates[firstKey]
+      $('recipeTextarea').value = state.recipeText
+      parseRecipe()
+      updateRecipeDropdown()
+      renderRecipe()
+      updateUrl()
+    }
   }
 }

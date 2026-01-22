@@ -333,6 +333,7 @@ function handleSliderInput(e) {
   })
 
   syncAfterSolve(solveResult.invalidCellIds)
+  updateUrl()
 }
 
 function handleSliderClose(e) {
