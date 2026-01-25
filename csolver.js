@@ -21,10 +21,16 @@ var {
   varparse,
   isconstant,
   isbarevar,
-  unixtime
+  unixtime,
+  tolerance
 } = (typeof module !== 'undefined' && module.exports)
   ? require('./matheval.js')
-  : { preval, vareval, varparse, isconstant, isbarevar, unixtime }
+  : { preval, vareval, varparse, isconstant, isbarevar, unixtime, tolerance }
+
+// Tolerance constants for floating-point comparison
+const TOL_TIGHT = 1e-9   // For solveFor binary search convergence
+const TOL_MEDIUM = 1e-6  // For equation satisfaction checks
+const TOL_ABS = 1e-12    // Absolute tolerance floor
 
 // =============================================================================
 // solveFor: Solve for a single variable to make expr equal target
@@ -32,7 +38,7 @@ var {
 
 function solveFor(expr, varName, target, values, inf = null, sup = null) {
   const test = { ...values }
-  const tol = Math.abs(target) * 1e-9 + 1e-9
+  const tol = tolerance(target, TOL_TIGHT)
   const hasInf = typeof inf === 'number' && isFinite(inf)
   const hasSup = typeof sup === 'number' && isFinite(sup)
 
@@ -248,8 +254,7 @@ function solveFor(expr, varName, target, values, inf = null, sup = null) {
 // eqnsSatisfied: Check if all equations are satisfied by given values
 // =============================================================================
 
-function eqnsSatisfied(eqns, values, tol = 1e-6) {
-  const absTol = 1e-12
+function eqnsSatisfied(eqns, values, tol = TOL_MEDIUM, absTol = TOL_ABS) {
   for (const eqn of eqns) {
     if (eqn.length < 2) continue
     const results = eqn.map(e => {
@@ -258,8 +263,7 @@ function eqnsSatisfied(eqns, values, tol = 1e-6) {
     })
     if (results.some(r => r.error || !isFinite(r.value))) return false
     const first = results[0].value
-    const tolerance = Math.abs(first) * tol + absTol
-    if (!results.every(r => Math.abs(r.value - first) < tolerance)) return false
+    if (!results.every(r => Math.abs(r.value - first) < tolerance(first, tol, absTol))) return false
   }
   return true
 }
@@ -337,7 +341,7 @@ function tryExtractLinearCoeffs(expr, varNames, baseValues) {
   return { coeffs, constant: f0.value }
 }
 
-function gaussianElim(eqns, vars, inf, sup) {
+function gaussianElim(eqns, vars, inf, sup, knownVars = null) {
   const varNames = Object.keys(vars).sort()
   if (varNames.length === 0) {
     return { ass: { ...vars }, zij: zidge(eqns, vars), sat: eqnsSatisfied(eqns, vars) }
@@ -580,7 +584,166 @@ function sortEqnsByLiterals(eqns) {
   })
 }
 
-function kludgeProp(eqns, vars, inf, sup) {
+// Solve self-referential equations where both sides depend on the same variable
+// Example: [['1/phi', 'phi - 1']] solves to phi = golden ratio
+// This is just solving (e1 - e2) = 0 for the shared variable
+function solveSelfReferential(eqns, values, constrained, trustworthy, inf, sup) {
+  for (const eqn of eqns) {
+    if (eqn.length !== 2) continue
+    const [e1, e2] = eqn
+    if (typeof e1 !== 'string' || typeof e2 !== 'string') continue
+    if (isbarevar(e1) || isbarevar(e2)) continue
+
+    const vars1 = varparse(e1)
+    const vars2 = varparse(e2)
+    if (vars1.size !== 1 || vars2.size !== 1) continue
+
+    const v1 = [...vars1][0]
+    const v2 = [...vars2][0]
+    if (v1 !== v2) continue
+
+    const v = v1
+    if (constrained.has(v) || trustworthy.has(v)) continue
+
+    // Already satisfied?
+    const r1 = vareval(e1, values)
+    const r2 = vareval(e2, values)
+    if (!r1.error && !r2.error && Math.abs(r1.value - r2.value) < tolerance(r1.value, TOL_MEDIUM, TOL_ABS)) continue
+
+    // Solve (e1 - e2) = 0 for v
+    // Try with lower bound of 0 first to prefer positive roots (common case)
+    const diffExpr = `(${e1}) - (${e2})`
+    const lowerBound = inf[v] !== undefined ? inf[v] : 0
+    let solvedVal = solveFor(diffExpr, v, 0, values, lowerBound, sup[v])
+    // Fallback without lower bound if that didn't work
+    if (solvedVal === null) {
+      solvedVal = solveFor(diffExpr, v, 0, values, inf[v], sup[v])
+    }
+    if (solvedVal !== null) {
+      values[v] = solvedVal
+    }
+  }
+}
+
+// Build dependency graph for fallback root search
+function buildDependencyGraph(eqns, constrained) {
+  const definedBy = new Map()
+  const copies = []
+  for (const eqn of eqns) {
+    if (eqn.length !== 2) continue
+    const [e1, e2] = eqn
+    if (isbarevar(e1) && isbarevar(e2)) {
+      copies.push([e1, e2])
+    }
+    if (isbarevar(e1) && typeof e2 === 'string' && !isbarevar(e2)) {
+      const vars = varparse(e2)
+      if (vars.size === 1) {
+        const root = [...vars][0]
+        if (!constrained.has(root) && !constrained.has(e1)) {
+          definedBy.set(e1, { expr: e2, root })
+        }
+      }
+    }
+    if (isbarevar(e2) && typeof e1 === 'string' && !isbarevar(e1)) {
+      const vars = varparse(e1)
+      if (vars.size === 1) {
+        const root = [...vars][0]
+        if (!constrained.has(root) && !constrained.has(e2)) {
+          definedBy.set(e2, { expr: e1, root })
+        }
+      }
+    }
+  }
+  return { definedBy, copies }
+}
+
+// Propagate values from root and compute residual for fallback search
+function propagateAndComputeResidual(rootVal, root, values, definedBy, copies, eqns, constrained) {
+  const test = { ...values, [root]: rootVal }
+
+  // Propagate definedBy expressions
+  for (const [v, { expr }] of definedBy) {
+    const r = vareval(expr, test)
+    if (!r.error && isFinite(r.value)) test[v] = r.value
+  }
+
+  // Copy linked variables
+  for (const [dest, src] of copies) {
+    const v = test[src]
+    if (isFinite(v)) test[dest] = v
+  }
+
+  // Find best values for bare var heads
+  for (const eqn of eqns) {
+    if (eqn.length < 2) continue
+    const head = eqn[0]
+    if (typeof head !== 'string' || !isbarevar(head)) continue
+    if (head === root || constrained.has(head)) continue
+
+    let bestVal = null
+    let bestScore = -1
+    for (let i = 1; i < eqn.length; i++) {
+      const e = eqn[i]
+      if (typeof e === 'number') { bestVal = e; bestScore = 2; break }
+      const r = vareval(e, test)
+      if (r.error || !isFinite(r.value)) continue
+      const vars = varparse(e)
+      const constrainedOnly = [...vars].every(v => constrained.has(v))
+      const score = constrainedOnly ? 1 : 0
+      if (score > bestScore) { bestScore = score; bestVal = r.value }
+    }
+    if (bestVal !== null) test[head] = bestVal
+  }
+
+  // Compute residual
+  let residual = 0
+  for (const eqn of eqns) {
+    if (eqn.length < 2) continue
+    const results = eqn.map(e => {
+      if (typeof e === 'number') return e
+      const r = vareval(e, test)
+      return r.error ? NaN : r.value
+    })
+    if (results.some(r => !isFinite(r))) continue
+    const target = results.find(r => isFinite(r))
+    for (const r of results) residual += (r - target) ** 2
+  }
+
+  return { test, residual }
+}
+
+// Fallback: 1D binary search on root variables when main solver fails
+function fallbackRootSearch(eqns, values, constrained, tol, inf, sup) {
+  const { definedBy, copies } = buildDependencyGraph(eqns, constrained)
+
+  const rootCounts = new Map()
+  for (const { root } of definedBy.values()) {
+    rootCounts.set(root, (rootCounts.get(root) || 0) + 1)
+  }
+
+  for (const [root, count] of rootCounts) {
+    if (count < 2) continue
+
+    let lo = 0.001, hi = 1000
+    for (let iter = 0; iter < 50; iter++) {
+      const mid = (lo + hi) / 2
+      const { test: testValues, residual } = propagateAndComputeResidual(mid, root, values, definedBy, copies, eqns, constrained)
+
+      if (eqnsSatisfied(eqns, testValues, tol)) {
+        Object.assign(values, testValues)
+        break
+      }
+
+      const probeDelta = (hi - lo) * 1e-4 + 1e-6
+      const { residual: residualHi } = propagateAndComputeResidual(mid + probeDelta, root, values, definedBy, copies, eqns, constrained)
+
+      if (residualHi < residual) lo = mid
+      else hi = mid
+    }
+  }
+}
+
+function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
   // Validate that all required variables are provided
   const required = findRequiredVars(eqns)
   const missing = [...required].filter(v => !Object.prototype.hasOwnProperty.call(vars, v))
@@ -589,8 +752,8 @@ function kludgeProp(eqns, vars, inf, sup) {
   }
 
   const values = { ...vars }
-  const tol = 1e-6
-  const absTol = 1e-12
+  const tol = TOL_MEDIUM
+  const absTol = TOL_ABS
 
   function evalExpr(expr) {
     if (typeof expr === 'number') return { value: expr, error: null }
@@ -621,7 +784,15 @@ function kludgeProp(eqns, vars, inf, sup) {
 
   const stableDerived = new Set()
 
+  // Start with constrained vars as trustworthy, plus any known vars from seeds.
+  // Only add knownVars that are NOT already constrained by literals.
+  // Variables constrained by literals are already protected; others should preserve init values.
   const trustworthy = new Set(constrained)
+  if (knownVars) {
+    for (const v of knownVars) {
+      if (!constrained.has(v)) trustworthy.add(v)
+    }
+  }
   let solvedThisPass = new Set()
   let solvedFromStableThisPass = new Set()
 
@@ -650,8 +821,7 @@ function kludgeProp(eqns, vars, inf, sup) {
     const results = eqn.map(evalExpr)
     if (results.some(r => r.error || !isFinite(r.value))) return false
     const first = results[0].value
-    const tolerance = Math.abs(first) * tol + absTol
-    return results.every(r => Math.abs(r.value - first) < tolerance)
+    return results.every(r => Math.abs(r.value - first) < tolerance(first, tol, absTol))
   }
 
   // Use extracted helpers (unixtimeArgs, invertUnixtimeSeconds, isDefinitionPair
@@ -835,47 +1005,6 @@ function kludgeProp(eqns, vars, inf, sup) {
             }
           }
 
-          // Handle product scaling (w*h)
-          if (exprVars.size === 2) {
-            const vars2 = [...exprVars]
-            const a = vars2[0]
-            const b = vars2[1]
-            const compact = expr.replace(/\s+/g, '')
-            if (compact === `${a}*${b}` || compact === `${b}*${a}`) {
-              if (!constrained.has(a) && !constrained.has(b) &&
-                  !solvedThisPass.has(a) && !solvedThisPass.has(b) &&
-                  !trustworthy.has(a) && !trustworthy.has(b)) {
-                const aVal = values[a]
-                const bVal = values[b]
-                if (isFinite(aVal) && isFinite(bVal) && isFinite(target) && target > 0) {
-                  const current = aVal * bVal
-                  let newA = null
-                  let newB = null
-
-                  if (current === 0) {
-                    const root = Math.sqrt(target)
-                    newA = root
-                    newB = root
-                  } else {
-                    const scale = Math.sqrt(target / current)
-                    if (isFinite(scale) && scale > 0) {
-                      newA = aVal * scale
-                      newB = bVal * scale
-                    }
-                  }
-
-                  if (newA !== null && newB !== null) {
-                    const opts = { isTrustworthy, isStable: targetIsStable, isStableNonSingleton: targetStableNonSingleton, eqnLen: eqn.length }
-                    markSolved(a, newA, opts)
-                    markSolved(b, newB, opts)
-                    changed = true
-                    continue
-                  }
-                }
-              }
-            }
-          }
-
           // Generic: try each variable
           const allowTrustworthy = eqnHasLiteral
           let bestVar = null
@@ -904,154 +1033,12 @@ function kludgeProp(eqns, vars, inf, sup) {
     if (!changed) break
   }
 
-  // Handle self-referential equations where both sides depend on the same variable
-  // Example: [['1/phi', 'phi - 1']] should solve to phi = golden ratio
-  // This is just solving (e1 - e2) = 0 for the shared variable
-  for (const eqn of eqns) {
-    if (checkEquation(eqn)) continue
-    if (eqn.length !== 2) continue
-
-    const [e1, e2] = eqn
-    if (typeof e1 !== 'string' || typeof e2 !== 'string') continue
-    if (isbarevar(e1) || isbarevar(e2)) continue
-
-    const vars1 = varparse(e1)
-    const vars2 = varparse(e2)
-    if (vars1.size !== 1 || vars2.size !== 1) continue
-
-    const v1 = [...vars1][0]
-    const v2 = [...vars2][0]
-    if (v1 !== v2) continue
-
-    const v = v1
-    if (constrained.has(v) || trustworthy.has(v)) continue
-
-    // Solve (e1 - e2) = 0 for v
-    // Try with lower bound of 0 first to prefer positive roots (common case)
-    const diffExpr = `(${e1}) - (${e2})`
-    const lowerBound = inf[v] !== undefined ? inf[v] : 0
-    let solvedVal = solveFor(diffExpr, v, 0, values, lowerBound, sup[v])
-    // Fallback without lower bound if that didn't work
-    if (solvedVal === null) {
-      solvedVal = solveFor(diffExpr, v, 0, values, inf[v], sup[v])
-    }
-    if (solvedVal !== null) {
-      values[v] = solvedVal
-    }
-  }
+  // Handle self-referential equations (e.g., 1/phi = phi - 1)
+  solveSelfReferential(eqns, values, constrained, trustworthy, inf, sup)
 
   // Fallback: 1D search on root variables
   if (!eqnsSatisfied(eqns, values)) {
-    const definedBy = new Map()
-    const copies = []
-    for (const eqn of eqns) {
-      if (eqn.length === 2) {
-        const [e1, e2] = eqn
-        if (isbarevar(e1) && isbarevar(e2)) {
-          copies.push([e1, e2])
-        }
-        if (isbarevar(e1) && typeof e2 === 'string' && !isbarevar(e2)) {
-          const vars = varparse(e2)
-          if (vars.size === 1) {
-            const root = [...vars][0]
-            if (!constrained.has(root) && !constrained.has(e1)) {
-              definedBy.set(e1, { expr: e2, root })
-            }
-          }
-        }
-        if (isbarevar(e2) && typeof e1 === 'string' && !isbarevar(e1)) {
-          const vars = varparse(e1)
-          if (vars.size === 1) {
-            const root = [...vars][0]
-            if (!constrained.has(root) && !constrained.has(e2)) {
-              definedBy.set(e2, { expr: e1, root })
-            }
-          }
-        }
-      }
-    }
-
-    const rootCounts = new Map()
-    for (const { root } of definedBy.values()) {
-      rootCounts.set(root, (rootCounts.get(root) || 0) + 1)
-    }
-
-    // Helper: propagate values from root and compute residual
-    // This was duplicated twice in the original code
-    function propagateAndResidual(rootVal, root) {
-      const test = { ...values, [root]: rootVal }
-
-      // Propagate definedBy expressions
-      for (const [v, { expr }] of definedBy) {
-        const r = vareval(expr, test)
-        if (!r.error && isFinite(r.value)) test[v] = r.value
-      }
-
-      // Copy linked variables
-      for (const [dest, src] of copies) {
-        const v = test[src]
-        if (isFinite(v)) test[dest] = v
-      }
-
-      // Find best values for bare var heads
-      for (const eqn of eqns) {
-        if (eqn.length < 2) continue
-        const head = eqn[0]
-        if (typeof head !== 'string' || !isbarevar(head)) continue
-        if (head === root || constrained.has(head)) continue
-
-        let bestVal = null
-        let bestScore = -1
-        for (let i = 1; i < eqn.length; i++) {
-          const e = eqn[i]
-          if (typeof e === 'number') { bestVal = e; bestScore = 2; break }
-          const r = vareval(e, test)
-          if (r.error || !isFinite(r.value)) continue
-          const vars = varparse(e)
-          const constrainedOnly = [...vars].every(v => constrained.has(v))
-          const score = constrainedOnly ? 1 : 0
-          if (score > bestScore) { bestScore = score; bestVal = r.value }
-        }
-        if (bestVal !== null) test[head] = bestVal
-      }
-
-      // Compute residual
-      let residual = 0
-      for (const eqn of eqns) {
-        if (eqn.length < 2) continue
-        const results = eqn.map(e => {
-          if (typeof e === 'number') return e
-          const r = vareval(e, test)
-          return r.error ? NaN : r.value
-        })
-        if (results.some(r => !isFinite(r))) continue
-        const target = results.find(r => isFinite(r))
-        for (const r of results) residual += (r - target) ** 2
-      }
-
-      return { test, residual }
-    }
-
-    for (const [root, count] of rootCounts) {
-      if (count < 2) continue
-
-      let lo = 0.001, hi = 1000
-      for (let iter = 0; iter < 50; iter++) {
-        const mid = (lo + hi) / 2
-        const { test: testValues, residual } = propagateAndResidual(mid, root)
-
-        if (eqnsSatisfied(eqns, testValues, tol)) {
-          Object.assign(values, testValues)
-          break
-        }
-
-        const probeDelta = (hi - lo) * 1e-4 + 1e-6
-        const { residual: residualHi } = propagateAndResidual(mid + probeDelta, root)
-
-        if (residualHi < residual) lo = mid
-        else hi = mid
-      }
-    }
+    fallbackRootSearch(eqns, values, constrained, tol)
   }
 
   const zij = zidge(eqns, values)
@@ -1297,11 +1284,230 @@ function gradientDesc(eqns, initialVars, inf, sup) {
 }
 
 // =============================================================================
+// newtonSolver: Newton-Raphson for non-linear systems
+// =============================================================================
+// For fully-determined non-linear systems (n equations, n unknowns), use
+// Newton's method to find a solution. This handles cases like w*h=A, w²+h²=z²
+// that gaussianElim can't handle and kludgeProp solves greedily.
+
+function newtonSolver(eqns, vars, inf, sup, knownVars = null) {
+  const values = { ...vars }
+
+  // Build list of constraint equations: pairs of expressions that should be equal
+  // Each equation [a, b, c, ...] means a=b, b=c, etc.
+  const constraints = []
+  for (const eqn of eqns) {
+    if (eqn.length < 2) continue
+    for (let i = 0; i < eqn.length - 1; i++) {
+      constraints.push({ left: eqn[i], right: eqn[i + 1] })
+    }
+  }
+
+  if (constraints.length === 0) {
+    return { ass: values, zij: zidge(eqns, values), sat: eqnsSatisfied(eqns, values) }
+  }
+
+  // Find variables that appear in non-linear expressions and aren't pinned
+  const allVars = new Set()
+  const pinnedVars = new Set()
+  for (const c of constraints) {
+    if (typeof c.left === 'number') {
+      if (typeof c.right === 'string' && isbarevar(c.right)) pinnedVars.add(c.right)
+    } else if (typeof c.right === 'number') {
+      if (typeof c.left === 'string' && isbarevar(c.left)) pinnedVars.add(c.left)
+    }
+    if (typeof c.left === 'string') for (const v of varparse(c.left)) allVars.add(v)
+    if (typeof c.right === 'string') for (const v of varparse(c.right)) allVars.add(v)
+  }
+
+  // Variables to solve for: those not pinned to literals
+  const allSolveVars = [...allVars].filter(v => !pinnedVars.has(v)).sort()
+
+  // For potentially underdetermined systems with knownVars, let kludgeProp handle it.
+  // kludgeProp's trustworthy mechanism preserves init values when multiple solutions exist.
+  // Use a margin of 2 to account for redundant/dependent constraints that simple counting misses.
+  // For clearly overdetermined systems, Newton is needed to find the unique solution.
+  const potentiallyUnderdetermined = constraints.length <= allSolveVars.length + 1
+  if (potentiallyUnderdetermined && knownVars && knownVars.size > 0) {
+    return { ass: values, zij: zidge(eqns, values), sat: false }
+  }
+  const solveVars = allSolveVars
+
+  // Newton is for multi-variable non-linear systems only.
+  // Single-variable problems are better handled by kludgeProp's solveFor.
+  // Need at least 2 unknowns and at least as many constraints.
+  if (solveVars.length < 2 || constraints.length < solveVars.length) {
+    return { ass: values, zij: zidge(eqns, values), sat: false }
+  }
+
+  // Evaluate residual: for each constraint, compute left - right
+  function evalResiduals(testValues) {
+    const residuals = []
+    for (const c of constraints) {
+      const leftVal = typeof c.left === 'number' ? c.left : vareval(c.left, testValues).value
+      const rightVal = typeof c.right === 'number' ? c.right : vareval(c.right, testValues).value
+      if (!isFinite(leftVal) || !isFinite(rightVal)) return null
+      residuals.push(leftVal - rightVal)
+    }
+    return residuals
+  }
+
+  // Compute Jacobian numerically
+  function computeJacobian(testValues) {
+    const h = 1e-7
+    const baseResiduals = evalResiduals(testValues)
+    if (!baseResiduals) return null
+
+    const jacobian = []
+    for (let j = 0; j < solveVars.length; j++) {
+      const v = solveVars[j]
+      const perturbed = { ...testValues, [v]: testValues[v] + h }
+      const perturbedResiduals = evalResiduals(perturbed)
+      if (!perturbedResiduals) return null
+
+      const col = perturbedResiduals.map((r, i) => (r - baseResiduals[i]) / h)
+      jacobian.push(col)
+    }
+    return { jacobian, residuals: baseResiduals }
+  }
+
+  // Solve J * delta = -residuals using least squares (J^T J delta = -J^T r)
+  function solveLinearSystem(jacobian, residuals) {
+    const n = solveVars.length
+    const m = residuals.length
+
+    // Compute J^T * J and J^T * (-r)
+    const JtJ = Array(n).fill(null).map(() => Array(n).fill(0))
+    const Jtr = Array(n).fill(0)
+
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        for (let k = 0; k < m; k++) {
+          JtJ[i][j] += jacobian[i][k] * jacobian[j][k]
+        }
+      }
+      for (let k = 0; k < m; k++) {
+        Jtr[i] -= jacobian[i][k] * residuals[k]
+      }
+    }
+
+    // Add small regularization for numerical stability
+    for (let i = 0; i < n; i++) JtJ[i][i] += 1e-10
+
+    // Gaussian elimination
+    const aug = JtJ.map((row, i) => [...row, Jtr[i]])
+    for (let col = 0; col < n; col++) {
+      let maxRow = col
+      for (let row = col + 1; row < n; row++) {
+        if (Math.abs(aug[row][col]) > Math.abs(aug[maxRow][col])) maxRow = row
+      }
+      [aug[col], aug[maxRow]] = [aug[maxRow], aug[col]]
+
+      if (Math.abs(aug[col][col]) < 1e-12) continue
+
+      for (let row = col + 1; row < n; row++) {
+        const factor = aug[row][col] / aug[col][col]
+        for (let j = col; j <= n; j++) aug[row][j] -= factor * aug[col][j]
+      }
+    }
+
+    // Back substitution
+    const delta = Array(n).fill(0)
+    for (let i = n - 1; i >= 0; i--) {
+      let sum = aug[i][n]
+      for (let j = i + 1; j < n; j++) sum -= aug[i][j] * delta[j]
+      delta[i] = Math.abs(aug[i][i]) > 1e-12 ? sum / aug[i][i] : 0
+    }
+
+    return delta
+  }
+
+  // Newton iteration
+  const MAX_ITER = 50
+  const test = { ...values }
+
+  // Anti-Postel: fail if starting from zeros rather than silently inventing values.
+  // Newton needs non-zero starting points to compute meaningful derivatives.
+  for (let i = 0; i < solveVars.length; i++) {
+    const v = solveVars[i]
+    if (test[v] === null || test[v] === undefined || !isFinite(test[v]) || test[v] === 0) {
+      return { ass: values, zij: zidge(eqns, values), sat: false }
+    }
+    // Add small perturbation to break symmetry (helps when Jacobian is singular at equal values)
+    test[v] = test[v] * (1 + 0.01 * (i + 1))
+  }
+
+  for (let iter = 0; iter < MAX_ITER; iter++) {
+    // Check convergence
+    if (eqnsSatisfied(eqns, test)) {
+      return { ass: test, zij: zidge(eqns, test), sat: true }
+    }
+
+    const result = computeJacobian(test)
+    if (!result) break
+
+    const { jacobian, residuals } = result
+
+    // Check if residuals are small enough
+    const maxResidual = Math.max(...residuals.map(Math.abs))
+    if (maxResidual < TOL_ABS) {
+      return { ass: test, zij: zidge(eqns, test), sat: eqnsSatisfied(eqns, test) }
+    }
+
+    const delta = solveLinearSystem(jacobian, residuals)
+
+    // Line search: try full step, then halve if it makes things worse
+    let alpha = 1
+    const currentError = residuals.reduce((s, r) => s + r * r, 0)
+
+    for (let ls = 0; ls < 10; ls++) {
+      const candidate = { ...test }
+      for (let i = 0; i < solveVars.length; i++) {
+        candidate[solveVars[i]] = test[solveVars[i]] + alpha * delta[i]
+      }
+
+      const newResiduals = evalResiduals(candidate)
+      if (newResiduals) {
+        const newError = newResiduals.reduce((s, r) => s + r * r, 0)
+        if (newError < currentError) {
+          for (let i = 0; i < solveVars.length; i++) {
+            test[solveVars[i]] = candidate[solveVars[i]]
+          }
+          break
+        }
+      }
+      alpha *= 0.5
+    }
+
+    // Check for convergence in variable space
+    const maxDelta = Math.max(...delta.map(d => Math.abs(d * alpha)))
+    if (maxDelta < TOL_TIGHT) break
+  }
+
+  const sat = eqnsSatisfied(eqns, test) && boundsSatisfied(test, inf, sup)
+  return { ass: test, zij: zidge(eqns, test), sat }
+}
+
+// =============================================================================
 // solvem: Kitchen-sink solver - tries multiple solvers in sequence
 // =============================================================================
 // Try each solver in order. First one to return sat=true wins.
 
-function solvem(eqns, init, infimum = {}, supremum = {}) {
+function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
+  // Filter out singletons (length 0 or 1) - they're display-only cells, not constraints.
+  // We keep track of original indices to produce parallel zij array.
+  // TODO: A cleaner design would have callers filter singletons before calling solvem,
+  // making solvem more like Mathematica's Solve (expects a simple list of equations).
+  // That's more anti-postel and better separation of concerns.
+  const nonSingletonIndices = []
+  const actualEqns = []
+  for (let i = 0; i < eqns.length; i++) {
+    if (eqns[i].length >= 2) {
+      nonSingletonIndices.push(i)
+      actualEqns.push(eqns[i])
+    }
+  }
+
   // Clamp initial values to bounds
   const boundedInit = { ...init }
   for (const [name, val] of Object.entries(boundedInit)) {
@@ -1316,9 +1522,19 @@ function solvem(eqns, init, infimum = {}, supremum = {}) {
     boundedInit[name] = isNum ? clamped : val
   }
 
+  // Helper to map zij back to original indices (0 for singletons)
+  function expandZij(compactZij) {
+    const result = new Array(eqns.length).fill(0)
+    for (let i = 0; i < nonSingletonIndices.length; i++) {
+      result[nonSingletonIndices[i]] = compactZij[i]
+    }
+    return result
+  }
+
   // Solver registry: try each in order, return first satisfying result
   const SOLVERS = [
     gaussianElim,   // Fast, exact for linear systems
+    newtonSolver,   // Newton-Raphson for non-linear systems
     kludgeProp,     // Algebraic propagation + special cases
     // gradientDesc, // Disabled: too slow (200k iterations)
   ]
@@ -1326,9 +1542,11 @@ function solvem(eqns, init, infimum = {}, supremum = {}) {
   let bestResult = null
 
   for (const solver of SOLVERS) {
-    const result = solver(eqns, boundedInit, infimum, supremum)
-    if (result.sat) return result
-    
+    const result = solver(actualEqns, boundedInit, infimum, supremum, knownVars)
+    if (result.sat) {
+      return { ass: result.ass, zij: expandZij(result.zij), sat: true }
+    }
+
     // Prefer results with actual values over results with nulls
     const hasNulls = Object.values(result.ass).some(v => v === null || v === undefined)
     if (!bestResult || !hasNulls) {
@@ -1337,7 +1555,10 @@ function solvem(eqns, init, infimum = {}, supremum = {}) {
   }
 
   // No solver found a satisfying assignment, return best attempt
-  return bestResult || { ass: boundedInit, zij: zidge(eqns, boundedInit), sat: false }
+  const finalZij = bestResult ? expandZij(bestResult.zij) : expandZij(zidge(actualEqns, boundedInit))
+  return bestResult
+    ? { ass: bestResult.ass, zij: finalZij, sat: false }
+    : { ass: boundedInit, zij: finalZij, sat: false }
 }
 
 // =============================================================================

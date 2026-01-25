@@ -365,12 +365,7 @@ function handleFieldKeypress(e) {
 
 function toggleCellPeg(input) {
   const cellId = input.dataset.cellId
-  
-  // Per README: "you can't mark a field fixed when in that state" (invalid)
-  if (input.classList.contains('invalid')) {
-    return
-  }
-  
+
   // Toggle fixed state
   if (state.fixedCellIds.has(cellId)) {
     state.fixedCellIds.delete(cellId)
@@ -854,17 +849,7 @@ function updateUrl() {
     const compressed = LZString.compressToEncodedURIComponent(state.recipeText)
     params.set('rawcipe', compressed)
   }
-  
-  if (state.solve && state.solve.ass) {
-    const vars = Object.keys(state.solve.ass).sort()
-    for (const v of vars) {
-      const val = state.solve.ass[v]
-      if (isFiniteNumber(val)) {
-        params.set(v, formatNum(val))
-      }
-    }
-  }
-  
+
   const queryString = params.toString()
   const newUrl = queryString ? `${location.pathname}?${queryString}` : location.pathname
   history.replaceState(null, '', newUrl)
@@ -891,29 +876,14 @@ function loadFromUrl() {
   }
   
   if (recipeText === null) return false
-  
-  const varOverrides = {}
-  for (const [key, value] of params) {
-    if (key === 'recipe' || key === 'rawcipe') continue
-    const num = toNum(value)
-    if (isFiniteNumber(num)) {
-      varOverrides[key] = num
-    }
-  }
-  
+
   urlUpdateEnabled = false
-  
+
   state.recipeText = recipeText
   $('recipeTextarea').value = recipeText
   if (selectedKey) $('recipeSelect').value = selectedKey
-  
+
   parseRecipe()
-  
-  if (Object.keys(varOverrides).length > 0) {
-    solveAndApply({ seedOverrides: varOverrides })
-    recomputeCellCvals(state.cells, state.solve.ass, state.fixedCellIds)
-  }
-  
   updateRecipeDropdown()
   renderRecipe()
   

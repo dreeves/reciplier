@@ -59,6 +59,7 @@ function runUtilQuals() {
     isbarevar,
     isconstant,
     unixtime,
+    tolerance,
     toNum,
     formatNum,
     isFiniteNumber,
@@ -471,6 +472,19 @@ function runUtilQuals() {
   check('isFiniteNumber: string', isFiniteNumber('42'), false)
   check('isFiniteNumber: object', isFiniteNumber({}), false)
   check('isFiniteNumber: array', isFiniteNumber([42]), false)
+
+  // ==========================================================================
+  // tolerance quals
+  // ==========================================================================
+  console.log('\n=== tolerance quals ===')
+
+  check('tolerance: zero value', tolerance(0, 1e-9), 1e-9)
+  check('tolerance: positive value', tolerance(100, 1e-9), 100 * 1e-9 + 1e-9)
+  check('tolerance: negative value', tolerance(-100, 1e-9), 100 * 1e-9 + 1e-9)
+  check('tolerance: default absTol', tolerance(1000, 1e-6), 1000 * 1e-6 + 1e-6)
+  check('tolerance: custom absTol', tolerance(1000, 1e-6, 1e-12), 1000 * 1e-6 + 1e-12)
+  check('tolerance: large value', tolerance(1e9, 1e-9), 1e9 * 1e-9 + 1e-9)
+  check('tolerance: small value', tolerance(1e-9, 1e-9), 1e-9 * 1e-9 + 1e-9)
 
   // ==========================================================================
   // Additional edge case quals

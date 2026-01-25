@@ -473,8 +473,7 @@ would be arbitrary which of the other fields would change when you edited one.
 If the user ever causes the constraints to be violated, like by marking a=3 and
 b=4 as fixed and then setting field c to something other than 5, or the squared
 hypotenuse field to something other than 25, then the UI always lets you but any
-non-fixed field whose equation is false is shown in red. (Also you can't mark a
-field frozen when in that state.)
+non-fixed field whose equation is false is shown in red.
 
 For example, if you had a=3 (fixed), b=4 (fixed), and changed the 5 in the c 
 field to 6, then the last field would turn red and show its violated equation as
@@ -693,6 +692,17 @@ best-of-all-worlds solution but I haven't found it yet.
 
 * [SYN] If you make a cell like `{12(}` the field is shown in red with a
 question mark but no error is displayed.
+
+* [SAP] List of apps that this can or does subsume:
+  - https://bid.yootl.es/
+  - https://dreeves.github.io/loanwolf/
+  - https://sheeq.replit.app (eg, the [sugar calculator](https://sheeq.replit.app/?eq=%28Calories_per_gram_of_sugar%2520*%2520%250AGrams_of_sugar_per_serving_in_healthy_stuff%2520*%2520%250AGrams_of_healthy_stuff%2520%252F%2520%250AGrams_per_serving_in_healthy_stuff%2520%252B%2520%250ACalories_per_gram_of_brown_sugar%2520*%2520%250AGrams_of_brown_sugar_to_add%2520%29%2520%252F%2520%28%250ACalories_per_serving_in_healthy_stuff%2520*%2520%250AGrams_of_healthy_stuff%2520%252F%2520%250AGrams_per_serving_in_healthy_stuff%2520%252B%2520%250ACalories_per_gram_of_brown_sugar%2520*%2520%250AGrams_of_brown_sugar_to_add%2520%29%2520%250A%253D%253D%2520%250ACalories_per_gram_of_sugar%2520*%2520%250AGrams_of_sugar_per_serving_in_junk_food%2520%252F%2520%250ACalories_per_serving_in_junk_food&vars=%257B%2522Calories_per_gram_of_sugar%2522%253A3.87%252C%2522Grams_of_sugar_per_serving_in_healthy_stuff%2522%253A5%252C%2522Grams_of_healthy_stuff%2522%253A233.5%252C%2522Grams_per_serving_in_healthy_stuff%2522%253A170%252C%2522Calories_per_gram_of_brown_sugar%2522%253A3.8%252C%2522Grams_of_brown_sugar_to_add%2522%253A46.10019431698941%252C%2522Calories_per_serving_in_healthy_stuff%2522%253A120%252C%2522Grams_of_sugar_per_serving_in_junk_food%2522%253A23%252C%2522Calories_per_serving_in_junk_food%2522%253A150%257D&infer=Grams_of_brown_sugar_to_add) or [pounds vs kilograms](https://sheeq.replit.app/?eq=pounds%2520%253D%2520kilograms%2520%252F%25200.45359237&vars=%257B%2522p%2522%253A0%252C%2522po%2522%253A0%252C%2522pou%2522%253A0%252C%2522poun%2522%253A0%252C%2522pound%2522%253A0%252C%2522pounds%2522%253A154.3235835294143%252C%2522k%2522%253A0%252C%2522ki%2522%253A0%252C%2522kil%2522%253A0%252C%2522kilo%2522%253A0%252C%2522kilob%2522%253A0%252C%2522kilog%2522%253A0%252C%2522kilogr%2522%253A0%252C%2522kilogra%2522%253A0%252C%2522kilogram%2522%253A0%252C%2522kilograms%2522%253A70%257D&infer=pounds))
+  - [Ride Speed Calculator](https://docs.google.com/spreadsheets/d/1LQUDFSLpxtOojcSSLMFWPyRS70eCP59TQHppnu14Px0/edit?gid=0#gid=0)
+
+* [DEV] This doesn't matter in prod but is annoying in dev: From the browser
+console:
+GET file:///assets/favicon-32x32.png net::ERR_FILE_NOT_FOUND
+GET file:///assets/favicon-16x16.png net::ERR_FILE_NOT_FOUND
 
 
 ## Latest half-baked ideas for cell syntax

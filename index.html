@@ -127,7 +127,7 @@ for an example of some prior art.
   
   <div class="text-center text-gray-400 text-sm mt-4">
     <div class="text-gray-300 text-xs mt-1">
-      v2026.01.21-f
+      v2026.01.24-a
     </div>
   </div>
 
@@ -192,5 +192,26 @@ for an example of some prior art.
 <script src="reciplui.js"></script>
 <script src="reciplier.js"></script>
 
+<script>
+// -----------------------------------------------------------------------------
+// Stick this Javascript at the bottom of your html; it will insert a warning at
+// the top of the page if it's loaded on an ancient browser that doesn't support
+// modern Javascript.
+function ancient_browser_check() {
+  "use strict"                         // not sure if using "use strict" matters
+  try { eval("let foo = (x)=>x+1") }   // feature detection: "let" & arrow funcs
+  catch (e) { return true }            // bad browser, not understanding ES6, or
+  return false                         // good browser, not being ancient; woot!
+}
+if (ancient_browser_check()) {
+  //document.body.insertAdjacentHTML('afterbegin', '<h1>' + blah blah + '</h1>')
+  // That works but the following version miiight be safer for ancient browsers:
+  var body = document.body;  // wavy flashback lines: "var" not "let" or "const"
+  var x = document.createElement("h1");
+  x.innerHTML = "Ancient browser warning: nothing's gonna work here!";
+  body.insertBefore(x, body.firstChild)          // ie, the very top of the page
+}
+// -----------------------------------------------------------------------------
+</script>
 </body>
 </html>

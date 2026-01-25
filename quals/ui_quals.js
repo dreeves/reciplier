@@ -625,7 +625,7 @@ async function main() {
     await dialBug1bMHandle.dispose()
     await dialBug1bDHandle.dispose()
 
-    // Qual: dial soft fallback - editing derived r*SID to an unsatisfiable value
+    // Qual: dial unsatisfiable rate - editing derived r*SID to an unsatisfiable value
     // should show "No solution" (even though the UI may fall back internally).
     await page.select('#recipeSelect', 'blank')
     await page.select('#recipeSelect', 'dial')
@@ -636,7 +636,7 @@ async function main() {
     for (const t of dialSoftFrozenTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
-      assert.equal(isNull, false, `dial soft fallback: couldn't find field with title containing "${t}"`)
+      assert.equal(isNull, false, `dial unsatisfiable rate: couldn't find field with title containing "${t}"`)
       await h.dispose()
     }
 
@@ -644,7 +644,7 @@ async function main() {
     for (const t of dialSoftFreezeTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
-      assert.equal(isNull, false, `dial soft fallback: couldn't find field with title containing "${t}"`)
+      assert.equal(isNull, false, `dial unsatisfiable rate: couldn't find field with title containing "${t}"`)
       await longpressHandle(page, h)
       await h.dispose()
     }
@@ -659,13 +659,13 @@ async function main() {
     await waitForNextFrame(page)
 
     const dialSoftBanner = await page.evaluate(() => String(state?.solveBanner || ''))
-    assert.ok(/No solution/i.test(dialSoftBanner), 'dial soft fallback: expected solveBanner to include "No solution" but got: ' + dialSoftBanner)
+    assert.ok(/No solution/i.test(dialSoftBanner), 'dial unsatisfiable rate: expected solveBanner to include "No solution" but got: ' + dialSoftBanner)
 
     const dialSoftBannerHidden = await page.$eval('#solveBanner', el => !!el.hidden)
-    assert.equal(dialSoftBannerHidden, false, 'dial soft fallback: solveBanner should be visible')
+    assert.equal(dialSoftBannerHidden, false, 'dial unsatisfiable rate: solveBanner should be visible')
 
     const dialSoftRateInvalid = await handleHasClass(dialSoftRateHandle, 'invalid')
-    assert.equal(dialSoftRateInvalid, true, 'dial soft fallback: expected edited r*SID field to be invalid')
+    assert.equal(dialSoftRateInvalid, true, 'dial unsatisfiable rate: expected edited r*SID field to be invalid')
 
     await dialSoftRateHandle.dispose()
 
@@ -751,6 +751,90 @@ async function main() {
     assert.equal(eggsAfterEdit, '24')
     const eggsInfo = await page.$eval('input.recipe-field', el => ({ invalid: el.classList.contains('invalid') }))
     assert.equal(eggsInfo.invalid, false)
+
+    // Qual: unfreeze frozen cell when in error state
+    // Bug report: freeze eggs, change scale to cause conflict, click pin to unfreeze
+    await page.select('#recipeSelect', 'blank')
+    await page.select('#recipeSelect', 'crepes')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Find and freeze eggs (first field)
+    const eggsToFreeze = await page.$('input.recipe-field')
+    await longpressHandle(page, eggsToFreeze)
+    await waitForNextFrame(page)
+
+    // Verify eggs is frozen
+    const eggsFrozenClass = await eggsToFreeze.evaluate(el => el.classList.contains('fixed'))
+    assert.equal(eggsFrozenClass, true, 'eggs should be frozen after longpress')
+
+    // Change x to a value that causes conflict (freeze eggs at 12 but set x to something incompatible)
+    // Actually, let's set x to 60 which should cause "no solution"
+    await setInputValue(page, 'input.recipe-field[data-label="x"]', '60')
+    await waitForNextFrame(page)
+
+    // Verify error state
+    const unfreezeTestBanner = await page.evaluate(() => String(state?.solveBanner || ''))
+    assert.ok(/No solution/i.test(unfreezeTestBanner), 'expected No solution banner after conflict')
+
+    // The eggs field should still be frozen and should be invalid
+    const eggsFrozenAfterConflict = await page.$('input.recipe-field')
+    const eggsStillFrozen = await eggsFrozenAfterConflict.evaluate(el => el.classList.contains('fixed'))
+    assert.equal(eggsStillFrozen, true, 'eggs should still be frozen after conflict')
+
+    // Now try to unfreeze by longpressing again
+    await longpressHandle(page, eggsFrozenAfterConflict)
+    await waitForNextFrame(page)
+
+    // Verify eggs is now unfrozen
+    const eggsUnfrozen = await page.$('input.recipe-field')
+    const eggsNotFrozenAnymore = await eggsUnfrozen.evaluate(el => !el.classList.contains('fixed'))
+    assert.equal(eggsNotFrozenAnymore, true, 'eggs should be unfrozen after longpress on frozen invalid cell')
+
+    await eggsToFreeze.dispose()
+
+    // Qual: unfreeze frozen invalid cell by clicking the corner pin
+    await page.select('#recipeSelect', 'blank')
+    await page.select('#recipeSelect', 'crepes')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Find and freeze eggs using the corner pin
+    const eggsPinTest = await page.$('input.recipe-field')
+    const eggsWrapper = await eggsPinTest.evaluateHandle(el => el.closest('.field-wrapper'))
+    const cornerPin = await eggsWrapper.$('.corner-pin')
+    assert.ok(cornerPin, 'corner pin should exist')
+
+    // Click pin to freeze
+    await cornerPin.click()
+    await waitForNextFrame(page)
+    const eggsFrozenByPin = await eggsPinTest.evaluate(el => el.classList.contains('fixed'))
+    assert.equal(eggsFrozenByPin, true, 'eggs should be frozen after clicking pin')
+
+    // Change x to cause conflict
+    await setInputValue(page, 'input.recipe-field[data-label="x"]', '60')
+    await waitForNextFrame(page)
+
+    // Verify error state
+    const pinTestBanner = await page.evaluate(() => String(state?.solveBanner || ''))
+    assert.ok(/No solution/i.test(pinTestBanner), 'expected No solution banner')
+
+    // Get the current corner pin (after re-render from setInputValue)
+    const eggsAfterConflict = await page.$('input.recipe-field')
+    const eggsWrapperAfter = await eggsAfterConflict.evaluateHandle(el => el.closest('.field-wrapper'))
+    const cornerPinAfter = await eggsWrapperAfter.$('.corner-pin')
+    assert.ok(cornerPinAfter, 'corner pin should still exist after conflict')
+
+    // Verify eggs is still frozen
+    const eggsStillFrozenPin = await eggsAfterConflict.evaluate(el => el.classList.contains('fixed'))
+    assert.equal(eggsStillFrozenPin, true, 'eggs should still be frozen after conflict')
+
+    // Click pin to unfreeze
+    await cornerPinAfter.click()
+    await waitForNextFrame(page)
+
+    // Verify eggs is now unfrozen
+    const eggsUnfrozenByPin = await page.$('input.recipe-field')
+    const eggsNotFrozenPin = await eggsUnfrozenByPin.evaluate(el => !el.classList.contains('fixed'))
+    assert.equal(eggsNotFrozenPin, true, 'eggs should be unfrozen after clicking pin on frozen invalid cell')
 
     // Qual 2: Simultaneous equations should not start violated
     await page.select('#recipeSelect', 'simeq')
@@ -1546,14 +1630,6 @@ async function main() {
     assert.equal(urlRecipeDropdown, 'crepes', 'URL ?recipe=crepes should select crepes in dropdown')
     assert.ok(urlRecipeText.includes('crepes'), 'URL ?recipe=crepes should load crepes template')
 
-    // Qual: URL with ?recipe=pyzza&x=2 loads pyzza with x=2 override
-    await page.goto(`${baseUrl}?recipe=pyzza&x=2`)
-    await page.waitForSelector('#recipeOutput', { visible: true })
-    const urlPyzzaX = await page.evaluate(() => state.solve?.ass?.x)
-    assert.ok(Math.abs(urlPyzzaX - 2) < 0.001, `URL ?recipe=pyzza&x=2 should set x=2, got ${urlPyzzaX}`)
-    const urlPyzzaA = await getInputValue(page, 'input.recipe-field[data-label="a"]')
-    assert.equal(urlPyzzaA, '6', 'URL ?recipe=pyzza&x=2 should scale a to 6')
-
     // Qual: URL with ?rawcipe= loads compressed custom template
     const customTemplate = '{x} {y = 2x}'
     const compressed = await page.evaluate((t) => LZString.compressToEncodedURIComponent(t), customTemplate)
@@ -1571,29 +1647,6 @@ async function main() {
     await page.waitForSelector('#recipeOutput', { visible: true })
     const urlAfterSelect = await page.evaluate(() => location.search)
     assert.ok(urlAfterSelect.includes('recipe=pyzza'), `URL should contain recipe=pyzza after selection, got ${urlAfterSelect}`)
-
-    // Qual: URL updates when field value changes
-    await setInputValue(page, 'input.recipe-field[data-label="a"]', '9')
-    const urlAfterEdit = await page.evaluate(() => location.search)
-    assert.ok(urlAfterEdit.includes('a=9'), `URL should contain a=9 after edit, got ${urlAfterEdit}`)
-
-    // Qual: URL state persists after page reload
-    await page.goto(`${baseUrl}?recipe=pyzza&x=2.5`)
-    await page.waitForSelector('#recipeOutput', { visible: true })
-    const xBeforeReload = await page.evaluate(() => state.solve?.ass?.x)
-    assert.ok(Math.abs(xBeforeReload - 2.5) < 0.001, `x should be 2.5 before reload, got ${xBeforeReload}`)
-    
-    await page.reload({ waitUntil: 'domcontentloaded' })
-    await page.waitForSelector('#recipeOutput', { visible: true })
-    
-    const xAfterReload = await page.evaluate(() => state.solve?.ass?.x)
-    const dropdownAfterReload = await page.$eval('#recipeSelect', el => el.value)
-    const urlAfterReload = await page.evaluate(() => location.search)
-    
-    assert.ok(Math.abs(xAfterReload - 2.5) < 0.001, `x should persist as 2.5 after reload, got ${xAfterReload}`)
-    assert.equal(dropdownAfterReload, 'pyzza', 'Dropdown should still show pyzza after reload')
-    assert.ok(urlAfterReload.includes('recipe=pyzza'), `URL should still contain recipe=pyzza after reload, got ${urlAfterReload}`)
-    assert.ok(urlAfterReload.includes('x=2.5'), `URL should still contain x=2.5 after reload, got ${urlAfterReload}`)
 
     // =========================================================================
     // Arithmetic in Fields Quals ([ARI] feature)
@@ -1648,7 +1701,7 @@ async function main() {
     const ariPlainVal = await getInputValue(page, 'input.recipe-field[data-label="a"]')
     assert.equal(ariPlainVal, '7', 'Plain number input should still work')
 
-    console.log('All quals passed.')
+    console.log('All browser/puppeteer quals passed [ui_quals.js]')
   } catch (e) {
     if (pageConsoleLogs.length > 0) {
       console.log(pageConsoleLogs.join('\n'))

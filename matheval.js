@@ -60,12 +60,13 @@ function vareval(expr, vars) {
         return `const ${name} = ${jsVal};`
       }).join('\n')
 
-    const fn = new Function(`
+    // Create function with unixtime available in scope
+    const fn = new Function('unixtime', `
       "use strict";
       ${assignments}
       return (${jsExpr});
     `)
-    const result = fn()
+    const result = fn(unixtime)
     return { value: result, error: null }
   } catch (e) {
     return { value: null, error: e.message }
@@ -101,6 +102,15 @@ function isconstant(expr) {
   return !r.error && typeof r.value === 'number' && isFinite(r.value)
 }
 
+// =============================================================================
+// tolerance: Compute relative+absolute tolerance for floating point comparison
+// =============================================================================
+// Pattern: Math.abs(value) * relTol + absTol (relative scales with magnitude)
+
+function tolerance(value, relTol = 1e-9, absTol = relTol) {
+  return Math.abs(value) * relTol + absTol
+}
+
 //globalThis.deoctalize = deoctalize
 typeof module !== 'undefined' && module.exports && (module.exports = {
   //deoctalize,
@@ -109,5 +119,6 @@ typeof module !== 'undefined' && module.exports && (module.exports = {
   vareval,
   varparse,
   isbarevar,
-  isconstant
+  isconstant,
+  tolerance
 })

@@ -121,11 +121,15 @@ function buildSymbolTable(cells) {
 
 // Build equations list for solvem() from cells
 // Each equation is an array of expressions that should all be equal
+// Singletons (length-1) are filtered out - they're not valid equations
+// TODO: wait, isn't solvem currently filtering out the singletons?
 function buildEquations(cells) {
   const eqns = []
   for (const cell of cells) {
     const eqn = [...cell.ceqn]
-    eqns.push(eqn)
+    if (eqn.length >= 2) {  // Filter out singletons
+      eqns.push(eqn)
+    }
   }
   return eqns
 }
@@ -143,6 +147,8 @@ function cellPartsForInit(cell, includeInit) {
 }
 
 function buildInitialEquations(cells, includeInit = false) {
+  // Don't filter singletons here - they may become non-singletons when init values
+  // are added later. solvem handles singleton filtering internally.
   return cells.map(c => {
     const parts = cellPartsForInit(c, includeInit)
     return parts.map(p => {
@@ -156,18 +162,104 @@ function buildInitialEquations(cells, includeInit = false) {
   })
 }
 
-function buildInitialSeedValues(cells, includeInit = false) {
+// TODO: ugh, this propagation stuff is is wrong-headed. this is in solvem's 
+// purview. 
+function buildInitialSeedValues(cells, includeInit = false, bounds = {}) {
+  const { inf = {}, sup = {} } = bounds
   const values = {}
+  const known = new Set()  // Track values from constants/inits (not defaults)
+  const eqns = []  // Collect equations for propagation
   for (const cell of cells) {
     const parts = cellPartsForInit(cell, includeInit)
+    if (parts.length >= 2) eqns.push(parts)
     for (const expr of parts) {
       if (typeof expr !== 'string') continue
       for (const v of varparse(expr)) {
-        if (values[v] === undefined) values[v] = 1
+        if (values[v] === undefined) {
+          // Use midpoint of bounds if available, else default to 1
+          const lo = inf[v], hi = sup[v]
+          if (isFiniteNumber(lo) && isFiniteNumber(hi)) {
+            values[v] = (lo + hi) / 2
+            known.add(v)  // Bounded values are "known"
+          } else if (isFiniteNumber(lo)) {
+            values[v] = lo + 1
+            known.add(v)
+          } else if (isFiniteNumber(hi)) {
+            values[v] = hi - 1
+            known.add(v)
+          } else {
+            values[v] = 1
+          }
+        }
+      }
+    }
+    // Use constant init expressions as seeds (for singletons and non-singletons)
+    if (hasInitExpr(cell)) {
+      const initVal = evalConstantExpression(cell.initExpr)
+      if (isFiniteNumber(initVal)) {
+        // For singletons, seed the variable in the expression
+        if ((cell.ceqn || []).length === 1) {
+          const vars = varparse(cell.ceqn[0])
+          if (vars.size === 1) {
+            const [varName] = vars
+            values[varName] = initVal
+            known.add(varName)
+          }
+        }
+        // For non-singletons like {r : 4.5 = d/2}, seed bare vars in the equation
+        for (const expr of cell.ceqn || []) {
+          if (isbarevar(String(expr))) {
+            const varName = String(expr).trim()
+            if (!known.has(varName)) {
+              values[varName] = initVal
+              known.add(varName)
+            }
+          }
+        }
+      }
+    }
+    // For equations with a single variable equaling a constant, use the constant.
+    for (const expr of parts) {
+      if (typeof expr !== 'string') continue
+      const constVal = evalConstantExpression(expr)
+      if (!isFiniteNumber(constVal)) continue
+      for (const otherExpr of parts) {
+        if (typeof otherExpr !== 'string' || otherExpr === expr) continue
+        const vars = varparse(otherExpr)
+        if (vars.size === 1) {
+          const [varName] = vars
+          values[varName] = constVal
+          known.add(varName)
+        }
       }
     }
   }
-  return values
+  // Forward propagation: only propagate from known values to unknown variables
+  for (let iter = 0; iter < 10; iter++) {
+    let changed = false
+    for (const eqn of eqns) {
+      for (const expr of eqn) {
+        // Only evaluate if all variables in expr are known
+        const exprVars = varparse(String(expr))
+        if (![...exprVars].every(v => known.has(v))) continue
+        const result = vareval(String(expr), values)
+        if (result.error || !isFiniteNumber(result.value)) continue
+        // Assign to bare variables that aren't yet known
+        for (const otherExpr of eqn) {
+          if (typeof otherExpr !== 'string' || otherExpr === expr) continue
+          if (!isbarevar(otherExpr)) continue
+          const varName = otherExpr.trim()
+          if (!known.has(varName)) {
+            values[varName] = result.value
+            known.add(varName)
+            changed = true
+          }
+        }
+      }
+    }
+    if (!changed) break
+  }
+  return { values, known }
 }
 
 function combineBounds(cells) {
@@ -290,11 +382,11 @@ function computeInitialValues(cells, bounds) {
   // Step 1: Solve the template as written (including constants).
   const { inf, sup } = bounds
   const baseEqns = buildInitialEquations(cells, false)
-  const baseSeedValues = buildInitialSeedValues(cells, false)
+  const { values: baseSeedValues, known: knownVars } = buildInitialSeedValues(cells, false, bounds)
   let baseResult
   let baseAss
   try {
-    baseResult = solvem(baseEqns, baseSeedValues, inf, sup)
+    baseResult = solvem(baseEqns, baseSeedValues, inf, sup, knownVars)
     baseAss = baseResult.ass
   } catch (e) {
     baseErrors.push(String(e && e.message ? e.message : e))
@@ -310,6 +402,8 @@ function computeInitialValues(cells, bounds) {
 
   const initCells = cells.filter(hasInitExpr)
   if (initCells.length) {
+    // baseEqns is parallel to cells (singletons included, solvem filters them).
+    // Map over cells to build parallel init value arrays.
     const constInitValues = cells.map(c => {
       if (!hasInitExpr(c)) return null
       const constVal = evalConstantExpression(c.initExpr)
@@ -326,7 +420,7 @@ function computeInitialValues(cells, bounds) {
       let constResult
       let constAss
       try {
-        constResult = solvem(constEqns, baseSeedValues, inf, sup)
+        constResult = solvem(constEqns, baseSeedValues, inf, sup, knownVars)
         constAss = constResult.ass
       } catch (e) {
         constAss = { ...baseSeedValues }
@@ -354,7 +448,7 @@ function computeInitialValues(cells, bounds) {
     let initResult
     let initAss
     try {
-      initResult = solvem(initEqns, initSeedValues, inf, sup)
+      initResult = solvem(initEqns, initSeedValues, inf, sup, knownVars)
       initAss = initResult.ass
     } catch (e) {
       errors.push(String(e && e.message ? e.message : e))
