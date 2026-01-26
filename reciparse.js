@@ -48,12 +48,13 @@ function extractCells(text) {
   const cellRegex = /\{([^{}]*)\}/g
   let match
   while ((match = cellRegex.exec(text)) !== null) {
-    // TODO: what's the difference between raw and urtext?
+    // TODO: this is dumb:
+    // raw = "{x = 5}" (with braces), urtext/content = "x = 5" (without braces)
     cells.push({
       id: `cell_${cellId++}`,
-      raw: match[0],
-      urtext: match[1],
-      content: match[1],
+      raw: match[0],        // includes braces
+      urtext: match[1],     // content only (used in tooltips)
+      content: match[1],    // same as urtext (historical duplication)
       startIndex: match.index,
       endIndex: match.index + match[0].length
     })

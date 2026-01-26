@@ -299,6 +299,7 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
 }
 
 // TODO: oof, many occurrences of "value" should probably be "cval"
+// but it could be sane at this point, i'm not sure
 
 function markInvalidInput(input, cellId, message) {
   input.classList.add('invalid')
