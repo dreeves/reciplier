@@ -48,11 +48,8 @@ function extractCells(text) {
   const cellRegex = /\{([^{}]*)\}/g
   let match
   while ((match = cellRegex.exec(text)) !== null) {
-    // TODO: this is dumb:
-    // raw = "{x = 5}" (with braces), urtext/content = "x = 5" (without braces)
     cells.push({
       id: `cell_${cellId++}`,
-      raw: match[0],          // "{x = 5}" with braces
       urtext: match[1],       // "x = 5" without braces
       startIndex: match.index,
       endIndex: match.index + match[0].length
@@ -153,7 +150,7 @@ function parseCell(cell) {
 
   const ceqn = ineqError ? [] : nonConstParts
 
-  // TODO: pretty sure we don't need most of this:
+  // TODO: do we need all of the following fields?
   return {
     ...cell,
     cval,
@@ -161,12 +158,8 @@ function parseCell(cell) {
     ceqn,
     initExpr,
     colonError,
-    urceqn: activeParts,
-    urparts: activeParts,
     ineq: ineqError ? null : ineq,
     ineqError: !!ineqError,
-    hasConstraint: !ineqError && activeParts.length >= 2,
     multipleNumbers,  // error flag
-    hasNumber: !ineqError && bareNumbers.length === 1
   }
 }

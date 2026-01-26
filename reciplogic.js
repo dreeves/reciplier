@@ -76,14 +76,14 @@ function buildSymbolTable(cells) {
   for (const cell of cells) {
     // Error case 7: multiple bare numbers in a cell
     cell.multipleNumbers && errors.push(
-      `Cell ${cell.raw} has more than one numerical value`)
+      `Cell {${cell.urtext}} has more than one numerical value`)
     cell.colonError === 'multi' && errors.push(
-      `Cell ${cell.raw} has more than one colon`)
+      `Cell {${cell.urtext}} has more than one colon`)
     cell.colonError === 'rhs' && errors.push(
-      `Cell ${cell.raw} has more than one expression after the colon`)
+      `Cell {${cell.urtext}} has more than one expression after the colon`)
 
     cell.ceqn.length === 0 && cell.cval !== null &&
-      errors.push(`Cell ${cell.raw} is a bare number ` +
+      errors.push(`Cell {${cell.urtext}} is a bare number ` +
                   `which doesn't make sense to put in a cell`)
 
     const cellVars = new Set()
@@ -109,7 +109,7 @@ function buildSymbolTable(cells) {
   // want to make this error shut up).
   for (const [v, info] of varInfo) {
     info.count === 1 && errors.push(
-      `Variable ${v} in ${info.firstCell.raw} not referenced in any other cell`)
+      `Variable ${v} in {${info.firstCell.urtext}} not referenced in any other cell`)
   }
 
   return { symbols, errors }
@@ -121,8 +121,7 @@ function buildSymbolTable(cells) {
 
 // Build equations list for solvem() from cells
 // Each equation is an array of expressions that should all be equal
-// Singletons (length-1) are filtered out - they're not valid equations
-// TODO: wait, isn't solvem currently filtering out the singletons?
+// Note: solvem also filters singletons internally (see csolver.js TODO about this)
 function buildEquations(cells) {
   const eqns = []
   for (const cell of cells) {
@@ -139,7 +138,7 @@ function hasInitExpr(cell) {
 }
 
 function cellPartsForInit(cell, includeInit) {
-  const parts = [...(cell.urparts || cell.urceqn || [])]
+  const parts = cell.cval !== null ? [...cell.ceqn, cell.cval] : [...cell.ceqn]
   if (includeInit && hasInitExpr(cell)) {
     parts.push(cell.initExpr)
   }
@@ -323,7 +322,7 @@ function getEffectiveBounds(cells) {
   return { inf, sup, combined }
 }
 
-function contradictionsForEqns(eqns, ass, zij) {
+function contradictionsForEqns(eqns, ass, zij, cells) {
   const errors = []
 
   for (let i = 0; i < eqns.length; i++) {
@@ -343,11 +342,11 @@ function contradictionsForEqns(eqns, ass, zij) {
     // Tolerance must be >= display precision (4 decimal places) to avoid
     // showing contradictions like "1.4023 ≠ 1.4023"
     const tolerance = Math.abs(first) * 1e-4 + 1e-4
-    for (let i = 1; i < results.length; i++) {
-      if (Math.abs(results[i] - first) > tolerance) {
-        const exprStr = eqn.join(' = ')
+    for (let j = 1; j < results.length; j++) {
+      if (Math.abs(results[j] - first) > tolerance) {
+        const cellRef = cells[i] ? `{${cells[i].urtext}}` : `{${eqn.join(' = ')}}`
         const valuesStr = results.map(r => formatNum(r)).join(' ≠ ')
-        errors.push(`Contradiction: {${exprStr}} evaluates to ${valuesStr}`)
+        errors.push(`Contradiction: ${cellRef} evaluates to ${valuesStr}`)
         break
       }
     }
@@ -395,7 +394,7 @@ function computeInitialValues(cells, bounds) {
   }
 
   if (!baseResult.sat) {
-    baseErrors.push(...contradictionsForEqns(baseEqns, baseAss, baseResult.zij))
+    baseErrors.push(...contradictionsForEqns(baseEqns, baseAss, baseResult.zij, cells))
   }
 
   let solve = { ass: baseAss, eqns: baseEqns, zij: baseResult.zij, sat: baseResult.sat }
@@ -467,8 +466,7 @@ function computeInitialValues(cells, bounds) {
       if (!initResult.sat) {
         logFailedSolve(initEqns, initSeedValues, initAss)
       }
-      errors.push(...invalidInitCells.map(cell => `Initial value for ${cell.raw} incompatible with constraints`))
-      // TODO: vet Latin error copy with human.
+      errors.push(...invalidInitCells.map(cell => `Initial value for {${cell.urtext}} incompatible with constraints`))
       errors.push('Inconsistent initial values')
     }
   } else if (!baseResult.sat) {

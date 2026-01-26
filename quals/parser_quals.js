@@ -140,8 +140,6 @@ function runParserQuals() {
     extractCells('{x}').length, 1)
   check('extractCells: single cell urtext',
     extractCells('{x}')[0]?.urtext, 'x')
-  check('extractCells: single cell raw',
-    extractCells('{x}')[0]?.raw, '{x}')
   check('extractCells: multiple cells count',
     extractCells('{a} {b} {c}').length, 3)
   check('extractCells: multiple cells urtext',
@@ -247,7 +245,7 @@ function runParserQuals() {
   console.log('\n=== parseCell quals ===')
 
   function makeCell(content) {
-    return { id: 'test', raw: `{${content}}`, urtext: content, startIndex: 0, endIndex: content.length + 2 }
+    return { id: 'test', urtext: content, startIndex: 0, endIndex: content.length + 2 }
   }
 
   // Basic cases
@@ -281,8 +279,6 @@ function runParserQuals() {
     parseCell(makeCell('y = 2x + 3')).ceqn, ['y', '2x + 3'])
 
   // Constraint with number
-  check('parseCell: constraint hasConstraint',
-    parseCell(makeCell('a = b = 5')).hasConstraint, true)
   check('parseCell: constraint ceqn',
     parseCell(makeCell('a = b = 5')).ceqn, ['a', 'b'])
   check('parseCell: constraint cval',
@@ -317,16 +313,6 @@ function runParserQuals() {
     parseCell(makeCell('5 = 6')).multipleNumbers, true)
   check('parseCell: inequality error flag',
     parseCell(makeCell('10 > x > 0')).ineqError, true)
-
-  // hasNumber and hasConstraint flags
-  check('parseCell: hasNumber true',
-    parseCell(makeCell('x = 5')).hasNumber, true)
-  check('parseCell: hasNumber false',
-    parseCell(makeCell('x = y')).hasNumber, false)
-  check('parseCell: hasConstraint true',
-    parseCell(makeCell('a = b')).hasConstraint, true)
-  check('parseCell: hasConstraint false (single var)',
-    parseCell(makeCell('x')).hasConstraint, false)
 
   // Edge cases
   check('parseCell: whitespace handling',

@@ -81,7 +81,7 @@ function assignErrorsToCells(errors, cells) {
   for (const err of errors) {
     let matchedCell = null
     for (const cell of cells) {
-      if (err.includes(cell.raw)) {
+      if (err.includes(`{${cell.urtext}}`)) {
         matchedCell = cell
         break
       }
@@ -297,9 +297,6 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
   repositionNonCriticalBannersAfterLastInvalidField()
   updateSliderDisplay()
 }
-
-// TODO: oof, many occurrences of "value" should probably be "cval"
-// but it could be sane at this point, i'm not sure
 
 function markInvalidInput(input, cellId, message) {
   input.classList.add('invalid')

@@ -128,13 +128,16 @@ async function main() {
         const isBareIdentifier = s => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(String(s || '').trim())
         const eqns = (state?.cells || []).map(c => {
           const eqn = [...(c.ceqn || [])]
+          const hasNumber = c?.cval !== null
+          const ceqnLen = c?.ceqn?.length ?? 0
+          const hasConstraint = hasNumber ? ceqnLen >= 1 : ceqnLen >= 2
           const isAssignmentSeed =
-            !!c?.hasConstraint &&
-            c?.hasNumber &&
+            hasConstraint &&
+            hasNumber &&
             !c?.startsFrozen &&
-            (c?.ceqn || []).length === 1 &&
+            ceqnLen === 1 &&
             isBareIdentifier(c.ceqn[0])
-          if (!isAssignmentSeed && c?.hasConstraint && c?.hasNumber) eqn.push(c.cval)
+          if (!isAssignmentSeed && hasConstraint && hasNumber) eqn.push(c.cval)
           return eqn
         })
         const sat = eqnsSatisfied(eqns, state?.solve?.ass || {})
