@@ -138,18 +138,18 @@ function runParserQuals() {
     extractCells('just plain text').length, 0)
   check('extractCells: single cell',
     extractCells('{x}').length, 1)
-  check('extractCells: single cell content',
-    extractCells('{x}')[0]?.content, 'x')
+  check('extractCells: single cell urtext',
+    extractCells('{x}')[0]?.urtext, 'x')
   check('extractCells: single cell raw',
     extractCells('{x}')[0]?.raw, '{x}')
   check('extractCells: multiple cells count',
     extractCells('{a} {b} {c}').length, 3)
-  check('extractCells: multiple cells content',
-    extractCells('{a} {b}').map(c => c.content), ['a', 'b'])
+  check('extractCells: multiple cells urtext',
+    extractCells('{a} {b}').map(c => c.urtext), ['a', 'b'])
   check('extractCells: cell with spaces',
-    extractCells('{ x = 2 }')[0]?.content, ' x = 2 ')
+    extractCells('{ x = 2 }')[0]?.urtext, ' x = 2 ')
   check('extractCells: cell with expression',
-    extractCells('{x = 2y + 3}')[0]?.content, 'x = 2y + 3')
+    extractCells('{x = 2y + 3}')[0]?.urtext, 'x = 2y + 3')
   check('extractCells: adjacent cells',
     extractCells('{a}{b}').length, 2)
   check('extractCells: preserves indices',
@@ -157,9 +157,9 @@ function runParserQuals() {
   check('extractCells: end index correct',
     extractCells('pre {x} post')[0]?.endIndex, 7)
   check('extractCells: empty cell',
-    extractCells('{}')[0]?.content, '')
+    extractCells('{}')[0]?.urtext, '')
   check('extractCells: cell with newline',
-    extractCells('{a\nb}')[0]?.content, 'a\nb')
+    extractCells('{a\nb}')[0]?.urtext, 'a\nb')
 
   // ==========================================================================
   // parseInequalities quals
@@ -247,7 +247,7 @@ function runParserQuals() {
   console.log('\n=== parseCell quals ===')
 
   function makeCell(content) {
-    return { id: 'test', raw: `{${content}}`, urtext: content, content, startIndex: 0, endIndex: content.length + 2 }
+    return { id: 'test', raw: `{${content}}`, urtext: content, startIndex: 0, endIndex: content.length + 2 }
   }
 
   // Basic cases

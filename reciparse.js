@@ -52,9 +52,8 @@ function extractCells(text) {
     // raw = "{x = 5}" (with braces), urtext/content = "x = 5" (without braces)
     cells.push({
       id: `cell_${cellId++}`,
-      raw: match[0],        // includes braces
-      urtext: match[1],     // content only (used in tooltips)
-      content: match[1],    // same as urtext (historical duplication)
+      raw: match[0],          // "{x = 5}" with braces
+      urtext: match[1],       // "x = 5" without braces
       startIndex: match.index,
       endIndex: match.index + match[0].length
     })
@@ -107,7 +106,7 @@ function parseInequalities(content) {
 // Per spec: ceqn is a list of non-constant expressions split on "=".
 // cval is the constant if there is one, null otherwise.
 function parseCell(cell) {
-  const content = cell.content.trim()
+  const content = cell.urtext.trim()
   const colonMatches = content.match(/:/g)
   const colonCount = colonMatches ? colonMatches.length : 0
   const hasColon = colonCount > 0
