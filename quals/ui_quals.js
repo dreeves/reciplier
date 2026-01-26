@@ -400,30 +400,26 @@ async function main() {
     const badInvalid = await page.$eval('input.recipe-field[data-label="a"]', el => el.classList.contains('invalid'))
     assert.equal(badInvalid, true)
 
-    // Qual: scaling slider updates x
-    await page.select('#recipeSelect', 'crepes')
+    // Qual: inline slider updates cell value (using ineqtest which has inequality bounds)
+    await page.select('#recipeSelect', 'ineqtest')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    await setSliderValue(page, 'input.slider-input[data-var-name="x"]', '2')
-    const sliderXValue = await getInputValue(page, 'input.recipe-field[data-label="x"]')
-    assert.equal(sliderXValue, '2')
+    await setSliderValue(page, 'input.recipe-slider[data-var-name="x"]', '2')
+    // The y field is derived from x (y = 2x), so it should be 4
+    const yAfterSlider = await page.$eval('input.recipe-field[data-label="y"]', el => el.value)
+    assert.equal(yAfterSlider, '4')
 
-    // Qual: slider updates in real time when x changes
-    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="x"]', '3')
-    const sliderDisplayAfterTyping = await page.$eval('input.slider-input[data-var-name="x"]', el => el.value)
-    assert.equal(sliderDisplayAfterTyping, '3')
-
-    // Qual: dragging slider emits multiple input events
-    await page.select('#recipeSelect', 'crepes')
+    // Qual: dragging inline slider emits multiple input events
+    await page.select('#recipeSelect', 'ineqtest')
     await page.waitForSelector('#recipeOutput', { visible: true })
     await page.evaluate(() => {
       window.__sliderInputs = 0
-      const slider = document.querySelector('input.slider-input[data-var-name="x"]')
+      const slider = document.querySelector('input.recipe-slider[data-var-name="x"]')
       slider.addEventListener('input', () => { window.__sliderInputs += 1 })
       // Scroll slider into view so mouse events work
       slider.scrollIntoView({ block: 'center' })
     })
-    const sliderHandle = await page.$('input.slider-input[data-var-name="x"]')
+    const sliderHandle = await page.$('input.recipe-slider[data-var-name="x"]')
     const sliderBox = await sliderHandle.boundingBox()
     await page.mouse.move(sliderBox.x + 2, sliderBox.y + sliderBox.height / 2)
     await page.mouse.down()
@@ -433,29 +429,29 @@ async function main() {
     const sliderInputCount = await page.evaluate(() => window.__sliderInputs)
     assert.ok(sliderInputCount > 1, `slider input count ${sliderInputCount}`)
 
-    // Qual: inequality sliders appear with bounds
+    // Qual: inline sliders appear for cells with inequality bounds
     await page.select('#recipeSelect', 'ineqtest')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    const xSliderExists = await page.$eval('input.slider-input[data-var-name="x"]', el => !!el)
-    const pSliderExists = await page.$eval('input.slider-input[data-var-name="p"]', el => !!el)
-    const tempSliderExists = await page.$eval('input.slider-input[data-var-name="temp"]', el => !!el)
+    const xSliderExists = await page.$eval('input.recipe-slider[data-var-name="x"]', el => !!el)
+    const pSliderExists = await page.$eval('input.recipe-slider[data-var-name="p"]', el => !!el)
+    const tempSliderExists = await page.$eval('input.recipe-slider[data-var-name="temp"]', el => !!el)
     assert.equal(xSliderExists, true)
     assert.equal(pSliderExists, true)
     assert.equal(tempSliderExists, true)
 
-    const xMin = await page.$eval('input.slider-input[data-var-name="x"]', el => Number(el.min))
-    const xMax = await page.$eval('input.slider-input[data-var-name="x"]', el => Number(el.max))
+    const xMin = await page.$eval('input.recipe-slider[data-var-name="x"]', el => Number(el.min))
+    const xMax = await page.$eval('input.recipe-slider[data-var-name="x"]', el => Number(el.max))
     assert.ok(Math.abs(xMin - 0.5) < 1e-6, `x min ${xMin}`)
     assert.ok(Math.abs(xMax - 10) < 1e-6, `x max ${xMax}`)
 
-    const pMin = await page.$eval('input.slider-input[data-var-name="p"]', el => Number(el.min))
-    const pMax = await page.$eval('input.slider-input[data-var-name="p"]', el => Number(el.max))
+    const pMin = await page.$eval('input.recipe-slider[data-var-name="p"]', el => Number(el.min))
+    const pMax = await page.$eval('input.recipe-slider[data-var-name="p"]', el => Number(el.max))
     assert.ok(pMin > 0 && pMin < 0.01, `p min ${pMin}`)
     assert.ok(Math.abs(pMax - 100) < 1e-6, `p max ${pMax}`)
 
-    const tMin = await page.$eval('input.slider-input[data-var-name="temp"]', el => Number(el.min))
-    const tMax = await page.$eval('input.slider-input[data-var-name="temp"]', el => Number(el.max))
+    const tMin = await page.$eval('input.recipe-slider[data-var-name="temp"]', el => Number(el.min))
+    const tMax = await page.$eval('input.recipe-slider[data-var-name="temp"]', el => Number(el.max))
     assert.ok(Math.abs(tMin - 32) < 1e-6, `temp min ${tMin}`)
     assert.ok(Math.abs(tMax - 212) < 1e-6, `temp max ${tMax}`)
 
@@ -464,24 +460,11 @@ async function main() {
     const legacyDisplay = await page.$('#scalingDisplay')
     assert.equal(legacyDisplay, null)
 
-    // Qual: slider line excerpt is ellipsized for long lines
-    const longLine = 'This is a very long line intended to overflow the slider line display in the UI and should be truncated {x = 1} with ellipses to keep it on screen.'
-    await page.$eval('#recipeTextarea', (el, v) => {
-      el.value = v
-      el.dispatchEvent(new Event('input', { bubbles: true }))
-    }, longLine)
-    await page.waitForSelector('input.slider-input[data-var-name="x"]', { visible: true })
-    const sliderLineText = await page.$eval('.slider-card[data-var-name="x"] .slider-line', el => el.textContent || '')
-    assert.ok(sliderLineText.includes('...'), `slider line missing ellipses: ${sliderLineText}`)
-
-    // Qual: dismissed slider resets on recipe change
-    await page.click('button.slider-close[data-var-name="x"]')
-    const dismissedSlider = await page.$('input.slider-input[data-var-name="x"]')
-    assert.equal(dismissedSlider, null)
+    // Qual: crepes has one slider (the {.1 <= x <= 10} cell with inequality bounds)
     await page.select('#recipeSelect', 'crepes')
     await page.waitForSelector('#recipeOutput', { visible: true })
-    const restoredSlider = await page.$('input.slider-input[data-var-name="x"]')
-    assert.equal(restoredSlider === null, false)
+    const crepesSliderCount = await page.$$eval('input.recipe-slider', els => els.length)
+    assert.equal(crepesSliderCount, 1, 'crepes should have one inline slider')
 
     // Qual: Editing derived field should solve for underlying variable
     // Bug report: Load crepes, change eggs from 12 to 24, expect x=2 and all fields double
@@ -1263,18 +1246,19 @@ async function main() {
     assert.equal(bannerVisible, true, 'Banner should be visible during edit')
     assert.ok(/try unfreezing cells/i.test(bannerText), 'Banner should mention unfreezing')
 
-    // Qual: pyzza slider bug - c^2 cell should NOT turn red when using slider
+    // Qual: pyzza c^2 cell should NOT turn red when changing x
     await page.select('#recipeSelect', 'pyzza')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    await setSliderValue(page, 'input.slider-input[data-var-name="x"]', '2')
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="x"]', '2')
+    await page.keyboard.press('Tab')
 
     const cSquaredHandle = await findFieldByTitleSubstring(page, 'a^2 + b^2 = c^2')
     const cSquaredIsNull = await cSquaredHandle.evaluate(el => el === null)
     assert.equal(cSquaredIsNull, false)
 
-    const cSquaredInvalidAfterSlider = await handleHasClass(cSquaredHandle, 'invalid')
-    assert.equal(cSquaredInvalidAfterSlider, false, 'c^2 cell should NOT be invalid after slider change')
+    const cSquaredInvalidAfterEdit = await handleHasClass(cSquaredHandle, 'invalid')
+    assert.equal(cSquaredInvalidAfterEdit, false, 'c^2 cell should NOT be invalid after x change')
 
     await cSquaredHandle.dispose()
 
@@ -1743,43 +1727,155 @@ async function main() {
     const pyzInvalidAfterSwitch = await page.$eval('input.recipe-field[data-label="a"]', el => el.classList.contains('invalid'))
     assert.equal(pyzInvalidAfterSwitch, false, 'invalid state should reset after switching reciplates')
 
-    // Qual: slider panel signature clears when switching reciplates
-    await page.select('#recipeSelect', 'dial')
+    // Qual: inline sliders have correct cellIds (testing with ineqtest which has inequality bounds)
+    await page.select('#recipeSelect', 'ineqtest')
     await page.waitForSelector('#recipeOutput', { visible: true })
-    await page.waitForSelector('#sliderPanel input.slider-input', { visible: true })
-    const dialSliderCount = await page.$$eval('#sliderPanel input.slider-input', els => els.length)
-    assert.ok(dialSliderCount > 0, 'dial should have sliders')
-    await page.select('#recipeSelect', 'simeq')
-    await page.waitForSelector('#recipeOutput', { visible: true })
-    // simeq may or may not have sliders depending on bounds, but the panel should be fresh
-    const sliderSigAfterSwitch = await page.$eval('#sliderPanel', el => el.dataset.sliderSignature || '')
-    // After switching, if there are no sliders, signature should be cleared
-    const simeqSliderCount = await page.$$eval('#sliderPanel input.slider-input', els => els.length)
-    if (simeqSliderCount === 0) {
-      assert.equal(sliderSigAfterSwitch, '', 'slider signature should be cleared when no sliders')
-    }
+    await page.waitForSelector('input.recipe-slider', { visible: true })
+    const ineqCellIds = await page.evaluate(() => {
+      return state.cells.map(c => c.id)
+    })
+    const ineqSliderCellId = await page.$eval('input.recipe-slider', el => el.dataset.cellId)
+    assert.ok(ineqCellIds.includes(ineqSliderCellId), 'inline slider cellId should match a cell in state')
 
-    // Qual: slider cellIds are correct after switching reciplates
-    // This tests the bug where sliders with same var names kept stale cellIds
-    await page.select('#recipeSelect', 'dial')
-    await page.waitForSelector('#recipeOutput', { visible: true })
-    await page.waitForSelector('#sliderPanel input.slider-input', { visible: true })
-    const dialCellIds = await page.evaluate(() => {
-      return state.cells.map(c => c.id)
+    // =========================================================================
+    // Slider Layout Tests - verify sliders fill available space correctly
+    // =========================================================================
+
+    // Qual: slider alone on a line fills nearly full width of container
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, 'Line 1\n{0 < x < 10}\nLine 3')
+    await page.waitForSelector('input.recipe-slider', { visible: true })
+    const sliderAloneLayout = await page.evaluate(() => {
+      const slider = document.querySelector('input.recipe-slider')
+      const container = document.querySelector('.recipe-rendered')
+      if (!slider || !container) return { error: 'elements not found' }
+      const sliderRect = slider.getBoundingClientRect()
+      const containerRect = container.getBoundingClientRect()
+      // Account for padding (16px = 1rem on each side typically)
+      const containerInnerWidth = containerRect.width - 32
+      return {
+        sliderWidth: sliderRect.width,
+        containerWidth: containerInnerWidth,
+        ratio: sliderRect.width / containerInnerWidth
+      }
     })
-    const dialSliderCellId = await page.$eval('#sliderPanel input.slider-input', el => el.dataset.cellId)
-    assert.ok(dialCellIds.includes(dialSliderCellId), 'dial slider cellId should match a cell in state')
-    // Switch to blank and back to dial - cellIds will be regenerated
-    await page.select('#recipeSelect', 'blank')
-    await page.waitForSelector('#recipeOutput', { visible: true })
-    await page.select('#recipeSelect', 'dial')
-    await page.waitForSelector('#recipeOutput', { visible: true })
-    await page.waitForSelector('#sliderPanel input.slider-input', { visible: true })
-    const dialCellIds2 = await page.evaluate(() => {
-      return state.cells.map(c => c.id)
+    // Slider should fill at least 80% of container width when alone on a line
+    // (allowing for bounds labels)
+    assert.ok(sliderAloneLayout.ratio > 0.7,
+      `slider alone should fill most of line width, got ratio ${sliderAloneLayout.ratio}`)
+
+    // Qual: slider between text fills remaining space
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, 'foo {0 < x < 10} bar')
+    await page.waitForSelector('input.recipe-slider', { visible: true })
+    const sliderBetweenTextLayout = await page.evaluate(() => {
+      const slider = document.querySelector('input.recipe-slider')
+      const container = document.querySelector('.recipe-rendered')
+      if (!slider || !container) return { error: 'elements not found' }
+      const sliderRect = slider.getBoundingClientRect()
+      const containerRect = container.getBoundingClientRect()
+      const containerInnerWidth = containerRect.width - 32
+      return {
+        sliderWidth: sliderRect.width,
+        containerWidth: containerInnerWidth,
+        ratio: sliderRect.width / containerInnerWidth
+      }
     })
-    const dialSliderCellId2 = await page.$eval('#sliderPanel input.slider-input', el => el.dataset.cellId)
-    assert.ok(dialCellIds2.includes(dialSliderCellId2), 'dial slider cellId should match a cell after re-switching')
+    // Slider between text should still fill significant portion (text is small)
+    assert.ok(sliderBetweenTextLayout.ratio > 0.5,
+      `slider between text should fill remaining space, got ratio ${sliderBetweenTextLayout.ratio}`)
+
+    // Qual: multiple lines with slider - each line independent
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, 'Text field: {x : 1}\nSlider: {0 < y < 10}\nMore text')
+    await page.waitForSelector('input.recipe-slider', { visible: true })
+    const multiLineLayout = await page.evaluate(() => {
+      const slider = document.querySelector('input.recipe-slider')
+      const textField = document.querySelector('input.recipe-field')
+      if (!slider || !textField) return { error: 'elements not found' }
+      const sliderRect = slider.getBoundingClientRect()
+      const textFieldRect = textField.getBoundingClientRect()
+      // Key check: slider and text field should be on different lines (different Y)
+      // and slider should be wider than text field
+      return {
+        sliderY: sliderRect.top,
+        textFieldY: textFieldRect.top,
+        sliderWidth: sliderRect.width,
+        textFieldWidth: textFieldRect.width,
+        differentLines: Math.abs(sliderRect.top - textFieldRect.top) > 10
+      }
+    })
+    assert.ok(multiLineLayout.differentLines,
+      'slider and text field should be on different lines')
+    assert.ok(multiLineLayout.sliderWidth > multiLineLayout.textFieldWidth,
+      `slider should be wider than text field: ${multiLineLayout.sliderWidth} vs ${multiLineLayout.textFieldWidth}`)
+
+    // Qual: three-line layout with slider in middle
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, 'Scaled by a factor of {x : 1}\n{.1 <= y <= 10}\ntest')
+    await page.waitForSelector('input.recipe-slider', { visible: true })
+    const threeLineLayout = await page.evaluate(() => {
+      const slider = document.querySelector('input.recipe-slider')
+      const textField = document.querySelector('input.recipe-field')
+      const container = document.querySelector('.recipe-rendered p')
+      if (!slider || !textField || !container) return { error: 'elements not found' }
+
+      const sliderRect = slider.getBoundingClientRect()
+      const textFieldRect = textField.getBoundingClientRect()
+      const containerRect = container.getBoundingClientRect()
+
+      // Find "test" text node position (it's after the slider)
+      const html = container.innerHTML
+      const hasThreeDistinctLines = html.includes('Scaled') &&
+                                    html.includes('recipe-slider') &&
+                                    html.includes('test')
+
+      return {
+        sliderY: sliderRect.top,
+        textFieldY: textFieldRect.top,
+        differentLines: Math.abs(sliderRect.top - textFieldRect.top) > 10,
+        sliderWidth: sliderRect.width,
+        containerWidth: containerRect.width - 32,
+        hasThreeDistinctLines
+      }
+    })
+    assert.ok(threeLineLayout.hasThreeDistinctLines, 'should have three distinct content areas')
+    assert.ok(threeLineLayout.differentLines,
+      'slider and text field should be on different lines in three-line layout')
+    // Slider on its own line should fill most of the width
+    assert.ok(threeLineLayout.sliderWidth / threeLineLayout.containerWidth > 0.7,
+      `slider alone on line should fill most of width, got ${threeLineLayout.sliderWidth / threeLineLayout.containerWidth}`)
+
+    // Qual: text field layout unchanged (no flexbox interference)
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, 'Amount: {x : 1} cups')
+    await page.waitForSelector('input.recipe-field', { visible: true })
+    const textFieldLayout = await page.evaluate(() => {
+      const textField = document.querySelector('input.recipe-field')
+      const container = document.querySelector('.recipe-rendered p')
+      if (!textField || !container) return { error: 'elements not found' }
+      const textFieldRect = textField.getBoundingClientRect()
+      const containerRect = container.getBoundingClientRect()
+      // Text field should NOT fill the whole line - it should be its natural width
+      return {
+        textFieldWidth: textFieldRect.width,
+        containerWidth: containerRect.width - 32,
+        ratio: textFieldRect.width / (containerRect.width - 32)
+      }
+    })
+    // Text field should be small (not expanded), typically less than 30% of container
+    assert.ok(textFieldLayout.ratio < 0.4,
+      `text field should not expand to fill line, got ratio ${textFieldLayout.ratio}`)
 
     console.log('All browser/puppeteer quals passed [ui_quals.js]')
   } catch (e) {

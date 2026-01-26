@@ -35,7 +35,8 @@ crepes: `\
 
 Yield: roughly {29x} crepes
 
-Scaled by a factor of {x : 1}
+Scaled by a factor of {x : 1} 
+{.1 <= x <= 10}
 
 (Flour notes: We did ~{440x}g for years via packed cups but {360x}g (up to {365x}g) is most likely what the recipe intended. Most recently we tried {420x}g and it worked well so we're trying lower.)
 `,
@@ -74,6 +75,7 @@ Drop rounded teaspoonfuls onto greased baking sheets, about 2 inches apart. Bake
 Yield: {54x} cookies, 117 cal (17g carb) per cookie.
 
 Scaled by a factor of {x : 1 }
+{.1 <= x <= 10}
 `,
 // -----------------------------------------------------------------------------
 simeq: `\
@@ -103,6 +105,7 @@ Pour into the prepared cake pan, spread evenly.
 Bake 30 to 40 minutes @ 325°F
 
 Scaled by a factor of {x : 1}
+{.1 <= x <= 10}
 `,
 // -----------------------------------------------------------------------------
 pancakes: `\
@@ -120,11 +123,15 @@ Cook on a greased griddle at 350°F for about 2 minutes per side until golden.
 Makes {8x} pancakes, 120 calories each.
 
 Scaled by a factor of {x} <!-- testing: no default/initial value given -->
+{.1 <= x <= 10}
 `,
 // -----------------------------------------------------------------------------
 breakaway: `\
 The riders in the break have a {m=1}:{s=30}s gap with {d=20}km ({d/M}mi) to go.
-So if the break averages {vb=40}km/h ({vb/M}mph) then the peloton needs to average {vp = pd/t}km/h ({vp/M}mph) to catch them at the line.
+So if the break averages {vb : 40}km/h ({vbm = vb/M}mph) then the peloton needs to average {vp = pd/t}km/h ({vpm = vp/M}mph) to catch them at the line.
+
+Break mph:   {15 < vbm < 35}
+Peloton mph: {15 < vpm < 35}
 
 Scratchpad:
 * Gap time:     {gt = m/60+s/3600} hours = {m+s/60 = gt*60}m = {60m+s = gt*3600}s
@@ -144,8 +151,8 @@ Rest stop 2:     {b2} hours = {b2*60 : 37} minutes
 Rest stop 3:     {b3} hours = {b3*60 :  0} minutes
 Total breaks:    {b = b1+b2+b3} hours
 Riding time:     {t = w-b} hours = {floor(t)}h{(t-floor(t))*60}m
-Avg speed:       {d/t} mph
-Unadjusted spd:  {d/w} mph
+Avg speed:       {d/t} mph [8 <= v <= 34] [TODO: sliders]
+Unadjusted spd:  {d/w} mph [8 <= u <= 34] (includes stops)
 `,
 // -----------------------------------------------------------------------------
 cheesepan: `\
@@ -153,7 +160,7 @@ Mix {2x} eggs and {3x} wheels of cheese in a {d}-inch diameter pan.
 Or a {w}x{h}-inch rectangular pan (with a {z}-inch diagonal) is fine.
 Or any pan as long as its area is {A} square inches. Heat at 350 degrees.
 
-This recipe is scaled by a factor of {x : 1}.
+This recipe is scaled by a factor of {x : 1} {.1 <= x <= 10}
 
 Constraints, constants, and sanity checks:
 * The true circle constant is {tau = 6.28}
@@ -213,11 +220,11 @@ Calories_per_serving_in_junk_food
 */
 // -----------------------------------------------------------------------------
 converter: `\
-# Kilograms vs Pounds
+### Kilograms vs Pounds
 {p = k/LB} pounds = {k = p*LB : 70} kilograms
 <!-- The fully exact definition of a pound is {LB = 0.45359237} kilograms -->
 
-# Grams-per-square-meter vs Ounces-per-square-yard
+### Grams-per-square-meter vs Ounces-per-square-yard
 {m} g/m^2 = {m*YD^2/OZ} oz/yd^2
 <!-- The fully exact definition of an ounce is {OZ = 28.349523125} grams -->
 <!-- The fully exact definition of a yard is {YD = 0.9144} meters -->
@@ -225,7 +232,7 @@ converter: `\
 // -----------------------------------------------------------------------------
 auction: `\
 Fraction of the thing/decision that's yours: 
-{r = .5} ({100*(1-r)}/{100r} them/you)
+{r = .5} ({100*(1-r)}/{100r} them/you) [TODO: slider 0 <= r <= 1]
 
 Your Bid: (any of these imply the other two)
 * Fair Market Value (FMV): {fmv}
@@ -249,6 +256,7 @@ quadratic: `\
 // -----------------------------------------------------------------------------
 gratio: `\
 The reciprocal of {phi} is {1/phi = phi - 1}, same as subtracting 1.
+[-2 < phi < 2] [TODO: slider]
 `,
 // -----------------------------------------------------------------------------
 test: `\

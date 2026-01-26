@@ -163,7 +163,7 @@ function renderRecipe() {
         markdownText += text.substring(lastIndex, cell.startIndex)
       }
 
-      // Render the cell as input field
+      // Render the cell as input field or slider based on inequality bounds
       const value = cell.cval
       const displayValue = formatNum(value)
       const isFixed = state.fixedCellIds.has(cell.id)
@@ -171,9 +171,21 @@ function renderRecipe() {
       const title = `${cell.urtext}`.replace(/"/g, '&quot;')
       const disabledAttr = disableInputs ? ' disabled' : ''
 
-      const label = cell.ceqn.length > 0 ? cell.ceqn[0].trim() : ''
-      const focusOnlyBgClass = !INDICATOR_SHOW_ALWAYS.background ? 'focus-only-bg' : ''
-      const inputHtml = `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''} ${isInvalid ? 'invalid' : ''} ${focusOnlyBgClass}" data-label="${label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}"${disabledAttr}>`
+      let inputHtml
+      if (cell.ineq) {
+        // Cell has inequality bounds - render as slider with bounds labels
+        const bounds = sliderBoundsForCell(cell)
+        const nearOne = Math.abs(value - 1) < 0.005
+        const varName = cell.ineq.varName || ''
+        const minLabel = formatNum(bounds.minLabel)
+        const maxLabel = formatNum(bounds.maxLabel)
+        inputHtml = `<span class="slider-bound">${minLabel}</span><input type="range" class="recipe-slider${nearOne ? ' at-one-x' : ''}" min="${bounds.min}" max="${bounds.max}" step="0.01" value="${displayValue}" data-cell-id="${cell.id}" data-var-name="${varName}" title="${title}"${disabledAttr}><span class="slider-bound">${maxLabel}</span>`
+      } else {
+        // No inequality bounds - render as text field
+        const label = cell.ceqn.length > 0 ? cell.ceqn[0].trim() : ''
+        const focusOnlyBgClass = !INDICATOR_SHOW_ALWAYS.background ? 'focus-only-bg' : ''
+        inputHtml = `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''} ${isInvalid ? 'invalid' : ''} ${focusOnlyBgClass}" data-label="${label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}"${disabledAttr}>`
+      }
       const placeholder = `@@RECIPLIER_CELL_${cell.id}@@`
       placeholders.set(placeholder, inputHtml)
       markdownText += placeholder
@@ -191,7 +203,26 @@ function renderRecipe() {
     for (const [placeholder, inputHtml] of placeholders) {
       html = html.split(placeholder).join(inputHtml)
     }
+    // Wrap each line in paragraphs containing sliders so each line can be its
+    // own flex container. This allows sliders to fill available space on their
+    // line without affecting other lines.
+    html = wrapLinesInParagraphsWithSliders(html)
     return `<div class="recipe-rendered">${html}</div>`
+  }
+
+  // Helper: For paragraphs containing sliders, wrap each line segment (separated
+  // by <br>) in a <span class="recipe-line">. This allows per-line flex layout.
+  function wrapLinesInParagraphsWithSliders(html) {
+    return html.replace(/<p>([\s\S]*?)<\/p>/g, (match, inner) => {
+      // Only process paragraphs that contain sliders
+      if (!inner.includes('recipe-slider')) return match
+      // Split by <br> variants (handles <br>, <br/>, <br />)
+      const parts = inner.split(/<br\s*\/?>/gi)
+      // Wrap each part in a recipe-line span
+      const wrapped = parts.map(part => `<span class="recipe-line">${part}</span>`)
+      // Rejoin with <br>
+      return `<p>${wrapped.join('<br>')}</p>`
+    })
   }
 
   const solveBanner = `<div id="solveBanner" class="error-display solve-display"${state.solveBanner ? '' : ' hidden'}>
@@ -220,7 +251,7 @@ function renderRecipe() {
 
   $('copyButton').disabled = criticalErrors.length > 0
   
-  // Attach event handlers to inputs
+  // Attach event handlers to text field inputs
   output.querySelectorAll('input.recipe-field').forEach(input => {
     input.addEventListener('input', handleFieldInput)
     input.addEventListener('blur', handleFieldBlur)
@@ -228,7 +259,11 @@ function renderRecipe() {
     attachPegTrigger(input)
   })
 
-  // Update slider display
+  // Attach event handlers to slider inputs
+  output.querySelectorAll('input.recipe-slider').forEach(input => {
+    input.addEventListener('input', handleInlineSliderInput)
+  })
+
   syncAfterSolve(invalidCellIds)
 }
 
@@ -274,6 +309,7 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
 
   const output = $('recipeOutput')
   if (output) {
+    // Sync text fields
     output.querySelectorAll('input.recipe-field').forEach(field => {
       if (editedFieldEl && field === editedFieldEl) {
         if (invalidCellIds.has(field.dataset.cellId)) {
@@ -292,10 +328,19 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
         field.classList.remove('invalid')
       }
     })
+
+    // Sync inline sliders
+    output.querySelectorAll('input.recipe-slider').forEach(slider => {
+      if (editedFieldEl && slider === editedFieldEl) return
+      const c = state.cells.find(x => x.id === slider.dataset.cellId)
+      if (c) {
+        slider.value = c.cval
+        slider.classList.toggle('at-one-x', Math.abs(c.cval - 1) < 0.005)
+      }
+    })
   }
 
   repositionNonCriticalBannersAfterLastInvalidField()
-  updateSliderDisplay()
 }
 
 function markInvalidInput(input, cellId, message) {
@@ -355,6 +400,29 @@ function handleFieldKeypress(e) {
   if (e.key === 'Enter') {
     e.target.blur()
   }
+}
+
+function handleInlineSliderInput(e) {
+  const input = e.target
+  const cellId = input.dataset.cellId
+  const cell = state.cells.find(c => c.id === cellId)
+  if (!cell) return
+
+  const newValue = toNum(input.value)
+  if (!isFiniteNumber(newValue)) return
+
+  cell.cval = newValue
+
+  const solveResult = solveAndApply({
+    editedCellId: cellId,
+    editedValue: newValue,
+  })
+
+  // Update at-one-x styling
+  input.classList.toggle('at-one-x', Math.abs(newValue - 1) < 0.005)
+
+  syncAfterSolve(solveResult.invalidCellIds, input)
+  updateUrl()
 }
 
 // =============================================================================
@@ -684,10 +752,6 @@ function attachPegTrigger(input) {
 }
 
 function handleRecipeChange() {
-  state.hiddenSliders = new Set()
-  // Force slider re-render by clearing cached signature (cellIds change between reciplates)
-  const sliderPanel = $('sliderPanel')
-  if (sliderPanel) delete sliderPanel.dataset.sliderSignature
   const selectedKey = $('recipeSelect').value
   if (reciplates.hasOwnProperty(selectedKey)) {
     state.recipeText = reciplates[selectedKey]
@@ -911,11 +975,6 @@ function init() {
 
   // Initialize debug panel
   initDebugPanel()
-  const sliderPanel = $('sliderPanel')
-  if (sliderPanel) {
-    sliderPanel.addEventListener('input', handleSliderInput)
-    sliderPanel.addEventListener('click', handleSliderClose)
-  }
 
   const helpButton = $('helpButton')
   const helpPopover = $('helpPopover')

@@ -539,7 +539,6 @@ let state = {
   solveBanner: '',
   invalidExplainBanner: '',
   invalidInputCellIds: new Set(),
-  hiddenSliders: new Set(),
   bounds: { inf: {}, sup: {}, combined: new Map() },
 }
 
@@ -602,7 +601,8 @@ function setInvalidExplainBannerFromInvalidity(invalidCellIds) {
     ? String(invalidInputCell.ceqn[0] || '').trim()
     : ''
   const shownLabel = label || '?'
-  const invalidInputMessage = invalidInputId ? `ERROR1753: ${shownLabel}` : ''
+  const invalidInputMessage = invalidInputId ? 
+    `ERROR1753: ${shownLabel} is invalid input?` : ''
   const invalidCellId = invalidCellIds?.size
     ? [...invalidCellIds][invalidCellIds.size - 1]
     : null

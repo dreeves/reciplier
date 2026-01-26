@@ -720,6 +720,25 @@ reciplier.dreev.es/recipe=crepes&template=collapsed then the template textarea
 loads in the collapsed state. I'm not sure what the default should be. Related
 idea: just have the template textarea below the rendered recipe.
 
+* [ISL] Render sliders iff the urtext of the cell has inequality bounds. And
+render those sliders not at the top but just inline, the same way we currently
+render a text field, we render sliders right in place. This means throwing away
+the slider excerpts and the close buttons. Remember to think in terms of
+death-to-if-statements. We want to elegantly generalize what's currently done
+with text fields to include other UI elements, in this case sliders.
+
+* [BFL] I changed my mind: I think the syntax for inequalities should require 
+that the be bounds occur first and last in the cell:
+  {0 < x : 5 < 10}
+  {0 < x = 5 < 10}
+Anything else should be a syntax error.
+
+* [AUC] In the decision auction reciplate, how do we have both a field and a
+slider for the shares that are both treated as frozen? Like you want to change
+either the number in the field or slide the slider and have the two stay in sync
+which implies they're not pegged. But then when you change the other fields, the
+shares shouldn't change, because they *are* pegged.
+
 
 ## Latest half-baked ideas for cell syntax
 
@@ -847,3 +866,58 @@ returns
 ass = {x: 4.106625693690123, d: 18.2383, w: 128.85357542252515, h: 2.0264779991739617, z: 128.86950962989468, A: 261.11893570865, tau: 6.28, d1: 9, r1: 4.499992598006505, r: 9.11915}
 zij = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2.7394753846919868e-11, 0, 0, 1.3234889800848443e-23, 6.462348535570529e-27]
 sat=false
+
+
+BUG REPORT:
+
+Replicata: Use this reciplate:
+```
+{2x : 6}
+{a = x}
+{x} {a} {z} {z}
+```
+
+Expectata: 
+That it find {x: 3, a: 3, z: 1} as a solution.
+
+Resultata: "Inconsistent initial values"
+
+
+BUG REPORT:
+
+Replicata:
+1. Load this reciplate:
+```
+{A}^2 + {B}^2 = {C}^2 = {A^2 + B^2 = C^2}
+```
+2. Change the A cell to 6.
+3. Change the B cell to 6.
+4. Change the C cell to 5.
+
+Expectata:
+That A and B both change, for example, to A=0 and B=5.
+
+Resultata: "No solution found"
+
+Probably the crux of the above:
+The following finds no solution:
+solvem([['C',5],['A^2 + B^2','C^2']], {A:6,B:6,C:null})
+But the following does find a solution:
+solvem([['C',5],['A^2 + B^2','C^2']], {A:6,B:6,C:5})
+Namely: {A: 3.5180632392360383, B: 3.552918674178076, C: 5}
+
+BUG REPORT: simeq correctly uses gauss-jordan to find a solution when the reciplate loads but if you change one of the cells it says "no solution found (try unfreezing cells)". the only way to have it use gauss-jordan again to compute the solution is to make a dummy edit to one of the frozen cells. this kind of makes sense because if you're editing one of the other cells then we treat that cell as temporarily pegged while you're editing it, and indeed there is no solution when you do that, unless you edit one of the cells to be consistent with the solution.
+
+BUG REPORT: 
+Load breakaway reciplate and slide the peloton (vpm) slider.
+Also possible to mess it up with just changing the fields.
+
+BUG REPORT:
+
+The rendering of this has the part before the first cell appear on two lines (ie, it wraps) with the rest appearing to the right, vertically centered.
+```
+This recipe is scaled by a factor of {x : 1} test {.1 <= x <= 10}
+```
+Removing "test" makes it render properly.
+I guess this is because the slider has hit it's minimum width and so the the above reciplate doesn't fit on one line?
+I think in that case it should just wrap and the slider should render on a new line. But of course have that happen without adding if-statements.
