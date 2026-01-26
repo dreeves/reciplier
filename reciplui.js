@@ -685,6 +685,9 @@ function attachPegTrigger(input) {
 
 function handleRecipeChange() {
   state.hiddenSliders = new Set()
+  // Force slider re-render by clearing cached signature (cellIds change between reciplates)
+  const sliderPanel = $('sliderPanel')
+  if (sliderPanel) delete sliderPanel.dataset.sliderSignature
   const selectedKey = $('recipeSelect').value
   if (reciplates.hasOwnProperty(selectedKey)) {
     state.recipeText = reciplates[selectedKey]

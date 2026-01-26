@@ -1704,6 +1704,83 @@ async function main() {
     const ariPlainVal = await getInputValue(page, 'input.recipe-field[data-label="a"]')
     assert.equal(ariPlainVal, '7', 'Plain number input should still work')
 
+    // =========================================================================
+    // Reciplate switch should reset all state
+    // =========================================================================
+
+    // Qual: switching reciplates clears fixedCellIds (pinned cells)
+    await page.select('#recipeSelect', 'simeq')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    // Pin a cell via longpress
+    const simeqField = await page.$('input.recipe-field[data-label="x"]')
+    await simeqField.click({ clickCount: 1 })
+    await page.mouse.down()
+    await new Promise(r => setTimeout(r, 600))
+    await page.mouse.up()
+    await waitForNextFrame(page)
+    const simeqPinned = await simeqField.evaluate(el => el.classList.contains('fixed'))
+    assert.equal(simeqPinned, true, 'simeq x should be pinned after longpress')
+    // Switch to different reciplate and back
+    await page.select('#recipeSelect', 'crepes')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await page.select('#recipeSelect', 'simeq')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const simeqPinnedAfterSwitch = await page.$eval('input.recipe-field[data-label="x"]', el => el.classList.contains('fixed'))
+    assert.equal(simeqPinnedAfterSwitch, false, 'pinned state should reset after switching reciplates')
+
+    // Qual: switching reciplates clears invalidInputCellIds
+    await page.select('#recipeSelect', 'pyzza')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="a"]', 'invalid!')
+    await page.keyboard.press('Tab')
+    await waitForNextFrame(page)
+    const pyzInvalid = await page.$eval('input.recipe-field[data-label="a"]', el => el.classList.contains('invalid'))
+    assert.equal(pyzInvalid, true, 'pyzza a should be invalid after bad input')
+    await page.select('#recipeSelect', 'crepes')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await page.select('#recipeSelect', 'pyzza')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const pyzInvalidAfterSwitch = await page.$eval('input.recipe-field[data-label="a"]', el => el.classList.contains('invalid'))
+    assert.equal(pyzInvalidAfterSwitch, false, 'invalid state should reset after switching reciplates')
+
+    // Qual: slider panel signature clears when switching reciplates
+    await page.select('#recipeSelect', 'dial')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await page.waitForSelector('#sliderPanel input.slider-input', { visible: true })
+    const dialSliderCount = await page.$$eval('#sliderPanel input.slider-input', els => els.length)
+    assert.ok(dialSliderCount > 0, 'dial should have sliders')
+    await page.select('#recipeSelect', 'simeq')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    // simeq may or may not have sliders depending on bounds, but the panel should be fresh
+    const sliderSigAfterSwitch = await page.$eval('#sliderPanel', el => el.dataset.sliderSignature || '')
+    // After switching, if there are no sliders, signature should be cleared
+    const simeqSliderCount = await page.$$eval('#sliderPanel input.slider-input', els => els.length)
+    if (simeqSliderCount === 0) {
+      assert.equal(sliderSigAfterSwitch, '', 'slider signature should be cleared when no sliders')
+    }
+
+    // Qual: slider cellIds are correct after switching reciplates
+    // This tests the bug where sliders with same var names kept stale cellIds
+    await page.select('#recipeSelect', 'dial')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await page.waitForSelector('#sliderPanel input.slider-input', { visible: true })
+    const dialCellIds = await page.evaluate(() => {
+      return state.cells.map(c => c.id)
+    })
+    const dialSliderCellId = await page.$eval('#sliderPanel input.slider-input', el => el.dataset.cellId)
+    assert.ok(dialCellIds.includes(dialSliderCellId), 'dial slider cellId should match a cell in state')
+    // Switch to blank and back to dial - cellIds will be regenerated
+    await page.select('#recipeSelect', 'blank')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await page.select('#recipeSelect', 'dial')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await page.waitForSelector('#sliderPanel input.slider-input', { visible: true })
+    const dialCellIds2 = await page.evaluate(() => {
+      return state.cells.map(c => c.id)
+    })
+    const dialSliderCellId2 = await page.$eval('#sliderPanel input.slider-input', el => el.dataset.cellId)
+    assert.ok(dialCellIds2.includes(dialSliderCellId2), 'dial slider cellId should match a cell after re-switching')
+
     console.log('All browser/puppeteer quals passed [ui_quals.js]')
   } catch (e) {
     if (pageConsoleLogs.length > 0) {

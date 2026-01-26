@@ -704,6 +704,22 @@ console:
 GET file:///assets/favicon-32x32.png net::ERR_FILE_NOT_FOUND
 GET file:///assets/favicon-16x16.png net::ERR_FILE_NOT_FOUND
 
+* [PUR] Crap something broke at some point. We need to do a complete reset when
+the reciplate changes. Let's add quals about this and then fix it. (I know I
+haven't described the bug; it involves broken sliders and stuff when switching
+between reciplates. If we always have a clean slate whenever the reciplate
+changes -- like rerender and reparse everything from scratch -- then that should
+eliminate all such bugs.) Note: not just changing reciplates with the dropdown.
+Any keystroke typed in the reciplate should trigger wiping everything and
+redoing it from scratch.
+
+* [COL] For sharing recipes, we might want to present a clean interface. I'm
+thinking that the template textarea should be collapsible and the collapsed/
+expanded state should be encoded in the URL. So if you share, for example, 
+reciplier.dreev.es/recipe=crepes&template=collapsed then the template textarea
+loads in the collapsed state. I'm not sure what the default should be. Related
+idea: just have the template textarea below the rendered recipe.
+
 
 ## Latest half-baked ideas for cell syntax
 
