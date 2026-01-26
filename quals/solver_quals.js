@@ -465,6 +465,60 @@ function runAllSolverQuals(ctx) {
 
   ;(() => {
     const eqns = [
+      ['C', 5],
+      ['A^2 + B^2', 'C^2'],
+    ]
+    const rep = solvem(eqns, {A: 6, B: 6, C: null})
+    check('solvem: literal pin without seed (sat)', rep.sat, true)
+    check('solvem: literal pin without seed (C=5)', rep.ass.C, 5, 1e-9)
+    check('solvem: literal pin without seed (eqnsSatisfied)', eqnsSatisfied(eqns, rep.ass), true)
+  })()
+
+  ;(() => {
+    const eqns = [
+      ['C', 5],
+      ['A^2 + B^2', 'C^2'],
+    ]
+    const cases = [
+      { name: 'seed A=10 B=10 C=null', vars: { A: 10, B: 10, C: null } },
+      { name: 'seed A=10 B=10 C=5', vars: { A: 10, B: 10, C: 5 } },
+      { name: 'seed A=6 B=6 C=null', vars: { A: 6, B: 6, C: null } },
+      { name: 'seed A=6 B=6 C=5', vars: { A: 6, B: 6, C: 5 } },
+      { name: 'seed A=1 B=1 C=null', vars: { A: 1, B: 1, C: null } },
+      { name: 'seed A=1 B=1 C=5', vars: { A: 1, B: 1, C: 5 } },
+    ]
+    for (const tc of cases) {
+      const rep = solvem(eqns, tc.vars)
+      check(`solvem: C pin from pyzza-ish ${tc.name} (sat)`, rep.sat, true)
+      check(`solvem: C pin from pyzza-ish ${tc.name} (C=5)`, rep.ass.C, 5, 1e-9)
+      check(`solvem: C pin from pyzza-ish ${tc.name} (eqnsSatisfied)`, eqnsSatisfied(eqns, rep.ass), true)
+    }
+  })()
+
+  ;(() => {
+    const eqns = [
+      ['a', '3x'],
+      ['b', '4x'],
+      ['a^2 + b^2', 'c^2'],
+      ['C', 5],
+      ['A^2 + B^2', 'C^2'],
+    ]
+    const cases = [
+      { name: 'seed C from A=B=10', vars: { x: 1, a: 3, b: 4, c: 5, A: 10, B: 10, C: 14.142135623730951 } },
+      { name: 'seed C pinned already', vars: { x: 1, a: 3, b: 4, c: 5, A: 10, B: 10, C: 5 } },
+      { name: 'seed C from A=B=6', vars: { x: 1, a: 3, b: 4, c: 5, A: 6, B: 6, C: 8.48528137423857 } },
+      { name: 'seed C from A=B=1', vars: { x: 1, a: 3, b: 4, c: 5, A: 1, B: 1, C: 1.4142135623730951 } },
+    ]
+    for (const tc of cases) {
+      const rep = solvem(eqns, tc.vars)
+      check(`solvem: pyzza seed shift ${tc.name} (sat)`, rep.sat, true)
+      check(`solvem: pyzza seed shift ${tc.name} (C=5)`, rep.ass.C, 5, 1e-9)
+      check(`solvem: pyzza seed shift ${tc.name} (eqnsSatisfied)`, eqnsSatisfied(eqns, rep.ass), true)
+    }
+  })()
+
+  ;(() => {
+    const eqns = [
       ['x', 2.5],
       ['a', '3x'],
       ['b', '4x'],

@@ -919,6 +919,47 @@ function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
     return null
   }
 
+  function scaleHomogeneousExpr(expr, exprVars, target) {
+    const base = evalExpr(expr)
+    if (base.error || !isFinite(base.value)) return null
+    const current = base.value
+    if (current === 0) return null
+    const ratio = target / current
+    if (!isFinite(ratio) || ratio < 0) return null
+
+    const probeFactor = 2
+    const probed = { ...values }
+    for (const v of exprVars) {
+      if (!isKnown(v)) return null
+      probed[v] = values[v] * probeFactor
+    }
+    const probe = vareval(expr, probed)
+    if (probe.error || !isFinite(probe.value)) return null
+    if (probe.value === 0) return null
+
+    const degree = Math.log(Math.abs(probe.value / current)) / Math.log(probeFactor)
+    if (!isFinite(degree) || Math.abs(degree) < 1e-12) return null
+
+    const scale = ratio === 0 ? 0 : Math.pow(ratio, 1 / degree)
+    if (!isFinite(scale)) return null
+
+    const scaled = { ...values }
+    for (const v of exprVars) {
+      const next = values[v] * scale
+      const lower = inf[v]
+      const upper = sup[v]
+      if (typeof lower === 'number' && isFinite(lower) && next < lower) return null
+      if (typeof upper === 'number' && isFinite(upper) && next > upper) return null
+      scaled[v] = next
+    }
+
+    const check = vareval(expr, scaled)
+    if (check.error || !isFinite(check.value)) return null
+    if (Math.abs(check.value - target) > tolerance(target, tol, absTol)) return null
+
+    return scaled
+  }
+
   // Main solving loop
   for (let pass = 0; pass < 20; pass++) {
     let changed = false
@@ -1025,6 +1066,18 @@ function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
           if (bestVar !== null) {
             markSolved(bestVar, bestVal, { isTrustworthy, isStable: targetIsStable, isStableNonSingleton: targetStableNonSingleton, eqnLen: eqn.length })
             changed = true
+          } else {
+            const scaleVars = [...exprVars].filter(v =>
+              !constrained.has(v) && !trustworthy.has(v) && !solvedThisPass.has(v))
+            if (scaleVars.length === exprVars.size && scaleVars.length > 1) {
+              const scaled = scaleHomogeneousExpr(expr, scaleVars, target)
+              if (scaled) {
+                for (const v of scaleVars) {
+                  markSolved(v, scaled[v], { isTrustworthy, isStable: targetIsStable, isStableNonSingleton: targetStableNonSingleton, eqnLen: eqn.length })
+                }
+                changed = true
+              }
+            }
           }
         }
       }
@@ -1312,9 +1365,15 @@ function newtonSolver(eqns, vars, inf, sup, knownVars = null) {
   const pinnedVars = new Set()
   for (const c of constraints) {
     if (typeof c.left === 'number') {
-      if (typeof c.right === 'string' && isbarevar(c.right)) pinnedVars.add(c.right)
+      if (typeof c.right === 'string' && isbarevar(c.right)) {
+        pinnedVars.add(c.right)
+        values[c.right] = c.left
+      }
     } else if (typeof c.right === 'number') {
-      if (typeof c.left === 'string' && isbarevar(c.left)) pinnedVars.add(c.left)
+      if (typeof c.left === 'string' && isbarevar(c.left)) {
+        pinnedVars.add(c.left)
+        values[c.left] = c.right
+      }
     }
     if (typeof c.left === 'string') for (const v of varparse(c.left)) allVars.add(v)
     if (typeof c.right === 'string') for (const v of varparse(c.right)) allVars.add(v)
