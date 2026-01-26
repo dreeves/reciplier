@@ -599,6 +599,14 @@ Also, as the user edits fields, append the cvals to the URL as well, like
 * [GAU] It shouldn't be hard to add a Gaussian elimination solver to the kitchen
 sink in csolver.js, why not.
 
+* [ISL] Render sliders iff the urtext of the cell has inequality bounds. And
+render those sliders not at the top but just inline, the same way we currently
+render a text field, we render sliders right in place. This means throwing away
+the slider excerpts and the close buttons. Remember to think in terms of
+death-to-if-statements. We want to elegantly generalize what's currently done
+with text fields to include other UI elements, in this case sliders.
+
+
 ## Future Work
 
 * [CRT] Crowdsource templates. If the template text area doesn't match one of
@@ -719,13 +727,6 @@ expanded state should be encoded in the URL. So if you share, for example,
 reciplier.dreev.es/recipe=crepes&template=collapsed then the template textarea
 loads in the collapsed state. I'm not sure what the default should be. Related
 idea: just have the template textarea below the rendered recipe.
-
-* [ISL] Render sliders iff the urtext of the cell has inequality bounds. And
-render those sliders not at the top but just inline, the same way we currently
-render a text field, we render sliders right in place. This means throwing away
-the slider excerpts and the close buttons. Remember to think in terms of
-death-to-if-statements. We want to elegantly generalize what's currently done
-with text fields to include other UI elements, in this case sliders.
 
 * [BFL] I changed my mind: I think the syntax for inequalities should require 
 that the be bounds occur first and last in the cell:
@@ -919,5 +920,5 @@ The rendering of this has the part before the first cell appear on two lines (ie
 This recipe is scaled by a factor of {x : 1} test {.1 <= x <= 10}
 ```
 Removing "test" makes it render properly.
-I guess this is because the slider has hit it's minimum width and so the the above reciplate doesn't fit on one line?
+I guess this is because the slider has hit its minimum width and so the the above reciplate doesn't fit on one line?
 I think in that case it should just wrap and the slider should render on a new line. But of course have that happen without adding if-statements.

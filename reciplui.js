@@ -179,7 +179,7 @@ function renderRecipe() {
         const varName = cell.ineq.varName || ''
         const minLabel = formatNum(bounds.minLabel)
         const maxLabel = formatNum(bounds.maxLabel)
-        inputHtml = `<span class="slider-bound">${minLabel}</span><input type="range" class="recipe-slider${nearOne ? ' at-one-x' : ''}" min="${bounds.min}" max="${bounds.max}" step="0.01" value="${displayValue}" data-cell-id="${cell.id}" data-var-name="${varName}" title="${title}"${disabledAttr}><span class="slider-bound">${maxLabel}</span>`
+        inputHtml = `<span class="slider-group"><span class="slider-bound">${minLabel}</span><input type="range" class="recipe-slider${nearOne ? ' at-one-x' : ''}" min="${bounds.min}" max="${bounds.max}" step="0.01" value="${displayValue}" data-cell-id="${cell.id}" data-var-name="${varName}" title="${title}"${disabledAttr}><span class="slider-bound">${maxLabel}</span></span>`
       } else {
         // No inequality bounds - render as text field
         const label = cell.ceqn.length > 0 ? cell.ceqn[0].trim() : ''
