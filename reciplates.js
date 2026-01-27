@@ -265,7 +265,7 @@ Scaled by a factor of x where x/2 is {x/2 = 8} for some reason.
 
 ---
 
-Frozen: {a = 5}
+Pegged: {a = 5}
 Computed: {b+0} <!-- Nothing should change if this is {b} vs {b+0} -->
 Constraint: {a + b = 10}
 `,

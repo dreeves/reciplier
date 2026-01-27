@@ -81,4 +81,4 @@ conditional that determines UI type. The elegance:
 3. Custom template with `{0.5 <= x <= 10 : 1}` - renders as inline slider
 4. Drag slider - dependent cells update
 5. Edit text field - sliders update accordingly
-6. Peg/freeze works on both input types
+6. Peg works on both input types

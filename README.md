@@ -11,25 +11,27 @@ spreadsheet. Better than a spreadsheet in some ways. It also subsume's my old
 
 # Functional Spec for Generalized Reciplier
 
+[TODO: I'm trying out an idea for new syntax; not sure if I'll keep this]
+
 The most basic Reciplier use case starts with a recipe template like so:
 
 ```
-Mix {2x} eggs and {3x} wheels of cheese. Then eat it.
+Mix [2x] eggs and [3x] wheels of cheese. Then eat it.
 
-This recipe is scaled by {x : 1}.
+This recipe is scaled by [x = 1].
 ```
 
-Each expression in curly braces is called a cell. Reciplier renders each cell,
-by default, as a numeric field in the UI and you can edit any of them at will,
+Each expression in brackets is called a cell. Reciplier renders each cell, by
+default, as a numeric field in the UI and you can edit any of them at will,
 causing the others to change accordingly to keep all the constraints satisfied,
 like how the number of wheels of cheese is always 3 times whatever x is. Or edit
 the field for wheels of cheese to 18 and the number of eggs will automatically
 change to 12 and x to 6.
 
 Also you can edit the recipe template and Reciplier reparses it and updates the 
-fields and the rest of the UI keystroke by keystroke as you edit. The template
+fields and the rest of the UI, keystroke by keystroke as you edit. The template
 defines the UI and you can use that UI and redefine it all on the same page. It
-will make sense when you try it.
+makes sense when you try it.
 
 ### Fancier Constraints
 
@@ -44,19 +46,21 @@ pan as well.
 Here's how we do all that by annotating the recipe template:
 
 ```
-Mix {2x} eggs and {3x} wheels of cheese in a {d}-inch diameter pan.
-Or a {w}x{h}-inch rectangular pan (with a {z}-inch diagonal) is fine.
-Or any pan as long as its area is {A} square inches. Heat at 350 degrees.
+Mix [2x] eggs and [3x] wheels of cheese in a [d]-inch diameter pan.
+Or a [w]x[h]-inch rectangular pan (with a [z]-inch diagonal) is fine.
+Or any pan as long as its area is [A] square inches. Heat at 350 degrees.
 
-This recipe is scaled by a factor of {x : 1}.
+This recipe is scaled by a factor of [x = 1].
 
 Constraints, constants, and sanity checks:
 * The true circle constant is {tau = 6.28}
-* The original pan diameter at 1x scale is {d1 = 9} (radius {r1 = d1 / 2})
-* Scaled radius is {r = d/2} and scaled diameter is {d = 2r}
+* The original pan diameter at 1x scale is [[d1 = 9]] (radius [r1 = d1 / 2])
+* Scaled radius is [r = d/2] and scaled diameter is [d = 2r]
 * The squared diagonal of the rectangular pan is {w^2 + h^2 = z^2}
 * The area again is {A = x*1/2*tau*r1^2 = 1/2*tau*r^2 = w*h}
 ```
+
+TODO: Talk about pegged and static cells.
 
 Any cell that scales linearly is multiplied by x, what we're using in this
 template as the scale variable. The confusing bit is the area, A, which is
@@ -93,21 +97,21 @@ Constraints and sanity checks:
 
 We use a convention that if any cell starts with a constant (arithmetic 
 expressions that evaluate to a number count as constants) then by default that
-cell is frozen in the UI. That's indicated above with double brackets and just
+cell is pegged in the UI. That's indicated above with double brackets and just
 means that the solver will hold that value fixed and try to find values for the
 other cells that satisfy the constraints. The user can always toggle the
-frozenness of a cell any time.
+peggedness of a cell any time.
 
 (Do we need that convention? Simpler would be if any cell that includes a
-constant at all is initially frozen. But we want to say {x=1} to mean x defaults
-to 1 without fixing x at 1.)
+constant at all is initially pegged. But we want to say {x=1} to mean x defaults
+to 1 without pegging x at 1.)
 
 The next thing to notice is that the variables in this recipe template are
-actually under-constrained. In particular, fixing one of w or h to any number
+actually under-constrained. In particular, pegging one of w or h to any number
 implies the other. Reciplier will pick arbitrary values satisfying the
 constraints. If those choices are silly (as in the 0.01x6361.7-inch pan above)
-the user can just change them and optionally freeze them. Maybe you have only
-9x9-inch square pans so you fix w at 9 and then if Reciplier says that that
+the user can just change them and optionally peg them. Maybe you have only
+9x9-inch square pans so you peg w at 9 and then if Reciplier says that that
 implies h=27, you can take that to mean 3 9x9-inch pans in a row.
 
 Maybe you slide the slider judiciously to make sure h is a multiple of 9. Or add
@@ -226,16 +230,9 @@ A cell is a data structure that includes these fields:
 * `cval` is the current value assigned to this cell
 * `ceqn` (pronounced "sequin") is a list of one or more non-constant expressions
 that are constrained to be equal to each other and possibly to cval
-* `fix` is a boolean saying whether the cell is frozen
+* `cpeg` is a boolean saying whether the cell is pegged
 * `urtext` is the exact string between the curly braces in the recipe template
 that defines the cell
-
-(PS: `fix` is not greppable and kind of pseudovernacular jargon where you have
-to disambiguate it in English, so I'm considering something cute like `icy`
-instead. But I could also change the terminology to something like "pegged"
-or "static" instead of "frozen". I don't think `peg` has the pseudovernacular
-jargon problem. Ok, I convinced myself. TODO: Change the terms in the spec from
-"frozen"/"freeze" to "pegged"/"peg".)
 
 Recall that the user can edit the template and thus change the urtext any time.
 Everything is reparsed from scratch when that happens.
@@ -243,7 +240,7 @@ Everything is reparsed from scratch when that happens.
 Each cell in the recipe template is parsed like so:
 
 1. Split the urtext on "=" to get a list of expressions. 
-2. If the first expression in the list is a constant, set `fix` to true.
+2. If the first expression in the list is a constant, set `cpeg` to true.
 3. Filter out all constant expressions. If more than one, that's an error.
 4. Set cval to the constant if there is one, null otherwise.
 5. Set ceqn to the list of non-constant expressions.
@@ -259,30 +256,30 @@ union of all symbols used in all the expressions. There has to be a satisfying
 assignment at this point or it's just a bad template and we show an error 
 banner. 
 
-2. Set the initial frozen status of each cell according to whether the first 
+2. Set the initial pegged status of each cell according to whether the first 
 expression in the urtext is a constant.
 
 3. Use the satisfying assignment from solvem to compute the cval for each cell.
 
 4. Set the ceqn of each cell to be the non-constant expressions in the urtext.
 
-That's it. Now when the user edits a cell, all other nonfrozen cells are free to
+That's it. Now when the user edits a cell, all other nonpegged cells are free to
 change.
 
 Key invariant: When the user is editing a cell, they are directly editing the
 cval. See "Always Be Solving" below.
 
 
-### Freezing and unfreezing cells
+### Pegging and unpegging cells
 
-Any cell at any time may be marked as frozen (`fix` set to true). Conceptually
+Any cell at any time may be marked as pegged (`cpeg` marked true). Conceptually
 that means that it's treated as one of the constraints that the cell have a
-value of cval. So when `fix` is true or when a cell is being edited, we 
+value of cval. So when `cpeg` is true or when a cell is being edited, we 
 non-destructively append cval to ceqn when calling solvem.
 
 Again, if the first expression in a cell's urtext is a constant, that cell
-starts frozen. This is what causes {6.28 = tau} to yield a field in the UI
-that's initially frozen while {tau = 6.28} doesn't. [TODO: this will be 
+starts pegged. This is what causes {6.28 = tau} to yield a field in the UI
+that's initially pegged while {tau = 6.28} doesn't. [TODO: this will be 
 changing]
 
 For example, if a cell in the template is defined as `{x = 3y = z}` then
@@ -310,9 +307,9 @@ calling vareval for each cell with the first expression in ceqn and the
 assignment from the solver. The solution will necessarily match the cval of 12
 that the user entered in cell c since that value was included as a constraint.
 If the solver doesn't find a solution, insert a banner saying "No solution
-found" and don't update any cvals. If any cells besides c are frozen (c's frozen
+found" and don't update any cvals. If any cells besides c are pegged (c's pegged
 status doesn't matter since we're editing it) then the banner says "No solution
-found (try unfreezing cells)". The banner is shown live, while the user is
+found (try unpegging cells)". The banner is shown live, while the user is
 typing, i.e., it's recomputed on every keystroke.
 
 ## Inequalities 
@@ -364,20 +361,20 @@ is rendered inline as a numeric field and a cell specified like... hmmm...
 `{~ a = b ~}` (?) means render it as a slider. Ok, let's not let scope creep get
 out of control though. Ignore this PPPS for now.
 
-## New way to specify initially frozen cells and initial/default cvals
+## New way to specify initially pegged cells and initial/default cvals
 
 TODO: Editing pass for spec above to drop the stuff about starting with a
 constant and to say that any cell with an equals-a-constant constraint starts
-frozen at that constant.
+pegged at that constant.
 
 (Historical note: In a previous version of Reciplier we used colons to label
 cells by associating each cell with a specific variable. That turned out to be a
 bad idea and is now ancient history. Later we tried the convention that if a
 cell's urtext started with a constant, the corresponding field would start
-frozen, so you could do {6.28 = tau} instead of {tau = 6.28} if you didn't want
+pegged, so you could do {6.28 = tau} instead of {tau = 6.28} if you didn't want
 tau inferred based on other cells. That was also a bad idea. It was too easy to
 forget that having a cell like {x+y=0} was not actually a constraint unless you
-froze the cell, either in the UI or by writing it as {0=x+y} in the reciplate.
+pegged the cell, either in the UI or by writing it as {0=x+y} in the reciplate.
 Especially if you put a cell like that in an html comment, since then you'd
 naturally think of it as purely a constraint because it didn't show up in the UI
 at all. Claude misguidedly tried fixing this by having a special case for cells
@@ -386,12 +383,12 @@ in html comments, which was an egregious anti-magic violation.)
 We use colon syntax for specifying an expression to use as the initial/default
 cval for a cell.
 
-For example, {x: 1} means x is initially unfrozen and not unconstrained, whereas
-{x = 1} means the cell _is_ initially frozen, just by virtue of having a
+For example, {x: 1} means x is initially unpegged and not unconstrained, whereas
+{x = 1} means the cell _is_ initially pegged, just by virtue of having a
 constant expression in the list of expressions that are set equal to each other.
-The user can still edit it and, orthogonally, still unfreeze it. Cells like 
-{a+b = 0} are no different. The constant 0 means the cell is initially frozen.
-You can instead specify it as {a+b : 0} and it will start unfrozen. Either way
+The user can still edit it and, orthogonally, still unpeg it. Cells like 
+{a+b = 0} are no different. The constant 0 means the cell is initially pegged.
+You can instead specify it as {a+b : 0} and it will start unpegged. Either way
 the field for the cell will start with a 0 in it. 
 
 If you do something like {x = 1 : 2} that's an error:
@@ -424,9 +421,9 @@ the initial cvals.
 Review of this new world order:
 
 * Order never matters for equations.
-* Any cell whose urtext sets it equal to a constant is initially frozen.
+* Any cell whose urtext sets it equal to a constant is initially pegged.
 * So all equations are explicit constraints, at least initially.
-* The user can remove an "equals a constant" constraint by unfreezing the cell.
+* The user can remove an "equals a constant" constraint by unpegging the cell.
 * (As before, a cell keeps all the non-constant expressions from its urtext in
   in ceqn. The constant, if there is one, is in cval. Then iff the fix field of
   the cell is true, cval is included in the constraint equation that's sent
@@ -466,16 +463,16 @@ Or without solving for the hypotenuse:
 Sanity check: {a^2 + b^2 = c^2} is the squared hypotenuse.
 ```
 
-We have a slick UI (TBD) to mark fields as frozen or fixed. Maybe you want to
-fix side b and see how changing side a affects side c. Without that ability it
-would be arbitrary which of the other fields would change when you edited one.
+We have a slick UI to mark fields as pegged. Maybe you want to hold side b fixed
+and see how changing side a affects side c. Without that ability it would be
+arbitrary which of the other fields would change when you edited one.
 
 If the user ever causes the constraints to be violated, like by marking a=3 and
-b=4 as fixed and then setting field c to something other than 5, or the squared
+b=4 as pegged and then setting field c to something other than 5, or the squared
 hypotenuse field to something other than 25, then the UI always lets you but any
-non-fixed field whose equation is false is shown in red.
+non-pegged field whose equation is false is shown in red.
 
-For example, if you had a=3 (fixed), b=4 (fixed), and changed the 5 in the c 
+For example, if you had a=3 (pegged), b=4 (pegged), and changed the 5 in the c
 field to 6, then the last field would turn red and show its violated equation as
 "25 != 36". But as soon as you clicked away from field c, it would recompute
 itself as the only value that makes all the equations true, namely 5.
@@ -581,10 +578,10 @@ for it. Also print the constraint satisfaction problem in Mathematica syntax so
 I can confirm if it's really true that there's no solution. For example:
 Solve[{c == 50, a == 3x, b == 4x, 25 == a^2 + b^2 == c^2}, {c, a, b, x}]
 
-* [DCF] Double-clicking to freeze/unfreeze is terrible. For one thing, I
+* [DCF] Double-clicking to peg/unpeg is terrible. For one thing, I
 double-click cells by muscle memory to highlight the current contents of a field
 in order to overwrite it. Worse, if you don't happen to ever double-click a cell
-then freezing/unfreezing is totally undiscoverable.
+then pegging/unpegging is totally undiscoverable.
 
 * [LNK] Direct links to recipes. When you select a recipe template from the
 dropdown, update the query string like "reciplier.dreev.es/?recipe=crepes" using
@@ -620,7 +617,7 @@ field the system just tries changing other variables until something works.
 That's pretty magical. What if instead you could see other fields kind of cross
 themselves out and show the new values implied by your edit? Or, like, if more
 than one cell can change to accommodate your edit you're forced to explicitly
-freeze cells until that's no longer the case?
+peg cells until that's no longer the case?
 
 * [VAR] Relatedly, should we make it easy to see the current assignment of
 values to variables? Or should you just include something like 
@@ -691,7 +688,7 @@ also [SEE].
 
 * [TVR] Sometimes, as in the Beeminder commitment dial with goal date, goal
 value, and goal rate, we want to say that exactly 1 out of 3 cells needs to be
-frozen. The status quo in Beeminderland is that clicking to edit a pegged cell
+unpegged. The status quo in Beeminderland is that clicking to edit a pegged cell
 makes it automatically unpeg itself and one of the other two cells (with no way
 to choose which) becomes pegged instead. I don't love that. It feels
 insufficiently anti-magical. But having the UI complain at you for entering
@@ -735,38 +732,33 @@ that the be bounds occur first and last in the cell:
 Anything else should be a syntax error.
 
 * [AUC] In the decision auction reciplate, how do we have both a field and a
-slider for the shares that are both treated as frozen? Like you want to change
+slider for the shares that are both treated as pegged? Like you want to change
 either the number in the field or slide the slider and have the two stay in sync
 which implies they're not pegged. But then when you change the other fields, the
 shares shouldn't change, because they *are* pegged.
 
+* [SPG] Probably sliders need to have the UI for pegging/unpegging, same as
+fields.
 
-## Latest half-baked ideas for cell syntax
+* [ESC] Support syntax like "Footnote: \[1\]" if you want literal brackets in
+the recipe. Similar for curly braces of course.
 
-What if every cell is a JSON object:
-  {eq: "x = 2y", min: 0, max: 99, ini: 50, elm: 'field', ...}
-As syntactic sugar you can omit "eq" like so:
-  {x = 2y, min: 0, max: 99, ini: 50, elm: "slider", ...}
-And you can omit "ini" like so:
-  {x = 2y : 50, min: 0, max: 99, elm: "slider", ...}
-And you can specify the min/max like so:
-  {0 < x = 2y < 99 : 50, elm: "slider", ...}
 
-Interestingly, we don't ever need to specify in the reciplate whether a cell is
-frozen/pegged or not. Consider all possible combinations:
-  {x = y, peg: true} -- Error: pegged field needs initial value.
-  {x = y : 1, peg: true} -- Same as {x = y = 1}.
-  {x = y, peg: false} -- Same as {x = y}.
-  {x = y = 7, peg: true} -- Same as {x = y = 7}.
-  {x = y = 7, peg: false} -- Error: constant in equation implies pegged.
+## Half-baked ideas for cell syntax: JSON objects with syntactic sugar
 
-So for the original use case of a recipe, you'd do this:
-Mix {2x} eggs and {3x} cups of flour.
-Scaling factor: {x : 1}
-{.1 <= x <= 10, elm: 'slider'}
+What if every cell were a JSON object:
+  {eq: "x = 2y", min: 0, max: 99, ini: 50, qua: 'field', peg: false, ...}
+As syntactic sugar you could omit "eq" by just leading with it:
+  {x = 2y, min: 0, max: 99, ini: 50, qua: 'slider', peg: false, ...}
+You could omit "ini" by having one of the "eq" expressions be a constant:
+  {x = 2y = 50, min: 0, max: 99, qua: 'field', peg: false, ...}
+You could specify the min/max like so:
+  {0 < x = 2y = 50 < 99, qua: 'slider', peg: false, ...}
+Double braces could be syntactic sugar for setting "peg" to true:
+  {{x = 1, qua: 'slider'}}
+And specifying the bounds via inequalities could make "qua" default to "slider":
+  {{0 <= x = 1 <= 10}}
 
-Man, I'm torn. Having a simple syntax for cells is super slick. We could even
-say that specifying a cell with bounds makes it render as a slider. [done]
 
 Maybe elegance and simplicity matter more here than full generality of
 constraint-solving. So jettison use cases like specifying bounds without
@@ -789,7 +781,7 @@ never mind, I think.
 
 What if specifying bounds for a cell is what makes it render as a slider? On the
 one hand, that's messy design. Better to have an explicit indicator for field vs
-slider and, orthogonally, the ability to specifying bounds, or perhaps arbitrary
+slider and, orthogonally, the ability to specify bounds, or perhaps arbitrary
 inequalities. But, pragmatically...
 
 * Eggs: {12x} large
@@ -801,15 +793,11 @@ inequalities. But, pragmatically...
 Yield: roughly {29x} crepes
 
 Scaled by a factor of {x : 1} {.1 <= x <= 10}
-{.1 <= x : 1 < 10}
-{.1 <= x < 10 : 1}
-
-
 
 
 SCRATCH AREA: ------------------------------------------------------------------
 
-Brainstorming ways to indicate an initially frozen field:
+Brainstorming ways to indicate an initially pegged field:
 * NIX: number first in urtext: {6.28 = tau} or {0 < 6.18 = tau < 7}
 * double curly braces: {{tau = 6.28}}
 * double square brackets: [[tau = 6.28]]
@@ -823,23 +811,23 @@ Bug report 1:
 Replicata:
 
 1. Load the dial recipe
-2. Freeze the vini cell at 73
-3. Freeze the vfin cell at 70
-4. Freeze the start time (tini) field (the one in unixtime in seconds)
+2. Peg the vini cell at 73
+3. Peg the vfin cell at 70
+4. Peg the start time (tini) field (the one in unixtime in seconds)
 5. Change the rate (r) to -1
 
 Expectata: That the end date changes.
 
-Resultata: "No solution (try unfreezing cells)" and the tfin field is red.
+Resultata: "No solution (try unpegging cells)" and the tfin field is red.
 
 Bug report 2:
 
 Replicata:
 
 1. Load the dial recipe
-2. Freeze the vini cell at 73
-3. Freeze the vfin cell at 70
-4. Freeze the start time (tini) field (the one in unixtime in seconds)
+2. Peg the vini cell at 73
+3. Peg the vfin cell at 70
+4. Peg the start time (tini) field (the one in unixtime in seconds)
 5. Change the rate (r) to 0
 
 Expectata: To see a "no solution" banner.
@@ -869,7 +857,7 @@ zij = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2.7394753846919868e-11, 0, 0, 1.32348898008
 sat=false
 
 
-BUG REPORT: simeq correctly uses gauss-jordan to find a solution when the reciplate loads but if you change one of the cells it says "no solution found (try unfreezing cells)". the only way to have it use gauss-jordan again to compute the solution is to make a dummy edit to one of the frozen cells. this kind of makes sense because if you're editing one of the other cells then we treat that cell as temporarily pegged while you're editing it, and indeed there is no solution when you do that, unless you edit one of the cells to be consistent with the solution.
+BUG REPORT: simeq correctly uses gauss-jordan to find a solution when the reciplate loads but if you change one of the cells it says "no solution found (try unpegging cells)". the only way to have it use gauss-jordan again to compute the solution is to make a dummy edit to one of the pegged cells. this kind of makes sense because if you're editing one of the other cells then we treat that cell as temporarily pegged while you're editing it, and indeed there is no solution when you do that, unless you edit one of the cells to be consistent with the solution.
 
 BUG REPORT: 
 Load breakaway reciplate and slide the peloton (vpm) slider.

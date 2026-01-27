@@ -320,10 +320,10 @@ function contradictionsForEqns(eqns, ass, zij, cells) {
   return errors
 }
 
-function recomputeCellCvals(cells, ass, fixedCellIds, pinnedCellId = null) {
+function recomputeCellCvals(cells, ass, peggedCellIds, pinnedCellId = null) {
   for (const cell of cells) {
     if (cell.id === pinnedCellId) continue
-    if (fixedCellIds && fixedCellIds.has(cell.id) && isFiniteNumber(cell.cval)) {
+    if (peggedCellIds && peggedCellIds.has(cell.id) && isFiniteNumber(cell.cval)) {
       continue
     }
     if (!cell.ceqn || cell.ceqn.length === 0) continue
@@ -422,7 +422,7 @@ let state = {
   recipeText: '',
   cells: [],
   solve: { ass: {}, eqns: null, zij: null, sat: true },
-  fixedCellIds: new Set(),
+  peggedCellIds: new Set(),
   errors: [],
   solveBanner: '',
   invalidExplainBanner: '',
@@ -469,9 +469,9 @@ function parseRecipe() {
   state.solve = solve
   state.bounds = bounds
   state.errors = allErrors
-  // Cells with constants and no colon start frozen (YN case in parse table)
-  state.fixedCellIds = new Set(cells.filter(c => c.frozen).map(c => c.id))
-  recomputeCellCvals(cells, solve.ass, state.fixedCellIds)
+  // Cells with constants and no colon start pegged (YN case in parse table)
+  state.peggedCellIds = new Set(cells.filter(c => c.pegged).map(c => c.id))
+  recomputeCellCvals(cells, solve.ass, state.peggedCellIds)
   state.solveBanner = ''
   state.invalidExplainBanner = ''
   state.invalidInputCellIds = new Set()
@@ -501,10 +501,10 @@ function setInvalidExplainBannerFromInvalidity(invalidCellIds) {
 }
 
 function setSolveBannerFromSatisfaction(sat) {
-  const anyFrozen = state.fixedCellIds.size > 0
+  const anyPegged = state.peggedCellIds.size > 0
   state.solveBanner = sat
     ? ''
-    : (anyFrozen ? 'No solution found (try unfreezing cells)' : 'No solution found')
+    : (anyPegged ? 'No solution found (try unpegging cells)' : 'No solution found')
 }
 
 function solveAndApply({
@@ -538,7 +538,7 @@ function solveAndApply({
 
   const skipRecomputeCellId = preserveEdited ? editedCellId : null
   if (sat) {
-    recomputeCellCvals(state.cells, state.solve.ass, state.fixedCellIds, skipRecomputeCellId)
+    recomputeCellCvals(state.cells, state.solve.ass, state.peggedCellIds, skipRecomputeCellId)
   }
 
   const invalidCellIds = collectInvalidCellIds(eqns, zij)
@@ -554,7 +554,7 @@ function buildInteractiveEqns(editedCellId = null, editedValue = null) {
 
     if (editedCellId !== null && c.id === editedCellId) {
       eqn.push(editedValue)
-    } else if (state.fixedCellIds.has(c.id)) {
+    } else if (state.peggedCellIds.has(c.id)) {
       eqn.push(c.cval)
     }
 

@@ -265,14 +265,14 @@ function runParserQuals() {
     parseCell(makeCell('x = 5')).ceqn, ['x'])
   check('parseCell: simple equation cval',
     parseCell(makeCell('x = 5')).cval, 5)
-  check('parseCell: equation frozen (YN: constant + no colon)',
-    parseCell(makeCell('x = 5')).frozen, true)
+  check('parseCell: equation pegged (YN: constant + no colon)',
+    parseCell(makeCell('x = 5')).pegged, true)
   check('parseCell: variable equation',
     parseCell(makeCell('x = y')).ceqn, ['x', 'y'])
   check('parseCell: variable equation cval',
     parseCell(makeCell('x = y')).cval, null)
-  check('parseCell: variable equation not frozen (NN: no constant + no colon)',
-    parseCell(makeCell('x = y')).frozen, false)
+  check('parseCell: variable equation not pegged (NN: no constant + no colon)',
+    parseCell(makeCell('x = y')).pegged, false)
   check('parseCell: three-way equation',
     parseCell(makeCell('a = b = c')).ceqn, ['a', 'b', 'c'])
   check('parseCell: expression equation',
@@ -284,13 +284,13 @@ function runParserQuals() {
   check('parseCell: constraint cval',
     parseCell(makeCell('a = b = 5')).cval, 5)
 
-  // Colon syntax: colon acts as equals but makes cell unfrozen
+  // Colon syntax: colon acts as equals but makes cell unpegged
   check('parseCell: colon ceqn',
     parseCell(makeCell('x : 5')).ceqn, ['x'])
   check('parseCell: colon cval',
     parseCell(makeCell('x : 5')).cval, 5)
-  check('parseCell: colon not frozen (YY: constant + colon)',
-    parseCell(makeCell('x : 5')).frozen, false)
+  check('parseCell: colon not pegged (YY: constant + colon)',
+    parseCell(makeCell('x : 5')).pegged, false)
   check('parseCell: colon with expression ceqn',
     parseCell(makeCell('y = 2x : 10')).ceqn, ['y', '2x'])
   check('parseCell: colon with expression cval',

@@ -559,7 +559,7 @@ function buildUsesAsInput(eqns) {
   return usesAsInput
 }
 
-// Find variables pinned to literal values
+// Find variables pinned to literal values (not to be confused with pegged)
 function findLiteralPins(eqns) {
   const literalPinned = new Map()
   for (const eqn of eqns) {
@@ -769,7 +769,7 @@ function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
   const usesAsInput = buildUsesAsInput(eqns)
   const literalPinned = findLiteralPins(eqns)
 
-  // Apply literal pins to values
+  // Apply literal pins to values (not to be confused with pegged)
   for (const [v, n] of literalPinned) {
     values[v] = n
   }
@@ -1130,7 +1130,7 @@ function gradientDesc(eqns, initialVars, inf, sup) {
   let strength = new Int8Array(varNames.length).fill(0)
   values.forEach((v, i) => { if (!isNaN(v)) strength[i] = 1 })
 
-  let pinned = new Set()
+  let pinned = new Set() // not to be confused with pegged
   let dependencies = new Map()
 
   const getDeps = (expr) => {
@@ -1361,6 +1361,7 @@ function newtonSolver(eqns, vars, inf, sup, knownVars = null) {
   }
 
   // Find variables that appear in non-linear expressions and aren't pinned
+  // (not to be confused with pegged)
   const allVars = new Set()
   const pinnedVars = new Set()
   for (const c of constraints) {
@@ -1379,7 +1380,8 @@ function newtonSolver(eqns, vars, inf, sup, knownVars = null) {
     if (typeof c.right === 'string') for (const v of varparse(c.right)) allVars.add(v)
   }
 
-  // Variables to solve for: those not pinned to literals
+  // Variables to solve for: those not pinned to literals (not to be confused
+  // with pegged)
   const allSolveVars = [...allVars].filter(v => !pinnedVars.has(v)).sort()
 
   // For potentially underdetermined systems with knownVars, let kludgeProp handle it.

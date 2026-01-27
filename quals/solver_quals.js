@@ -125,7 +125,7 @@ function runSolvemQuals(solvemImpl, label) {
       expected: { d1: 9, r1: 4.5, tau: 6.28, x: 1, r: 4.5, d: 9, A: 63.585 },
     },
     {
-      name: 'cheesepan r1 with x frozen at 1',
+      name: 'cheesepan r1 with x pegged at 1',
       eqns: [
         ['d1', 9], ['r1', 'd1/2'], ['tau', 6.28], ['x', 1],
         ['r', 'd/2'],
@@ -147,13 +147,13 @@ function runSolvemQuals(solvemImpl, label) {
       expected: { d: 10, r: 5 },
     },
     {
-      name: 'both r=d/2 and d=2r with d frozen',
+      name: 'both r=d/2 and d=2r with d pegged',
       eqns: [['d', 10], ['r', 'd/2'], ['_v', 'd', '2*r']],
       vars: { d: 10, r: 1, _v: 1 },
       expected: { d: 10, r: 5 },
     },
     {
-      name: 'both r=d/2 and d=2r with r frozen',
+      name: 'both r=d/2 and d=2r with r pegged',
       eqns: [['r', 5], ['d', '2*r'], ['_v', 'd/2', 'r']],
       vars: { d: 1, r: 5, _v: 1 },
       expected: { d: 10, r: 5 },
@@ -558,7 +558,7 @@ function runAllSolverQuals(ctx) {
     ], {x: 1, eggs: 12, milk: 5.333, flour: 3}).ass,
     {x: 2, eggs: 24, milk: 10.666, flour: 6})
 
-  check('solvem: frozen x makes eggs unsatisfiable',
+  check('solvem: pegged x makes eggs unsatisfiable',
     eqnsSatisfied(
       [['x', 1], ['eggs', '12x', 24]],
       solvem([['x', 1], ['eggs', '12x', 24]], {x: 1, eggs: 12}).ass
@@ -581,7 +581,7 @@ function runAllSolverQuals(ctx) {
     ], {d1: 9, r1: 1, tau: 6.28, x: 1, r: 1, d: 1, A: 1, _v: 1}).ass,
     {d1: 9, r1: 4.5, tau: 6.28, x: 1, r: 4.5, d: 9, A: 63.585, _v: 63.585})
 
-  check('solvem: cheesepan r1 with x frozen at 1',
+  check('solvem: cheesepan r1 with x pegged at 1',
     solvem([
       ['d1', 9], ['r1', 'd1/2'], ['tau', 6.28], ['x', 1],
       ['r', 'd/2'],
@@ -612,11 +612,11 @@ function runAllSolverQuals(ctx) {
     })(),
     true)
 
-  check('solvem: both r=d/2 and d=2r with d frozen',
+  check('solvem: both r=d/2 and d=2r with d pegged',
     solvem([['d', 10], ['r', 'd/2'], ['_v', 'd', '2*r']], {d: 10, r: 1, _v: 1}).ass,
     {d: 10, r: 5})
 
-  check('solvem: both r=d/2 and d=2r with r frozen',
+  check('solvem: both r=d/2 and d=2r with r pegged',
     solvem([['r', 5], ['d', '2*r'], ['_v', 'd/2', 'r']], {d: 1, r: 5, _v: 1}).ass,
     {d: 10, r: 5})
 
@@ -789,12 +789,12 @@ function runAllSolverQuals(ctx) {
   })()
 
   ;(() => {
-    // Date/value parameters are frozen, unixtime derives tini/tfin, then r is computed
+    // Date/value parameters are pegged, unixtime derives tini/tfin, then r is computed
     const eqns = [
       ['SID', 86400],
-      ['y0', 2025], ['m0', 12], ['d0', 25],  // Freeze start date
-      ['y', 2025], ['m', 12], ['d', 26],     // Freeze end date
-      ['vini', 0], ['vfin', 100100],          // Freeze values
+      ['y0', 2025], ['m0', 12], ['d0', 25],  // Peg start date
+      ['y', 2025], ['m', 12], ['d', 26],     // Peg end date
+      ['vini', 0], ['vfin', 100100],          // Peg values
       ['tini', 'unixtime(y0, m0, d0)'],
       ['tfin', 'unixtime(y, m, d)'],
       ['r', '(vfin-vini)/(tfin-tini)'],
@@ -1036,7 +1036,7 @@ function runAllSolverQuals(ctx) {
       r: r0,
     })
 
-    check('solvem: dial bug1b tini frozen (sat)', rep.sat, true)
+    check('solvem: dial bug1b tini pegged (sat)', rep.sat, true)
     check('solvem: dial bug1b end year', rep.ass.y, 2025, 0.01)
     check('solvem: dial bug1b end month', rep.ass.m, 12, 0.01)
     check('solvem: dial bug1b end day', rep.ass.d, 28, 0.01)

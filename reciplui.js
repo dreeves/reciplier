@@ -6,7 +6,7 @@
 
 const CONFIG_DEFAULTS = {
 // --- Trigger Modes ---
-// Which triggers are active by default for pegging/freezing fields.
+// Which triggers are active by default for pegging fields.
 // Invisible: 'dblclick', 'tripleclick', 'longpress', 'borderclick', 'modclick', 'rightclick'
 // Visual: 'cornerpin', 'edgedots', 'brackets', 'hoverglow'
 triggerModes: ['longpress', 'cornerpin'],
@@ -166,7 +166,7 @@ function renderRecipe() {
       // Render the cell as input field or slider based on inequality bounds
       const value = cell.cval
       const displayValue = formatNum(value)
-      const isFixed = state.fixedCellIds.has(cell.id)
+      const isPegged = state.peggedCellIds.has(cell.id)
       const isInvalid = invalidCellIds.has(cell.id)
       const title = `${cell.urtext}`.replace(/"/g, '&quot;')
       const disabledAttr = disableInputs ? ' disabled' : ''
@@ -184,7 +184,7 @@ function renderRecipe() {
         // No inequality bounds - render as text field
         const label = cell.ceqn.length > 0 ? cell.ceqn[0].trim() : ''
         const focusOnlyBgClass = !INDICATOR_SHOW_ALWAYS.background ? 'focus-only-bg' : ''
-        inputHtml = `<input type="text" class="recipe-field ${isFixed ? 'fixed' : ''} ${isInvalid ? 'invalid' : ''} ${focusOnlyBgClass}" data-label="${label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}"${disabledAttr}>`
+        inputHtml = `<input type="text" class="recipe-field ${isPegged ? 'pegged' : ''} ${isInvalid ? 'invalid' : ''} ${focusOnlyBgClass}" data-label="${label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}"${disabledAttr}>`
       }
       const placeholder = `@@RECIPLIER_CELL_${cell.id}@@`
       placeholders.set(placeholder, inputHtml)
@@ -426,22 +426,21 @@ function handleInlineSliderInput(e) {
 }
 
 // =============================================================================
-// Peg/Freeze Toggle Logic
+// Peg Toggle Logic
 // =============================================================================
 
 function toggleCellPeg(input) {
   const cellId = input.dataset.cellId
 
-  // Toggle fixed state
-  if (state.fixedCellIds.has(cellId)) {
-    state.fixedCellIds.delete(cellId)
-    input.classList.remove('fixed')
+  if (state.peggedCellIds.has(cellId)) {
+    state.peggedCellIds.delete(cellId)
+    input.classList.remove('pegged')
   } else {
-    state.fixedCellIds.add(cellId)
-    input.classList.add('fixed')
+    state.peggedCellIds.add(cellId)
+    input.classList.add('pegged')
   }
 
-  // Re-solve under the new frozen constraints and update the banner invariant.
+  // Re-solve under the new peg constraints and update the banner invariant.
   solveAndApply({ editedCellId: null, editedValue: null })
   renderRecipe()
 }
@@ -488,13 +487,13 @@ function handleFieldMouseLeave(e) {
 // --- Corner Pin trigger ---
 function createCornerPin(input) {
   const pin = document.createElement('span')
-  const isPinned = state.fixedCellIds.has(input.dataset.cellId)
+  const isPegged = state.peggedCellIds.has(input.dataset.cellId)
   const focusOnlyClass = !INDICATOR_SHOW_ALWAYS.cornerpin ? ' focus-only' : ''
-  pin.className = 'corner-pin' + (isPinned ? ' pinned' : '') + focusOnlyClass
-  pin.textContent = isPinned ? '●' : '📌'
-  pin.title = isPinned ? 
-    'Pinned! This field only changes if you edit it.' : 
-    'Unpinned. Click to pin it.'
+  pin.className = 'corner-pin' + (isPegged ? ' pegged' : '') + focusOnlyClass
+  pin.textContent = isPegged ? '●' : '📌'
+  pin.title = isPegged ?
+    'Pegged! This field only changes if you edit it.' :
+    'Unpegged. Click to peg it.'
   // Apply dynamic size (responsive)
   const size = getResponsivePinSize()
   const fontSize = Math.max(8, Math.round(size * 0.67))
@@ -515,17 +514,17 @@ function createCornerPin(input) {
 function createEdgeDots(input) {
   const dots = []
   const positions = ['top', 'right', 'bottom', 'left']
-  const isPinned = state.fixedCellIds.has(input.dataset.cellId)
+  const isPegged = state.peggedCellIds.has(input.dataset.cellId)
   const focusOnlyClass = !INDICATOR_SHOW_ALWAYS.edgedots ? ' focus-only' : ''
-  
+
   for (const pos of positions) {
     const dot = document.createElement('span')
-    dot.className = 'edge-dot ' + pos + (isPinned ? ' pinned' : '') + focusOnlyClass
+    dot.className = 'edge-dot ' + pos + (isPegged ? ' pegged' : '') + focusOnlyClass
     dot.addEventListener('click', (e) => {
       e.stopPropagation()
       toggleCellPeg(input)
-      const nowPinned = state.fixedCellIds.has(input.dataset.cellId)
-      dots.forEach(d => d.classList.toggle('pinned', nowPinned))
+      const nowPegged = state.peggedCellIds.has(input.dataset.cellId)
+      dots.forEach(d => d.classList.toggle('pegged', nowPegged))
     })
     dots.push(dot)
   }
@@ -541,18 +540,18 @@ function createCornerBrackets(input) {
     { pos: 'bottom-left', char: '⌞' },
     { pos: 'bottom-right', char: '⌟' }
   ]
-  const isPinned = state.fixedCellIds.has(input.dataset.cellId)
+  const isPegged = state.peggedCellIds.has(input.dataset.cellId)
   const focusOnlyClass = !INDICATOR_SHOW_ALWAYS.brackets ? ' focus-only' : ''
-  
+
   for (const corner of corners) {
     const bracket = document.createElement('span')
-    bracket.className = 'corner-bracket ' + corner.pos + (isPinned ? ' pinned' : '') + focusOnlyClass
+    bracket.className = 'corner-bracket ' + corner.pos + (isPegged ? ' pegged' : '') + focusOnlyClass
     bracket.textContent = corner.char
     bracket.addEventListener('click', (e) => {
       e.stopPropagation()
       toggleCellPeg(input)
-      const nowPinned = state.fixedCellIds.has(input.dataset.cellId)
-      brackets.forEach(b => b.classList.toggle('pinned', nowPinned))
+      const nowPegged = state.peggedCellIds.has(input.dataset.cellId)
+      brackets.forEach(b => b.classList.toggle('pegged', nowPegged))
     })
     brackets.push(bracket)
   }

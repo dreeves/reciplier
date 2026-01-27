@@ -134,7 +134,7 @@ async function main() {
           const isAssignmentSeed =
             hasConstraint &&
             hasNumber &&
-            !c?.frozen &&
+            !c?.pegged &&
             ceqnLen === 1 &&
             isBareIdentifier(c.ceqn[0])
           if (!isAssignmentSeed && hasConstraint && hasNumber) eqn.push(c.cval)
@@ -233,7 +233,7 @@ async function main() {
 
     await dBareHandle.dispose()
 
-    // Qual: simeq edit unfrozen x to 60 then tab should not redden everything
+    // Qual: simeq edit unpegged x to 60 then tab should not redden everything
     await page.waitForSelector('#recipeSelect', { visible: true })
     await page.select('#recipeSelect', 'simeq')
     await page.waitForSelector('#recipeOutput', { visible: true })
@@ -241,20 +241,20 @@ async function main() {
     const initialInvalidCount = await page.$$eval('input.recipe-field.invalid', els => els.length)
     assert.equal(initialInvalidCount, 0)
 
-    const xUnfrozen = await page.evaluateHandle(() => {
+    const xUnpegged = await page.evaluateHandle(() => {
       const inputs = Array.from(document.querySelectorAll('input.recipe-field'))
       return inputs.find(i => (i.getAttribute('title') || '').trim() === 'x') || null
     })
-    const xUnfrozenIsNull = await xUnfrozen.evaluate(el => el === null)
-    assert.equal(xUnfrozenIsNull, false)
+    const xUnpeggedIsNull = await xUnpegged.evaluate(el => el === null)
+    assert.equal(xUnpeggedIsNull, false)
 
-    await xUnfrozen.click({ clickCount: 3 })
+    await xUnpegged.click({ clickCount: 3 })
     await page.keyboard.type('60')
     await page.keyboard.press('Tab')
     await waitForNextFrame(page)
 
-    const xUnfrozenVal = await xUnfrozen.evaluate(el => el.value)
-    assert.equal(xUnfrozenVal, '60')
+    const xUnpeggedVal = await xUnpegged.evaluate(el => el.value)
+    assert.equal(xUnpeggedVal, '60')
 
     const bannerAfter = await page.evaluate(() => state.solveBanner)
     assert.ok(/No solution/i.test(bannerAfter))
@@ -262,7 +262,7 @@ async function main() {
     const invalidAfterCount = await page.$$eval('input.recipe-field.invalid', els => els.length)
     assert.ok(invalidAfterCount > 0)
 
-    await xUnfrozen.dispose()
+    await xUnpegged.dispose()
 
     // Qual: simeq edit x=6 cell then y=7 should keep 6&7 on blur
     await page.waitForSelector('#recipeSelect', { visible: true })
@@ -457,18 +457,18 @@ async function main() {
 
     await flourNoteHandle.dispose()
 
-    // Qual: dial freeze vini/vfin/start date then changing rate updates end date
+    // Qual: dial peg vini/vfin/start date then changing rate updates end date
     await page.waitForSelector('#recipeSelect', { visible: true })
     await page.select('#recipeSelect', 'dial')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    // Freeze vfin by directly adding its cell ID to fixedCellIds
+    // Peg vfin by directly adding its cell ID to peggedCellIds
     // (dblclick trigger is not enabled by default, so we can't use click({clickCount:2}))
     await page.evaluate(() => {
       const cells = state?.cells || []
       for (const c of cells) {
         if (JSON.stringify(c).includes('vfin')) {
-          state.fixedCellIds.add(c.id)
+          state.peggedCellIds.add(c.id)
           break
         }
       }
@@ -497,22 +497,22 @@ async function main() {
     await dialDayHandle.dispose()
     await dialRateHandle.dispose()
 
-    // Qual: dial bug1b - freeze tini directly (not y0/m0/d0), edit rate to -1
+    // Qual: dial bug1b - peg tini directly (not y0/m0/d0), edit rate to -1
     // This is the exact repro from the bug report
     await page.select('#recipeSelect', 'blank')
     await page.select('#recipeSelect', 'dial')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    // Freeze vfin and tini by directly adding to fixedCellIds
-    // (vini already starts frozen via = syntax)
+    // Peg vfin and tini by directly adding to peggedCellIds
+    // (vini already starts pegged via = syntax)
     // (dblclick trigger is not enabled by default)
-    // IMPORTANT: Check ceqn[0] exactly, not substring match, to avoid freezing
+    // IMPORTANT: Check ceqn[0] exactly, not substring match, to avoid pegging
     // cells like {(tfin-tini)/SID} that merely reference tini in an expression.
     await page.evaluate(() => {
       for (const c of state?.cells || []) {
         const firstExpr = c.ceqn && c.ceqn[0]
         if (firstExpr === 'vfin' || firstExpr === 'tini') {
-          state.fixedCellIds.add(c.id)
+          state.peggedCellIds.add(c.id)
         }
       }
     })
@@ -546,14 +546,14 @@ async function main() {
     await page.select('#recipeSelect', 'dial')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    // Freeze vfin and tini by directly adding to fixedCellIds
-    // (vini already starts frozen via = syntax)
+    // Peg vfin and tini by directly adding to peggedCellIds
+    // (vini already starts pegged via = syntax)
     // IMPORTANT: Check ceqn[0] exactly, not substring match.
     await page.evaluate(() => {
       for (const c of state?.cells || []) {
         const firstExpr = c.ceqn && c.ceqn[0]
         if (firstExpr === 'vfin' || firstExpr === 'tini') {
-          state.fixedCellIds.add(c.id)
+          state.peggedCellIds.add(c.id)
         }
       }
     })
@@ -839,9 +839,9 @@ async function main() {
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }, contradictory)
 
-    // Freeze a and b so the contradiction is real under the spec
-    // NOTE: With "bare number => starts frozen" semantics, {a:1} and {b:2}
-    // are already frozen; double-clicking would unfreeze them.
+    // Peg a and b so the contradiction is real under the spec
+    // NOTE: With "bare number => starts pegged" semantics, {a:1} and {b:2}
+    // are already pegged; double-clicking would unpeg them.
     // await page.click('input.recipe-field[data-label="a"]', { clickCount: 2 })
     // await page.click('input.recipe-field[data-label="b"]', { clickCount: 2 })
 
@@ -874,7 +874,7 @@ async function main() {
     assert.ok(/invalid expression/i.test(emptyExprError || ''))
 
     // Qual: solver banner appears during typing when overconstrained
-    // Use {a:1} {b:} {a=b} - a is frozen, b is free
+    // Use {a:1} {b:} {a=b} - a is pegged, b is free
     // When we type a different value in b (not blur), banner should show
     const overconstrained = '{1 = a} {b} {a=b}'
     await page.$eval('#recipeTextarea', (el, v) => {
@@ -892,7 +892,7 @@ async function main() {
     const bannerVisible = await page.$eval('#solveBanner', el => !el.hidden)
     const bannerText = await page.$eval('#solveBanner', el => el.textContent || '')
     assert.equal(bannerVisible, true, 'Banner should be visible during edit')
-    assert.ok(/try unfreezing cells/i.test(bannerText), 'Banner should mention unfreezing')
+    assert.ok(/try unpegging cells/i.test(bannerText), 'Banner should mention unpegging')
 
     // Qual: pyzza slider bug - c^2 cell should NOT turn red when using slider
     await page.select('#recipeSelect', 'pyzza')
@@ -909,7 +909,7 @@ async function main() {
 
     await cSquaredHandle.dispose()
 
-    // Qual: pyzza editing c should persist when nothing is frozen
+    // Qual: pyzza editing c should persist when nothing is pegged
     await page.select('#recipeSelect', 'pyzza')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
@@ -939,7 +939,7 @@ async function main() {
     assert.equal(bInvalid, false)
     assert.equal(cInvalid, false)
 
-    // Qual: blur behavior - when other cells are frozen, invalid value should snap back
+    // Qual: blur behavior - when other cells are pegged, invalid value should snap back
     await page.select('#recipeSelect', 'pyzza')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
@@ -1002,40 +1002,39 @@ async function main() {
     assert.equal(aValHidden, '5')
     assert.equal(bValHidden, '10')
 
-    // Qual: colon init value is NOT frozen - solver can change it
-    // Contrast with the next qual which tests that equals IS frozen
-    const colonNotFrozen = '{x : 1} {y = 2x}'
+    // Qual: colon init value is NOT pegged - solver can change it
+    // Contrast with the next qual which tests that equals IS pegged
+    const colonNotPegged = '{x : 1} {y = 2x}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
-    }, colonNotFrozen)
+    }, colonNotPegged)
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    // Type y=10, which requires x=5. Since x is NOT frozen (colon), solver should change x.
+    // Type y=10, which requires x=5. Since x is NOT pegged (colon), solver should change x.
     await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="y"]', '10')
     await new Promise(r => setTimeout(r, 100))
     const xChangedFromDefault = await getInputValue(page, 'input.recipe-field[data-label="x"]')
     // x should change to 5 (since y=10 and y=2x means x=5)
-    assert.equal(xChangedFromDefault, '5', 'colon init should NOT be frozen - x should change to satisfy y=10')
+    assert.equal(xChangedFromDefault, '5', 'colon init should NOT be pegged - x should change to satisfy y=10')
     const colonBanner = await page.evaluate(() => state.solveBanner)
     assert.equal(colonBanner, '', 'colon init should allow solving without "No solution" banner')
 
-    // Qual: constant at front starts frozen
-    const startsFrozen = '{1 = x} {y = 2x}'
+    // Qual: constant at front starts pegged
+    const startsPegged = '{1 = x} {y = 2x}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
-    }, startsFrozen)
+    }, startsPegged)
     await page.waitForSelector('#recipeOutput', { visible: true })
     await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="y"]', '10')
     await new Promise(r => setTimeout(r, 100))
-    const xStillFrozen = await getInputValue(page, 'input.recipe-field[data-label="x"]')
-    assert.equal(xStillFrozen, '1')
-    const frozenBannerVisible = await page.$eval('#solveBanner', el => !el.hidden)
-    const frozenBannerText = await page.$eval('#solveBanner', el => el.textContent || '')
-    assert.equal(frozenBannerVisible, true)
-    assert.ok(/No solution found \(try unfreezing cells\)/i.test(frozenBannerText))
-
+    const xStillPegged = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.equal(xStillPegged, '1')
+    const peggedBannerVisible = await page.$eval('#solveBanner', el => !el.hidden)
+    const peggedBannerText = await page.$eval('#solveBanner', el => el.textContent || '')
+    assert.equal(peggedBannerVisible, true)
+    assert.ok(/No solution found \(try unpegging cells\)/i.test(peggedBannerText))
     // Qual: bare constant is an error
     const bareConstant = '{5}'
     await page.$eval('#recipeTextarea', (el, v) => {

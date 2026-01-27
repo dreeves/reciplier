@@ -164,7 +164,7 @@ async function main() {
           const isAssignmentSeed =
             hasConstraint &&
             hasNumber &&
-            !c?.frozen &&
+            !c?.pegged &&
             ceqnLen === 1 &&
             isBareIdentifier(c.ceqn[0])
           if (!isAssignmentSeed && hasConstraint && hasNumber) eqn.push(c.cval)
@@ -281,30 +281,30 @@ async function main() {
 
     await dBareHandle.dispose()
 
-    // Qual: simeq edit unfrozen x to 60 then tab should not redden everything
+    // Qual: simeq edit unpegged x to 60 then tab should not redden everything
     await page.waitForSelector('#recipeSelect', { visible: true })
     await page.select('#recipeSelect', 'simeq')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
     const initialInvalidCount = await page.$$eval('input.recipe-field.invalid', els => els.length)
     assert.equal(initialInvalidCount, 0)
-
-    const xUnfrozen = await page.evaluateHandle(() => {
+    
+    const xUnpegged = await page.evaluateHandle(() => {
       const inputs = Array.from(document.querySelectorAll('input.recipe-field'))
       return inputs.find(i => (i.getAttribute('title') || '').trim() === 'x') || null
     })
-    const xUnfrozenIsNull = await xUnfrozen.evaluate(el => el === null)
-    assert.equal(xUnfrozenIsNull, false)
+    const xUnpeggedIsNull = await xUnpegged.evaluate(el => el === null)
+    assert.equal(xUnpeggedIsNull, false)
 
-    await xUnfrozen.click({ clickCount: 3 })
+    await xUnpegged.click({ clickCount: 3 })
     await page.keyboard.type('60')
     await page.keyboard.press('Tab')
     await waitForNextFrame(page)
 
-    const xUnfrozenVal = await xUnfrozen.evaluate(el => el.value)
+    const xUnpeggedVal = await xUnpegged.evaluate(el => el.value)
     // the following was previously 6 because we'd snap back to 6 when the
     // solver failed to find a solution after editing x to 60
-    assert.equal(xUnfrozenVal, '60')
+    assert.equal(xUnpeggedVal, '60')
 
     const bannerAfter = await page.evaluate(() => state.solveBanner)
     assert.ok(/No solution/i.test(bannerAfter))
@@ -312,7 +312,7 @@ async function main() {
     const invalidAfterCount = await page.$$eval('input.recipe-field.invalid', els => els.length)
     assert.ok(invalidAfterCount > 0)
 
-    await xUnfrozen.dispose()
+    await xUnpegged.dispose()
 
     // Qual: simeq edit x=6 cell then y=7 should keep 6&7 on blur
     await page.waitForSelector('#recipeSelect', { visible: true })
@@ -513,21 +513,21 @@ async function main() {
 
     await flourNoteHandle.dispose()
 
-    // Qual: dial freeze vini/vfin/start date then changing rate updates end date
+    // Qual: dial peg vini/vfin/start date then changing rate updates end date
     await page.waitForSelector('#recipeSelect', { visible: true })
     await page.select('#recipeSelect', 'dial')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    const dialFrozenTitles = ['vini = 73', 'y0 = 2025', 'm0 = 12', 'd0 = 25']
-    for (const t of dialFrozenTitles) {
+    const dialPeggedTitles = ['vini = 73', 'y0 = 2025', 'm0 = 12', 'd0 = 25']
+    for (const t of dialPeggedTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false)
       await h.dispose()
     }
 
-    const dialFreezeTitles = ['vfin : 70']
-    for (const t of dialFreezeTitles) {
+    const dialPegTitles = ['vfin : 70']
+    for (const t of dialPegTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false)
@@ -558,27 +558,27 @@ async function main() {
     await dialDayHandle.dispose()
     await dialRateHandle.dispose()
 
-    // Qual: dial bug1b - freeze tini directly (not y0/m0/d0), edit rate to -1
+    // Qual: dial bug1b - peg tini directly (not y0/m0/d0), edit rate to -1
     // This is the exact repro from the bug report
     await page.select('#recipeSelect', 'blank')
     await page.select('#recipeSelect', 'dial')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    // Freeze vini, vfin, and tini (the start TIME field, not the start DATE fields)
-    const dialBug1bFrozenTitles = ['vini = 73']
-    for (const t of dialBug1bFrozenTitles) {
+    // Peg vini, vfin, and tini (the start TIME field, not the start DATE fields)
+    const dialBug1bPeggedTitles = ['vini = 73']
+    for (const t of dialBug1bPeggedTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false, `dial bug1b: couldn't find field with title containing "${t}"`)
       await h.dispose()
     }
 
-    const dialBug1bFreezeTitles = ['vfin : 70', 'tini = unixtime']
-    for (const t of dialBug1bFreezeTitles) {
+    const dialBug1bPegTitles = ['vfin : 70', 'tini = unixtime']
+    for (const t of dialBug1bPegTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false, `dial bug1b: couldn't find field with title containing "${t}"`)
-      await longpressHandle(page, h)  // Double-click to freeze
+      await longpressHandle(page, h)  // Long-press to peg
       await h.dispose()
     }
 
@@ -617,17 +617,17 @@ async function main() {
     await page.select('#recipeSelect', 'dial')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    // Freeze vini, vfin, and tini (start TIME field)
-    const dialSoftFrozenTitles = ['vini = 73']
-    for (const t of dialSoftFrozenTitles) {
+    // Peg vini, vfin, and tini (start TIME field)
+    const dialSoftPeggedTitles = ['vini = 73']
+    for (const t of dialSoftPeggedTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false, `dial unsatisfiable rate: couldn't find field with title containing "${t}"`)
       await h.dispose()
     }
 
-    const dialSoftFreezeTitles = ['vfin : 70', 'tini = unixtime']
-    for (const t of dialSoftFreezeTitles) {
+    const dialSoftPegTitles = ['vfin : 70', 'tini = unixtime']
+    for (const t of dialSoftPegTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false, `dial unsatisfiable rate: couldn't find field with title containing "${t}"`)
@@ -655,23 +655,23 @@ async function main() {
 
     await dialSoftRateHandle.dispose()
 
-    // Qual: dial bug - editing derived r*SID to 0 after freezing should show "No solution"
+    // Qual: dial bug - editing derived r*SID to 0 after pegging should show "No solution"
     // and should NOT show the invalid-explain banner.
     await page.select('#recipeSelect', 'blank')
     await page.select('#recipeSelect', 'dial')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    // Freeze vini, vfin, and tini (start TIME field)
-    const dialRateZeroFrozenTitles = ['vini = 73']
-    for (const t of dialRateZeroFrozenTitles) {
+    // Peg vini, vfin, and tini (start TIME field)
+    const dialRateZeroPeggedTitles = ['vini = 73']
+    for (const t of dialRateZeroPeggedTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false, `dial rate=0: couldn't find field with title containing "${t}"`)
       await h.dispose()
     }
 
-    const dialRateZeroFreezeTitles = ['vfin : 70', 'tini = unixtime']
-    for (const t of dialRateZeroFreezeTitles) {
+    const dialRateZeroPegTitles = ['vfin : 70', 'tini = unixtime']
+    for (const t of dialRateZeroPegTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false, `dial rate=0: couldn't find field with title containing "${t}"`)
@@ -738,62 +738,62 @@ async function main() {
     const eggsInfo = await page.$eval('input.recipe-field', el => ({ invalid: el.classList.contains('invalid') }))
     assert.equal(eggsInfo.invalid, false)
 
-    // Qual: unfreeze frozen cell when in error state
-    // Bug report: freeze eggs, change scale to cause conflict, click pin to unfreeze
+    // Qual: unpeg pegged cell when in error state
+    // Bug report: peg eggs, change scale to cause conflict, click pin to unpeg
     await page.select('#recipeSelect', 'blank')
     await page.select('#recipeSelect', 'crepes')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    // Find and freeze eggs (first field)
-    const eggsToFreeze = await page.$('input.recipe-field')
-    await longpressHandle(page, eggsToFreeze)
+    // Find and peg eggs (first field)
+    const eggsToPeg = await page.$('input.recipe-field')
+    await longpressHandle(page, eggsToPeg)
     await waitForNextFrame(page)
 
-    // Verify eggs is frozen
-    const eggsFrozenClass = await eggsToFreeze.evaluate(el => el.classList.contains('fixed'))
-    assert.equal(eggsFrozenClass, true, 'eggs should be frozen after longpress')
+    // Verify eggs is pegged
+    const eggsPeggedClass = await eggsToPeg.evaluate(el => el.classList.contains('pegged'))
+    assert.equal(eggsPeggedClass, true, 'eggs should be pegged after longpress')
 
-    // Change x to a value that causes conflict (freeze eggs at 12 but set x to something incompatible)
+    // Change x to a value that causes conflict (peg eggs at 12 but set x to something incompatible)
     // Actually, let's set x to 60 which should cause "no solution"
     await setInputValue(page, 'input.recipe-field[data-label="x"]', '60')
     await waitForNextFrame(page)
 
     // Verify error state
-    const unfreezeTestBanner = await page.evaluate(() => String(state?.solveBanner || ''))
-    assert.ok(/No solution/i.test(unfreezeTestBanner), 'expected No solution banner after conflict')
+    const unpegTestBanner = await page.evaluate(() => String(state?.solveBanner || ''))
+    assert.ok(/No solution/i.test(unpegTestBanner), 'expected No solution banner after conflict')
 
-    // The eggs field should still be frozen and should be invalid
-    const eggsFrozenAfterConflict = await page.$('input.recipe-field')
-    const eggsStillFrozen = await eggsFrozenAfterConflict.evaluate(el => el.classList.contains('fixed'))
-    assert.equal(eggsStillFrozen, true, 'eggs should still be frozen after conflict')
+    // The eggs field should still be pegged and should be invalid
+    const eggsPeggedAfterConflict = await page.$('input.recipe-field')
+    const eggsStillPegged = await eggsPeggedAfterConflict.evaluate(el => el.classList.contains('pegged'))
+    assert.equal(eggsStillPegged, true, 'eggs should still be pegged after conflict')
 
-    // Now try to unfreeze by longpressing again
-    await longpressHandle(page, eggsFrozenAfterConflict)
+    // Now try to unpeg by longpressing again
+    await longpressHandle(page, eggsPeggedAfterConflict)
     await waitForNextFrame(page)
 
-    // Verify eggs is now unfrozen
-    const eggsUnfrozen = await page.$('input.recipe-field')
-    const eggsNotFrozenAnymore = await eggsUnfrozen.evaluate(el => !el.classList.contains('fixed'))
-    assert.equal(eggsNotFrozenAnymore, true, 'eggs should be unfrozen after longpress on frozen invalid cell')
+    // Verify eggs is now unpegged
+    const eggsUnpegged = await page.$('input.recipe-field')
+    const eggsNotPeggedAnymore = await eggsUnpegged.evaluate(el => !el.classList.contains('pegged'))
+    assert.equal(eggsNotPeggedAnymore, true, 'eggs should be unpegged after longpress on pegged invalid cell')
 
-    await eggsToFreeze.dispose()
+    await eggsToPeg.dispose()
 
-    // Qual: unfreeze frozen invalid cell by clicking the corner pin
+    // Qual: unpeg pegged invalid cell by clicking the corner pin
     await page.select('#recipeSelect', 'blank')
     await page.select('#recipeSelect', 'crepes')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    // Find and freeze eggs using the corner pin
+    // Find and peg eggs using the corner pin
     const eggsPinTest = await page.$('input.recipe-field')
     const eggsWrapper = await eggsPinTest.evaluateHandle(el => el.closest('.field-wrapper'))
     const cornerPin = await eggsWrapper.$('.corner-pin')
     assert.ok(cornerPin, 'corner pin should exist')
 
-    // Click pin to freeze
+    // Click pin to peg
     await cornerPin.click()
     await waitForNextFrame(page)
-    const eggsFrozenByPin = await eggsPinTest.evaluate(el => el.classList.contains('fixed'))
-    assert.equal(eggsFrozenByPin, true, 'eggs should be frozen after clicking pin')
+    const eggsPeggedByPin = await eggsPinTest.evaluate(el => el.classList.contains('pegged'))
+    assert.equal(eggsPeggedByPin, true, 'eggs should be pegged after clicking pin')
 
     // Change x to cause conflict
     await setInputValue(page, 'input.recipe-field[data-label="x"]', '60')
@@ -809,18 +809,18 @@ async function main() {
     const cornerPinAfter = await eggsWrapperAfter.$('.corner-pin')
     assert.ok(cornerPinAfter, 'corner pin should still exist after conflict')
 
-    // Verify eggs is still frozen
-    const eggsStillFrozenPin = await eggsAfterConflict.evaluate(el => el.classList.contains('fixed'))
-    assert.equal(eggsStillFrozenPin, true, 'eggs should still be frozen after conflict')
+    // Verify eggs is still pegged
+    const eggsStillPeggedPin = await eggsAfterConflict.evaluate(el => el.classList.contains('pegged'))
+    assert.equal(eggsStillPeggedPin, true, 'eggs should still be pegged after conflict')
 
-    // Click pin to unfreeze
+    // Click pin to unpeg
     await cornerPinAfter.click()
     await waitForNextFrame(page)
 
-    // Verify eggs is now unfrozen
-    const eggsUnfrozenByPin = await page.$('input.recipe-field')
-    const eggsNotFrozenPin = await eggsUnfrozenByPin.evaluate(el => !el.classList.contains('fixed'))
-    assert.equal(eggsNotFrozenPin, true, 'eggs should be unfrozen after clicking pin on frozen invalid cell')
+    // Verify eggs is now unpegged
+    const eggsUnpeggedByPin = await page.$('input.recipe-field')
+    const eggsNotPeggedPin = await eggsUnpeggedByPin.evaluate(el => !el.classList.contains('pegged'))
+    assert.equal(eggsNotPeggedPin, true, 'eggs should be unpegged after clicking pin on pegged invalid cell')
 
     // Qual 2: Simultaneous equations should not start violated
     await page.select('#recipeSelect', 'simeq')
@@ -1135,8 +1135,8 @@ async function main() {
     })
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    const biketourBreakFreezeTitles = ['b1*60 : 26', 'b2*60 : 37']
-    for (const t of biketourBreakFreezeTitles) {
+    const biketourBreakPegTitles = ['b1*60 : 26', 'b2*60 : 37']
+    for (const t of biketourBreakPegTitles) {
       const h = await findFieldByTitleSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false)
@@ -1191,9 +1191,9 @@ async function main() {
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }, contradictory)
 
-    // Freeze a and b so the contradiction is real under the spec
-    // NOTE: With "bare number => starts frozen" semantics, {a:1} and {b:2}
-    // are already frozen; double-clicking would unfreeze them.
+    // Peg a and b so the contradiction is real under the spec
+    // NOTE: With "bare number => starts pegged" semantics, {a:1} and {b:2}
+    // are already pegged; double-clicking would unpeg them.
     // await page.click('input.recipe-field[data-label="a"]', { clickCount: 2 })
     // await page.click('input.recipe-field[data-label="b"]', { clickCount: 2 })
 
@@ -1226,7 +1226,7 @@ async function main() {
     assert.ok(/invalid expression/i.test(emptyExprError || ''))
 
     // Qual: solver banner appears during typing when overconstrained
-    // Use {a:1} {b:} {a=b} - a is frozen, b is free
+    // Use {a:1} {b:} {a=b} - a is pegged, b is free
     // When we type a different value in b (not blur), banner should show
     const overconstrained = '{1 = a} {b} {a=b}'
     await page.$eval('#recipeTextarea', (el, v) => {
@@ -1244,7 +1244,7 @@ async function main() {
     const bannerVisible = await page.$eval('#solveBanner', el => !el.hidden)
     const bannerText = await page.$eval('#solveBanner', el => el.textContent || '')
     assert.equal(bannerVisible, true, 'Banner should be visible during edit')
-    assert.ok(/try unfreezing cells/i.test(bannerText), 'Banner should mention unfreezing')
+    assert.ok(/try unpegging cells/i.test(bannerText), 'Banner should mention unpegging')
 
     // Qual: pyzza c^2 cell should NOT turn red when changing x
     await page.select('#recipeSelect', 'pyzza')
@@ -1262,7 +1262,7 @@ async function main() {
 
     await cSquaredHandle.dispose()
 
-    // Qual: pyzza editing c should persist when nothing is frozen
+    // Qual: pyzza editing c should persist when nothing is pegged
     await page.select('#recipeSelect', 'pyzza')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
@@ -1292,7 +1292,7 @@ async function main() {
     assert.equal(bInvalid, false)
     assert.equal(cInvalid, false)
 
-    // Qual: blur behavior - when other cells are frozen, invalid value should snap back
+    // Qual: blur behavior - when other cells are pegged, invalid value should snap back
     await page.select('#recipeSelect', 'pyzza')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
@@ -1385,12 +1385,12 @@ async function main() {
     assert.equal(markdownResult.inputCount, 1)
     assert.equal(markdownResult.hasHidden, false)
 
-    // Qual: constant at end is default, not frozen (during typing)
-    const defaultNotFrozen = '{x : 1} {y = 2x}'
+    // Qual: constant at end is default, not pegged (during typing)
+    const defaultNotPegged = '{x : 1} {y = 2x}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
-    }, defaultNotFrozen)
+    }, defaultNotPegged)
     await page.waitForSelector('#recipeOutput', { visible: true })
     await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="y"]', '10')
     await new Promise(r => setTimeout(r, 50))
@@ -1410,34 +1410,34 @@ async function main() {
     assert.equal(initX, '10')
     assert.equal(initY, '5')
 
-    // Qual: constant at front starts frozen
-    const startsFrozen = '{1 = x} {y = 2x}'
+    // Qual: constant at front starts pegged
+    const startsPegged = '{1 = x} {y = 2x}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
-    }, startsFrozen)
+    }, startsPegged)
     await page.waitForSelector('#recipeOutput', { visible: true })
     await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="y"]', '10')
     await new Promise(r => setTimeout(r, 100))
-    const xStillFrozen = await getInputValue(page, 'input.recipe-field[data-label="x"]')
-    assert.equal(xStillFrozen, '1')
-    const frozenBannerVisible = await page.$eval('#solveBanner', el => !el.hidden)
-    const frozenBannerText = await page.$eval('#solveBanner', el => el.textContent || '')
-    assert.equal(frozenBannerVisible, true)
-    assert.ok(/No solution found \(try unfreezing cells\)/i.test(frozenBannerText))
+    const xStillPegged = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.equal(xStillPegged, '1')
+    const peggedBannerVisible = await page.$eval('#solveBanner', el => !el.hidden)
+    const peggedBannerText = await page.$eval('#solveBanner', el => el.textContent || '')
+    assert.equal(peggedBannerVisible, true)
+    assert.ok(/No solution found \(try unpegging cells\)/i.test(peggedBannerText))
 
-    const endsFrozen = '{x = 1} {y = 2x}'
+    const endsPegged = '{x = 1} {y = 2x}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
-    }, endsFrozen)
+    }, endsPegged)
     await page.waitForSelector('#recipeOutput', { visible: true })
     await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="y"]', '10')
     await new Promise(r => setTimeout(r, 100))
-    const xEndFrozen = await getInputValue(page, 'input.recipe-field[data-label="x"]')
-    assert.equal(xEndFrozen, '1')
-    const endFrozenBannerText = await page.$eval('#solveBanner', el => el.textContent || '')
-    assert.ok(/No solution found \(try unfreezing cells\)/i.test(endFrozenBannerText))
+    const xEndPegged = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.equal(xEndPegged, '1')
+    const endPeggedBannerText = await page.$eval('#solveBanner', el => el.textContent || '')
+    assert.ok(/No solution found \(try unpegging cells\)/i.test(endPeggedBannerText))
 
     // Qual: bare constant is an error
     const bareConstant = '{5}'
@@ -1692,25 +1692,25 @@ async function main() {
     // Reciplate switch should reset all state
     // =========================================================================
 
-    // Qual: switching reciplates clears fixedCellIds (pinned cells)
+    // Qual: switching reciplates clears peggedCellIds
     await page.select('#recipeSelect', 'simeq')
     await page.waitForSelector('#recipeOutput', { visible: true })
-    // Pin a cell via longpress
+    // Peg a cell via longpress
     const simeqField = await page.$('input.recipe-field[data-label="x"]')
     await simeqField.click({ clickCount: 1 })
     await page.mouse.down()
     await new Promise(r => setTimeout(r, 600))
     await page.mouse.up()
     await waitForNextFrame(page)
-    const simeqPinned = await simeqField.evaluate(el => el.classList.contains('fixed'))
-    assert.equal(simeqPinned, true, 'simeq x should be pinned after longpress')
+    const simeqPegged = await simeqField.evaluate(el => el.classList.contains('pegged'))
+    assert.equal(simeqPegged, true, 'simeq x should be pegged after longpress')
     // Switch to different reciplate and back
     await page.select('#recipeSelect', 'crepes')
     await page.waitForSelector('#recipeOutput', { visible: true })
     await page.select('#recipeSelect', 'simeq')
     await page.waitForSelector('#recipeOutput', { visible: true })
-    const simeqPinnedAfterSwitch = await page.$eval('input.recipe-field[data-label="x"]', el => el.classList.contains('fixed'))
-    assert.equal(simeqPinnedAfterSwitch, false, 'pinned state should reset after switching reciplates')
+    const simeqPeggedAfterSwitch = await page.$eval('input.recipe-field[data-label="x"]', el => el.classList.contains('pegged'))
+    assert.equal(simeqPeggedAfterSwitch, false, 'pegged state should reset after switching reciplates')
 
     // Qual: switching reciplates clears invalidInputCellIds
     await page.select('#recipeSelect', 'pyzza')

@@ -264,7 +264,7 @@ button:disabled {
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
 }
 
-.recipe-field.fixed {
+.recipe-field.pegged {
   background-color: #dbeafe;
   border-color: #3b82f6;
   font-weight: 600;
@@ -495,7 +495,7 @@ a:hover {
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.corner-pin.pinned {
+.corner-pin.pegged {
   background-color: #dbeafe;
   border-color: #3b82f6;
   color: #dc2626;
@@ -519,7 +519,7 @@ a:hover {
   transform: scale(1.3);
 }
 
-.edge-dot.pinned {
+.edge-dot.pegged {
   background-color: #3b82f6;
 }
 
@@ -576,7 +576,7 @@ a:hover {
   transform: scale(1.2);
 }
 
-.corner-bracket.pinned {
+.corner-bracket.pegged {
   color: #3b82f6;
 }
 
@@ -645,13 +645,13 @@ a:hover {
 }
 
 /* Blue background focus-only mode */
-.recipe-field.fixed.focus-only-bg {
+.recipe-field.pegged.focus-only-bg {
   background-color: #fff;
   border-color: #d1d5db;
   font-weight: normal;
 }
 
-.recipe-field.fixed.focus-only-bg:focus {
+.recipe-field.pegged.focus-only-bg:focus {
   background-color: #dbeafe;
   border-color: #3b82f6;
   font-weight: 600;

@@ -102,7 +102,7 @@ function parseInequalities(content) {
 // Parse a single cell's content into cval and ceqn
 // Per spec: ceqn is a list of non-constant expressions split on "=".
 // cval is the constant if there is one, null otherwise.
-// Colon is treated as equals but affects frozen state:
+// Colon is treated as equals but affects pegged state:
 //   YY: constant + colon → unpegged (e.g., {x : 3})
 //   YN: constant + no colon → pegged (e.g., {x = 3})
 //   NY: no constant + colon → ERROR (e.g., {2x : a})
@@ -158,8 +158,8 @@ function parseCell(cell) {
   const ineqError = Boolean(inequality.error || (inequality.bounds && bareVars.length === 0))
   const activeParts = ineqError ? [] : parts
 
-  // frozen = YN case: has constant AND no colon
-  const frozen = activeParts.length > 0 && hasConstant && !hasColon
+  // pegged = YN case: has constant AND no colon
+  const pegged = activeParts.length > 0 && hasConstant && !hasColon
 
   // Error flag if multiple bare numbers (spec case 7)
   const multipleNumbers = !ineqError && bareNumbers.length > 1
@@ -172,7 +172,7 @@ function parseCell(cell) {
   return {
     ...cell,
     cval,
-    frozen,
+    pegged,
     ceqn,
     colonError,
     ineq: ineqError ? null : ineq,
