@@ -133,23 +133,11 @@ function buildEquations(cells) {
   return eqns
 }
 
-function hasInitExpr(cell) {
-  return cell.initExpr !== null && cell.initExpr !== undefined
-}
-
-function cellPartsForInit(cell, includeInit) {
-  const parts = cell.cval !== null ? [...cell.ceqn, cell.cval] : [...cell.ceqn]
-  if (includeInit && hasInitExpr(cell)) {
-    parts.push(cell.initExpr)
-  }
-  return parts
-}
-
-function buildInitialEquations(cells, includeInit = false) {
-  // Don't filter singletons here - they may become non-singletons when init values
-  // are added later. solvem handles singleton filtering internally.
+// Build equations list for solvem() from cells.
+// Each equation is an array [ceqn..., cval] of expressions that should all be equal.
+function buildInitialEquations(cells) {
   return cells.map(c => {
-    const parts = cellPartsForInit(c, includeInit)
+    const parts = c.cval !== null ? [...c.ceqn, c.cval] : [...c.ceqn]
     return parts.map(p => {
       if (typeof p !== 'string') return p
       const vars = varparse(p)
@@ -161,15 +149,14 @@ function buildInitialEquations(cells, includeInit = false) {
   })
 }
 
-// TODO: ugh, this propagation stuff is is wrong-headed. this is in solvem's 
-// purview. 
-function buildInitialSeedValues(cells, includeInit = false, bounds = {}) {
+// TODO: ugh, this propagation stuff is wrong-headed. this is in solvem's purview.
+function buildInitialSeedValues(cells, bounds = {}) {
   const { inf = {}, sup = {} } = bounds
   const values = {}
-  const known = new Set()  // Track values from constants/inits (not defaults)
+  const known = new Set()  // Track values from constants (not defaults)
   const eqns = []  // Collect equations for propagation
   for (const cell of cells) {
-    const parts = cellPartsForInit(cell, includeInit)
+    const parts = cell.cval !== null ? [...cell.ceqn, cell.cval] : [...cell.ceqn]
     if (parts.length >= 2) eqns.push(parts)
     for (const expr of parts) {
       if (typeof expr !== 'string') continue
@@ -188,31 +175,6 @@ function buildInitialSeedValues(cells, includeInit = false, bounds = {}) {
             known.add(v)
           } else {
             values[v] = 1
-          }
-        }
-      }
-    }
-    // Use constant init expressions as seeds (for singletons and non-singletons)
-    if (hasInitExpr(cell)) {
-      const initVal = evalConstantExpression(cell.initExpr)
-      if (isFiniteNumber(initVal)) {
-        // For singletons, seed the variable in the expression
-        if ((cell.ceqn || []).length === 1) {
-          const vars = varparse(cell.ceqn[0])
-          if (vars.size === 1) {
-            const [varName] = vars
-            values[varName] = initVal
-            known.add(varName)
-          }
-        }
-        // For non-singletons like {r : 4.5 = d/2}, seed bare vars in the equation
-        for (const expr of cell.ceqn || []) {
-          if (isbarevar(String(expr))) {
-            const varName = String(expr).trim()
-            if (!known.has(varName)) {
-              values[varName] = initVal
-              known.add(varName)
-            }
           }
         }
       }
@@ -376,104 +338,27 @@ function recomputeCellCvals(cells, ass, fixedCellIds, pinnedCellId = null) {
 // Compute initial values for all variables using solvem()
 function computeInitialValues(cells, bounds) {
   const errors = []
-  const baseErrors = []
-
-  // Step 1: Solve the template as written (including constants).
   const { inf, sup } = bounds
-  const baseEqns = buildInitialEquations(cells, false)
-  const { values: baseSeedValues, known: knownVars } = buildInitialSeedValues(cells, false, bounds)
-  let baseResult
-  let baseAss
+  const eqns = buildInitialEquations(cells)
+  const { values: seedValues, known: knownVars } = buildInitialSeedValues(cells, bounds)
+
+  let result
+  let ass
   try {
-    baseResult = solvem(baseEqns, baseSeedValues, inf, sup, knownVars)
-    baseAss = baseResult.ass
+    result = solvem(eqns, seedValues, inf, sup, knownVars)
+    ass = result.ass
   } catch (e) {
-    baseErrors.push(String(e && e.message ? e.message : e))
-    baseAss = { ...baseSeedValues }
-    baseResult = { ass: baseAss, zij: new Array(baseEqns.length).fill(NaN), sat: false }
+    errors.push(String(e && e.message ? e.message : e))
+    ass = { ...seedValues }
+    result = { ass, zij: new Array(eqns.length).fill(NaN), sat: false }
   }
 
-  if (!baseResult.sat) {
-    baseErrors.push(...contradictionsForEqns(baseEqns, baseAss, baseResult.zij, cells))
+  if (!result.sat) {
+    logFailedSolve(eqns, seedValues, ass)
+    errors.push(...contradictionsForEqns(eqns, ass, result.zij, cells))
   }
 
-  let solve = { ass: baseAss, eqns: baseEqns, zij: baseResult.zij, sat: baseResult.sat }
-
-  const initCells = cells.filter(hasInitExpr)
-  if (initCells.length) {
-    // baseEqns is parallel to cells (singletons included, solvem filters them).
-    // Map over cells to build parallel init value arrays.
-    const constInitValues = cells.map(c => {
-      if (!hasInitExpr(c)) return null
-      const constVal = evalConstantExpression(c.initExpr)
-      return constVal === null ? null : constVal
-    })
-    const hasConstInit = constInitValues.some(isFiniteNumber)
-    let seedAss = baseAss
-
-    if (hasConstInit) {
-      const constEqns = baseEqns.map((eqn, i) => {
-        const initVal = constInitValues[i]
-        return isFiniteNumber(initVal) ? [...eqn, initVal] : eqn
-      })
-      let constResult
-      let constAss
-      try {
-        constResult = solvem(constEqns, baseSeedValues, inf, sup, knownVars)
-        constAss = constResult.ass
-      } catch (e) {
-        constAss = { ...baseSeedValues }
-        constResult = { ass: constAss, zij: new Array(constEqns.length).fill(NaN), sat: false }
-      }
-      if (constResult.sat) seedAss = constAss
-    }
-
-    const invalidInitCells = []
-    const initValues = cells.map((c, i) => {
-      if (!hasInitExpr(c)) return null
-      const constVal = constInitValues[i]
-      if (isFiniteNumber(constVal)) return constVal
-      const r = vareval(c.initExpr, seedAss)
-      const valOk = !r.error && isFiniteNumber(r.value)
-      if (!valOk) invalidInitCells.push(c)
-      return valOk ? r.value : null
-    })
-
-    const initEqns = baseEqns.map((eqn, i) => {
-      const initVal = initValues[i]
-      return isFiniteNumber(initVal) ? [...eqn, initVal] : eqn
-    })
-    const initSeedValues = baseSeedValues
-    let initResult
-    let initAss
-    try {
-      initResult = solvem(initEqns, initSeedValues, inf, sup, knownVars)
-      initAss = initResult.ass
-    } catch (e) {
-      errors.push(String(e && e.message ? e.message : e))
-      initAss = { ...initSeedValues }
-      initResult = { ass: initAss, zij: new Array(initEqns.length).fill(NaN), sat: false }
-    }
-
-    const initOk = initResult.sat && invalidInitCells.length === 0
-    if (initOk) {
-      solve = { ass: initAss, eqns: initEqns, zij: initResult.zij, sat: initResult.sat }
-    } else {
-      if (!baseResult.sat && baseErrors.length) {
-        logFailedSolve(baseEqns, baseSeedValues, baseAss)
-        errors.push(...baseErrors)
-      }
-      if (!initResult.sat) {
-        logFailedSolve(initEqns, initSeedValues, initAss)
-      }
-      errors.push(...invalidInitCells.map(cell => `Initial value for {${cell.urtext}} incompatible with constraints`))
-      errors.push('Inconsistent initial values')
-    }
-  } else if (!baseResult.sat) {
-    logFailedSolve(baseEqns, baseSeedValues, baseAss)
-    errors.push(...baseErrors)
-  }
-
+  const solve = { ass, eqns, zij: result.zij, sat: result.sat }
   return { solve, errors }
 }
 
@@ -581,9 +466,8 @@ function parseRecipe() {
   state.solve = solve
   state.bounds = bounds
   state.errors = allErrors
-  // Per README future-work item 8: cells defined with bare numbers start frozen
-  // state.fixedCellIds = new Set(cells.filter(c => c.fix).map(c => c.id))
-  state.fixedCellIds = new Set(cells.filter(c => c.startsFrozen).map(c => c.id))
+  // Cells with constants and no colon start frozen (YN case in parse table)
+  state.fixedCellIds = new Set(cells.filter(c => c.frozen).map(c => c.id))
   recomputeCellCvals(cells, solve.ass, state.fixedCellIds)
   state.solveBanner = ''
   state.invalidExplainBanner = ''

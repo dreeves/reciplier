@@ -265,14 +265,14 @@ function runParserQuals() {
     parseCell(makeCell('x = 5')).ceqn, ['x'])
   check('parseCell: simple equation cval',
     parseCell(makeCell('x = 5')).cval, 5)
-  check('parseCell: equation startsFrozen',
-    parseCell(makeCell('x = 5')).startsFrozen, true)
+  check('parseCell: equation frozen (YN: constant + no colon)',
+    parseCell(makeCell('x = 5')).frozen, true)
   check('parseCell: variable equation',
     parseCell(makeCell('x = y')).ceqn, ['x', 'y'])
   check('parseCell: variable equation cval',
     parseCell(makeCell('x = y')).cval, null)
-  check('parseCell: variable equation not frozen',
-    parseCell(makeCell('x = y')).startsFrozen, false)
+  check('parseCell: variable equation not frozen (NN: no constant + no colon)',
+    parseCell(makeCell('x = y')).frozen, false)
   check('parseCell: three-way equation',
     parseCell(makeCell('a = b = c')).ceqn, ['a', 'b', 'c'])
   check('parseCell: expression equation',
@@ -284,13 +284,17 @@ function runParserQuals() {
   check('parseCell: constraint cval',
     parseCell(makeCell('a = b = 5')).cval, 5)
 
-  // Colon syntax (initial values)
-  check('parseCell: colon init',
-    parseCell(makeCell('x : 5')).initExpr, '5')
-  check('parseCell: colon init ceqn',
+  // Colon syntax: colon acts as equals but makes cell unfrozen
+  check('parseCell: colon ceqn',
     parseCell(makeCell('x : 5')).ceqn, ['x'])
-  check('parseCell: colon with expression',
-    parseCell(makeCell('y = 2x : 10')).initExpr, '10')
+  check('parseCell: colon cval',
+    parseCell(makeCell('x : 5')).cval, 5)
+  check('parseCell: colon not frozen (YY: constant + colon)',
+    parseCell(makeCell('x : 5')).frozen, false)
+  check('parseCell: colon with expression ceqn',
+    parseCell(makeCell('y = 2x : 10')).ceqn, ['y', '2x'])
+  check('parseCell: colon with expression cval',
+    parseCell(makeCell('y = 2x : 10')).cval, 10)
   check('parseCell: colon colonError null',
     parseCell(makeCell('x : 5')).colonError, null)
 
@@ -299,6 +303,8 @@ function runParserQuals() {
     parseCell(makeCell('x : 5 : 6')).colonError, 'multi')
   check('parseCell: colon with rhs equation',
     parseCell(makeCell('x : y = 5')).colonError, 'rhs')
+  check('parseCell: colon without constant (NY case)',
+    parseCell(makeCell('x : y')).colonError, 'noconst')
 
   // Inequalities
   check('parseCell: inequality ineq',

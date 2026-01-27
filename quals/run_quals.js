@@ -134,7 +134,7 @@ async function main() {
           const isAssignmentSeed =
             hasConstraint &&
             hasNumber &&
-            !c?.startsFrozen &&
+            !c?.frozen &&
             ceqnLen === 1 &&
             isBareIdentifier(c.ceqn[0])
           if (!isAssignmentSeed && hasConstraint && hasNumber) eqn.push(c.cval)

@@ -164,7 +164,7 @@ async function main() {
           const isAssignmentSeed =
             hasConstraint &&
             hasNumber &&
-            !c?.startsFrozen &&
+            !c?.frozen &&
             ceqnLen === 1 &&
             isBareIdentifier(c.ceqn[0])
           if (!isAssignmentSeed && hasConstraint && hasNumber) eqn.push(c.cval)
@@ -1477,6 +1477,7 @@ async function main() {
     const colonRhsErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
     assert.ok((colonRhsErrors || []).some(e => /more than one expression/i.test(e)))
 
+    // With new colon semantics, {x = 1 : 2} has two constants (1 and 2) → multipleNumbers error
     const initConflictTemplate = '{x = 1 : 2} {x}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
@@ -1484,8 +1485,7 @@ async function main() {
     }, initConflictTemplate)
     await page.waitForSelector('#recipeOutput', { visible: true })
     const initConflictErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
-    // previously: Initial value for \{x = 1 : 2\} incompatible with constraints
-    assert.ok((initConflictErrors || []).some(e => /Inconsistent initial values/i.test(e)))
+    assert.ok((initConflictErrors || []).some(e => /more than one numerical value/i.test(e)))
 
     // Qual: nested braces syntax error
     const nestedBraces = 'Test {a{b}c}'

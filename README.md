@@ -698,7 +698,7 @@ insufficiently anti-magical. But having the UI complain at you for entering
 values incompatible with the constraints might be annoying. I suspect there's a
 best-of-all-worlds solution but I haven't found it yet.
 
-* [SYN] If you make a cell like `{12(}` the field is shown in red with a
+* [SYN] Bug: If you make a cell like `{12(}` the field is shown in red with a
 question mark but no error is displayed.
 
 * [SAP] List of apps that this can or does subsume:
@@ -867,21 +867,6 @@ returns
 ass = {x: 4.106625693690123, d: 18.2383, w: 128.85357542252515, h: 2.0264779991739617, z: 128.86950962989468, A: 261.11893570865, tau: 6.28, d1: 9, r1: 4.499992598006505, r: 9.11915}
 zij = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2.7394753846919868e-11, 0, 0, 1.3234889800848443e-23, 6.462348535570529e-27]
 sat=false
-
-
-BUG REPORT:
-
-Replicata: Use this reciplate:
-```
-{2x : 6}
-{a = x}
-{x} {a} {z} {z}
-```
-
-Expectata: 
-That it find {x: 3, a: 3, z: 1} as a solution.
-
-Resultata: "Inconsistent initial values"
 
 
 BUG REPORT: simeq correctly uses gauss-jordan to find a solution when the reciplate loads but if you change one of the cells it says "no solution found (try unfreezing cells)". the only way to have it use gauss-jordan again to compute the solution is to make a dummy edit to one of the frozen cells. this kind of makes sense because if you're editing one of the other cells then we treat that cell as temporarily pegged while you're editing it, and indeed there is no solution when you do that, unless you edit one of the cells to be consistent with the solution.

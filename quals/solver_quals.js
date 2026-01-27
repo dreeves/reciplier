@@ -2330,6 +2330,23 @@ function runAllSolverQuals(ctx) {
     check('solvem: strict upper x=-2', rep.ass.x, -2, 1e-9)
   })()
 
+  // ==========================================================================
+  // Expression with init value (regression test for {2x : 6} bug)
+  // ==========================================================================
+
+  // {2x : 6} means 2x = 6, so x = 3 (not x = 6!)
+  ;(() => {
+    const eqns = [
+      ['2*x', 6],   // from {2x : 6}
+      ['a', 'x'],   // from {a = x}
+    ]
+    const rep = solvem(eqns, { x: 1, a: 1, z: 1 })
+    check('solvem: {2x : 6} finds x=3 (sat)', rep.sat, true)
+    check('solvem: {2x : 6} x=3', rep.ass.x, 3, 1e-6)
+    check('solvem: {2x : 6} a=x=3', rep.ass.a, 3, 1e-6)
+    check('solvem: {2x : 6} z unchanged', rep.ass.z, 1, 1e-9)
+  })()
+
   console.log('\n=== Summary ===')
   console.log(`${results.passed} passed, ${results.failed} failed`)
   if (results.failed > 0) {

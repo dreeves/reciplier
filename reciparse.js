@@ -102,6 +102,11 @@ function parseInequalities(content) {
 // Parse a single cell's content into cval and ceqn
 // Per spec: ceqn is a list of non-constant expressions split on "=".
 // cval is the constant if there is one, null otherwise.
+// Colon is treated as equals but affects frozen state:
+//   YY: constant + colon → unpegged (e.g., {x : 3})
+//   YN: constant + no colon → pegged (e.g., {x = 3})
+//   NY: no constant + colon → ERROR (e.g., {2x : a})
+//   NN: no constant + no colon → unpegged (e.g., {2x = a})
 function parseCell(cell) {
   const content = cell.urtext.trim()
   const colonMatches = content.match(/:/g)
@@ -112,14 +117,18 @@ function parseCell(cell) {
   const rightPart = hasColon ? content.slice(colonIndex + 1).trim() : ''
   const colonMultiple = colonCount > 1
   const colonRightHasEq = hasColon && /[=<>]/.test(rightPart)
-  const colonError = colonMultiple ? 'multi' : (colonRightHasEq ? 'rhs' : null)
-  const initExpr = hasColon && !colonError ? rightPart : null
   const inequality = parseInequalities(leftPart)
   const exprPart = inequality.error ? '' : inequality.core
 
   // Split by = to get constraint expressions (but be careful with == or !=)
   // We want to split on single = that's not part of == or !=
   let parts = exprPart.split(/(?<![=!<>])=(?!=)/).map(e => e.trim()).filter(e => e !== '')
+
+  // If colon is present and valid, treat right side as additional equation term
+  const colonValidSoFar = hasColon && !colonMultiple && !colonRightHasEq
+  if (colonValidSoFar && rightPart !== '') {
+    parts.push(rightPart)
+  }
 
   // Separate bare numbers from expressions
   // Per spec: bare numbers go to cval field, not ceqn
@@ -133,6 +142,15 @@ function parseCell(cell) {
     partIsConst.push(isConst)
   }
 
+  const hasConstant = bareNumbers.length > 0
+
+  // NY case: colon without constant is an error (ambiguous semantics)
+  const colonNoConst = colonValidSoFar && !hasConstant
+  const colonError = colonMultiple ? 'multi'
+                   : colonRightHasEq ? 'rhs'
+                   : colonNoConst ? 'noconst'
+                   : null
+
   const bareVars = parts.filter(part => isbarevar(part))
   const ineq = inequality.bounds && bareVars.length
     ? { ...inequality.bounds, varName: bareVars[0] }
@@ -140,7 +158,8 @@ function parseCell(cell) {
   const ineqError = Boolean(inequality.error || (inequality.bounds && bareVars.length === 0))
   const activeParts = ineqError ? [] : parts
 
-  const startsFrozen = activeParts.length > 0 && partIsConst.some(Boolean)
+  // frozen = YN case: has constant AND no colon
+  const frozen = activeParts.length > 0 && hasConstant && !hasColon
 
   // Error flag if multiple bare numbers (spec case 7)
   const multipleNumbers = !ineqError && bareNumbers.length > 1
@@ -150,13 +169,11 @@ function parseCell(cell) {
 
   const ceqn = ineqError ? [] : nonConstParts
 
-  // TODO: do we need all of the following fields?
   return {
     ...cell,
     cval,
-    startsFrozen,
+    frozen,
     ceqn,
-    initExpr,
     colonError,
     ineq: ineqError ? null : ineq,
     ineqError: !!ineqError,
