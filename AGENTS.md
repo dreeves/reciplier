@@ -57,7 +57,7 @@ remain the same.
 2. **reciplier.js** - Delete slider panel code: `pickSliderCells()`,
    `sliderLineForCell()`, `sliderLineHtml()`, `buildSliderDefs()`,
    `renderSliderPanel()`, `syncSliderPanel()`, `updateSliderDisplay()`,
-   `handleSliderClose()`. Keep `sliderBoundsForCell()`. Adapt `handleSliderInput()`.
+   `handleSliderClose()`. Keep `sliderBounds()`. Adapt `handleSliderInput()`.
    Remove slider panel event listener setup from `init()`.
 
 3. **reciplogic.js** - Remove `hiddenSliders` from state and all references.

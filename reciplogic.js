@@ -64,7 +64,8 @@ function logFailedSolve(eqns, seedValues, solvedValues) {
 // =============================================================================
 
 // Build symbol table from parsed cells
-function buildSymbolTable(cells) {
+// (was buildSymbolTable)
+function symtab(cells) {
   const symbols = {}
   const errors = []
   const varInfo = new Map()
@@ -125,7 +126,8 @@ function buildSymbolTable(cells) {
 // Build equations list for solvem() from cells
 // Each equation is an array of expressions that should all be equal
 // Note: solvem also filters singletons internally (see csolver.js TODO about this)
-function buildEquations(cells) {
+// (was buildEquations)
+function cellsToEqns(cells) {
   const eqns = []
   for (const cell of cells) {
     const eqn = [...cell.ceqn]
@@ -138,7 +140,8 @@ function buildEquations(cells) {
 
 // Build equations list for solvem() from cells.
 // Each equation is an array [ceqn..., cval] of expressions that should all be equal.
-function buildInitialEquations(cells) {
+// (was buildInitialEquations)
+function initEqns(cells) {
   return cells.map(c => {
     const parts = c.cval !== null ? [...c.ceqn, c.cval] : [...c.ceqn]
     return parts.map(p => {
@@ -153,7 +156,8 @@ function buildInitialEquations(cells) {
 }
 
 // TODO: ugh, this propagation stuff is wrong-headed. this is in solvem's purview.
-function buildInitialSeedValues(cells, bounds = {}) {
+// (was buildInitialSeedValues)
+function initSeeds(cells, bounds = {}) {
   const { inf = {}, sup = {} } = bounds
   const values = {}
   const known = new Set()  // Track values from constants (not defaults)
@@ -185,7 +189,7 @@ function buildInitialSeedValues(cells, bounds = {}) {
     // For equations with a single variable equaling a constant, use the constant.
     for (const expr of parts) {
       if (typeof expr !== 'string') continue
-      const constVal = evalConstantExpression(expr)
+      const constVal = evalConst(expr)
       if (!isFiniteNumber(constVal)) continue
       for (const otherExpr of parts) {
         if (typeof otherExpr !== 'string' || otherExpr === expr) continue
@@ -269,7 +273,8 @@ function strictEpsilon(infVal, supVal) {
   return eps
 }
 
-function getEffectiveBounds(cells) {
+// (was getEffectiveBounds)
+function effectiveBounds(cells) {
   const combined = combineBounds(cells)
   const inf = {}
   const sup = {}
@@ -287,7 +292,8 @@ function getEffectiveBounds(cells) {
   return { inf, sup, combined }
 }
 
-function contradictionsForEqns(eqns, ass, zij, cells) {
+// (was contradictionsForEqns)
+function eqnContradictions(eqns, ass, zij, cells) {
   const errors = []
 
   for (let i = 0; i < eqns.length; i++) {
@@ -320,7 +326,8 @@ function contradictionsForEqns(eqns, ass, zij, cells) {
   return errors
 }
 
-function recomputeCellCvals(cells, ass, peggedCellIds, skipCellId = null) {
+// (was recomputeCellCvals)
+function refreshCvals(cells, ass, peggedCellIds, skipCellId = null) {
   for (const cell of cells) {
     if (cell.id === skipCellId) continue
     if (peggedCellIds && peggedCellIds.has(cell.id) && isFiniteNumber(cell.cval)) {
@@ -339,11 +346,12 @@ function recomputeCellCvals(cells, ass, peggedCellIds, skipCellId = null) {
 }
 
 // Compute initial values for all variables using solvem()
-function computeInitialValues(cells, bounds) {
+// (was computeInitialValues)
+function initValues(cells, bounds) {
   const errors = []
   const { inf, sup } = bounds
-  const eqns = buildInitialEquations(cells)
-  const { values: seedValues, known: knownVars } = buildInitialSeedValues(cells, bounds)
+  const eqns = initEqns(cells)
+  const { values: seedValues, known: knownVars } = initSeeds(cells, bounds)
 
   let result
   let ass
@@ -358,7 +366,7 @@ function computeInitialValues(cells, bounds) {
 
   if (!result.sat) {
     logFailedSolve(eqns, seedValues, ass)
-    errors.push(...contradictionsForEqns(eqns, ass, result.zij, cells))
+    errors.push(...eqnContradictions(eqns, ass, result.zij, cells))
   }
 
   const solve = { ass, eqns, zij: result.zij, sat: result.sat }
@@ -404,7 +412,8 @@ function isCellViolated(cell, ass) {
 }
 
 // Get set of cell IDs that are violated (for UI highlighting)
-function getViolatedCellIds(cells, ass) {
+// (was getViolatedCellIds)
+function violatedCellIds(cells, ass) {
   const violatedIds = new Set()
   for (const cell of cells) {
     if (isCellViolated(cell, ass)) {
@@ -456,11 +465,11 @@ function parseRecipe() {
   cells = cells.map(parseCell)
 
   // Build symbol table
-  const { errors: symbolErrors } = buildSymbolTable(cells)
+  const { errors: symbolErrors } = symtab(cells)
   
   // Compute initial values (includes template satisfiability check)
-  const bounds = getEffectiveBounds(cells)
-  const { solve, errors: valueErrors } = computeInitialValues(cells, bounds)
+  const bounds = effectiveBounds(cells)
+  const { solve, errors: valueErrors } = initValues(cells, bounds)
 
   const allErrors = [...syntaxErrors, ...symbolErrors, ...valueErrors]
   
@@ -471,13 +480,14 @@ function parseRecipe() {
   state.errors = allErrors
   // Cells with constants and no colon start pegged (YN case in parse table)
   state.peggedCellIds = new Set(cells.filter(c => c.pegged).map(c => c.id))
-  recomputeCellCvals(cells, solve.ass, state.peggedCellIds)
+  refreshCvals(cells, solve.ass, state.peggedCellIds)
   state.solveBanner = ''
   state.invalidExplainBanner = ''
   state.invalidInputCellIds = new Set()
 }
 
-function setInvalidExplainBannerFromInvalidity(invalidCellIds) {
+// (was setInvalidExplainBannerFromInvalidity)
+function explainInvalidity(invalidCellIds) {
   const hasErrors = (state.errors || []).length > 0
   const hasSolveBanner = !!state.solveBanner
   const invalidInputId = state.invalidInputCellIds?.size
@@ -500,7 +510,8 @@ function setInvalidExplainBannerFromInvalidity(invalidCellIds) {
     : (invalidInputId ? invalidInputMessage : (invalidCellId ? syntaxMessage : ''))
 }
 
-function setSolveBannerFromSatisfaction(sat) {
+// (was setSolveBannerFromSatisfaction)
+function solveBannerFromSat(sat) {
   const anyPegged = state.peggedCellIds.size > 0
   state.solveBanner = sat
     ? ''
@@ -515,7 +526,7 @@ function solveAndApply({
 } = {}) {
   const seedAss = { ...state.solve.ass, ...(seedOverrides || {}) }
 
-  const eqns = buildInteractiveEqns(editedCellId, editedValue)
+  const eqns = interactiveEqns(editedCellId, editedValue)
   const { inf, sup } = state.bounds
   const solveResult = solvem(eqns, seedAss, inf, sup)
   const solvedAss = solveResult.ass
@@ -526,7 +537,7 @@ function solveAndApply({
     logFailedSolve(eqns, seedAss, solvedAss)
   }
 
-  setSolveBannerFromSatisfaction(sat)
+  solveBannerFromSat(sat)
 
   state.solve = { ass: solvedAss, eqns, zij, sat }
 
@@ -538,17 +549,18 @@ function solveAndApply({
 
   const skipRecomputeCellId = preserveEdited ? editedCellId : null
   if (sat) {
-    recomputeCellCvals(state.cells, state.solve.ass, state.peggedCellIds, skipRecomputeCellId)
+    refreshCvals(state.cells, state.solve.ass, state.peggedCellIds, skipRecomputeCellId)
   }
 
   const invalidCellIds = collectInvalidCellIds(eqns, zij)
 
-  setInvalidExplainBannerFromInvalidity(invalidCellIds)
+  explainInvalidity(invalidCellIds)
 
   return { eqns, solved: solvedAss, sat, invalidCellIds }
 }
 
-function buildInteractiveEqns(editedCellId = null, editedValue = null) {
+// (was buildInteractiveEqns)
+function interactiveEqns(editedCellId = null, editedValue = null) {
   return state.cells.map(c => {
     const eqn = [...c.ceqn]
 
@@ -562,7 +574,8 @@ function buildInteractiveEqns(editedCellId = null, editedValue = null) {
   })
 }
 
-function getUnsatisfiedCellIds(eqns, zij) {
+// (was getUnsatisfiedCellIds)
+function unsatisfiedCellIds(eqns, zij) {
   const unsatisfied = new Set()
   if (!Array.isArray(zij)) return unsatisfied
 
@@ -579,9 +592,9 @@ function getUnsatisfiedCellIds(eqns, zij) {
 
 // Combine per-cell violations, solver residuals, and invalid input markers.
 function collectInvalidCellIds(eqns, zij) {
-  const invalidCellIds = new Set(getViolatedCellIds(state.cells, state.solve.ass))
+  const invalidCellIds = new Set(violatedCellIds(state.cells, state.solve.ass))
 
-  const unsatisfied = state.solveBanner && eqns && zij ? getUnsatisfiedCellIds(eqns, zij) : null
+  const unsatisfied = state.solveBanner && eqns && zij ? unsatisfiedCellIds(eqns, zij) : null
   unsatisfied && unsatisfied.forEach(id => invalidCellIds.add(id))
   for (const id of state.invalidInputCellIds) invalidCellIds.add(id)
 

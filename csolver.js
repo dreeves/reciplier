@@ -312,7 +312,8 @@ function zidge(eqns, ass) {
 // Try to extract linear coefficients from an expression via numerical
 // differentiation
 // Returns {coeffs: [...], constant} or null if nonlinear
-function tryExtractLinearCoeffs(expr, varNames, baseValues) {
+// (was tryExtractLinearCoeffs)
+function linearCoeffs(expr, varNames, baseValues) {
   // Always use zeros as the base for numerical differentiation.
   // The baseValues parameter is only used to know which variables exist.
   const zeros = {}
@@ -381,11 +382,11 @@ function gaussianElim(eqns, vars, inf, sup, knownVars = null) {
       
       const leftCoeffs = leftIsNum 
         ? { coeffs: varNames.map(() => 0), constant: left }
-        : tryExtractLinearCoeffs(left, varNames, vars)
+        : linearCoeffs(left, varNames, vars)
       
       const rightCoeffs = rightIsNum
         ? { coeffs: varNames.map(() => 0), constant: right }
-        : tryExtractLinearCoeffs(right, varNames, vars)
+        : linearCoeffs(right, varNames, vars)
       
       if (!leftCoeffs || !rightCoeffs) continue
       
@@ -515,7 +516,8 @@ function invertUnixtimeSeconds(seconds) {
 }
 
 // Find all variables required by equations
-function findRequiredVars(eqns) {
+// (was findRequiredVars)
+function requiredVars(eqns) {
   const required = new Set()
   for (const eqn of eqns) {
     for (const term of eqn) {
@@ -531,7 +533,8 @@ function findRequiredVars(eqns) {
 }
 
 // Find variables that appear in equations with literal numbers (constrained)
-function findConstrainedVars(eqns) {
+// (was findConstrainedVars)
+function constrainedVars(eqns) {
   const constrained = new Set()
   for (const eqn of eqns) {
     if (eqn.some(e => typeof e === 'number')) {
@@ -544,7 +547,8 @@ function findConstrainedVars(eqns) {
 }
 
 // Build map of variable -> count of times used as input (not as LHS definition)
-function buildUsesAsInput(eqns) {
+// (was buildUsesAsInput)
+function inputUseCounts(eqns) {
   const usesAsInput = new Map()
   for (const eqn of eqns) {
     if (eqn.length < 2) continue
@@ -563,7 +567,8 @@ function buildUsesAsInput(eqns) {
 }
 
 // Find variables pinned to literal values (not to be confused with pegged)
-function findLiteralPins(eqns) {
+// (was findLiteralPins)
+function literalPins(eqns) {
   const literalPinned = new Map()
   for (const eqn of eqns) {
     const n = eqn.find(e => typeof e === 'number')
@@ -578,7 +583,8 @@ function findLiteralPins(eqns) {
 }
 
 // Sort equations: those with literals first
-function sortEqnsByLiterals(eqns) {
+// (was sortEqnsByLiterals)
+function sortByLiterals(eqns) {
   return [...eqns].sort((a, b) => {
     const aHasLiteral = a.some(e => typeof e === 'number')
     const bHasLiteral = b.some(e => typeof e === 'number')
@@ -590,7 +596,8 @@ function sortEqnsByLiterals(eqns) {
 // Solve self-referential equations where both sides depend on the same variable
 // Example: [['1/phi', 'phi - 1']] solves to phi = golden ratio
 // This is just solving (e1 - e2) = 0 for the shared variable
-function solveSelfReferential(eqns, values, constrained, trustworthy, inf, sup) {
+// (was solveSelfReferential)
+function solveSelfRef(eqns, values, constrained, trustworthy, inf, sup) {
   for (const eqn of eqns) {
     if (eqn.length !== 2) continue
     const [e1, e2] = eqn
@@ -629,7 +636,8 @@ function solveSelfReferential(eqns, values, constrained, trustworthy, inf, sup) 
 }
 
 // Build dependency graph for fallback root search
-function buildDependencyGraph(eqns, constrained) {
+// (was buildDependencyGraph)
+function depGraph(eqns, constrained) {
   const definedBy = new Map()
   const copies = []
   for (const eqn of eqns) {
@@ -661,7 +669,8 @@ function buildDependencyGraph(eqns, constrained) {
 }
 
 // Propagate values from root and compute residual for fallback search
-function propagateAndComputeResidual(rootVal, root, values, definedBy, copies, eqns, constrained) {
+// (was propagateAndComputeResidual)
+function propagateResidual(rootVal, root, values, definedBy, copies, eqns, constrained) {
   const test = { ...values, [root]: rootVal }
 
   // Propagate definedBy expressions
@@ -716,8 +725,9 @@ function propagateAndComputeResidual(rootVal, root, values, definedBy, copies, e
 }
 
 // Fallback: 1D binary search on root variables when main solver fails
-function fallbackRootSearch(eqns, values, constrained, tol, inf, sup) {
-  const { definedBy, copies } = buildDependencyGraph(eqns, constrained)
+// (was fallbackRootSearch)
+function rootSearch(eqns, values, constrained, tol, inf, sup) {
+  const { definedBy, copies } = depGraph(eqns, constrained)
 
   const rootCounts = new Map()
   for (const { root } of definedBy.values()) {
@@ -730,7 +740,7 @@ function fallbackRootSearch(eqns, values, constrained, tol, inf, sup) {
     let lo = 0.001, hi = 1000
     for (let iter = 0; iter < 50; iter++) {
       const mid = (lo + hi) / 2
-      const { test: testValues, residual } = propagateAndComputeResidual(mid, root, values, definedBy, copies, eqns, constrained)
+      const { test: testValues, residual } = propagateResidual(mid, root, values, definedBy, copies, eqns, constrained)
 
       if (eqnsSatisfied(eqns, testValues, tol)) {
         Object.assign(values, testValues)
@@ -738,7 +748,7 @@ function fallbackRootSearch(eqns, values, constrained, tol, inf, sup) {
       }
 
       const probeDelta = (hi - lo) * 1e-4 + 1e-6
-      const { residual: residualHi } = propagateAndComputeResidual(mid + probeDelta, root, values, definedBy, copies, eqns, constrained)
+      const { residual: residualHi } = propagateResidual(mid + probeDelta, root, values, definedBy, copies, eqns, constrained)
 
       if (residualHi < residual) lo = mid
       else hi = mid
@@ -748,7 +758,7 @@ function fallbackRootSearch(eqns, values, constrained, tol, inf, sup) {
 
 function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
   // Validate that all required variables are provided
-  const required = findRequiredVars(eqns)
+  const required = requiredVars(eqns)
   const missing = [...required].filter(v => !Object.prototype.hasOwnProperty.call(vars, v))
   if (missing.length > 0) {
     throw new Error(`solvem: missing initial vars: ${missing.sort().join(', ')}`)
@@ -768,9 +778,9 @@ function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
   }
 
   // Initialize constraint tracking using extracted helpers
-  const constrained = findConstrainedVars(eqns)
-  const usesAsInput = buildUsesAsInput(eqns)
-  const literalPinned = findLiteralPins(eqns)
+  const constrained = constrainedVars(eqns)
+  const usesAsInput = inputUseCounts(eqns)
+  const literalPinned = literalPins(eqns)
 
   // Apply literal pins to values (not to be confused with pegged)
   for (const [v, n] of literalPinned) {
@@ -830,9 +840,10 @@ function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
   // Use extracted helpers (unixtimeArgs, invertUnixtimeSeconds, isDefinitionPair
   // are now at module level)
 
-  const sortedEqns = sortEqnsByLiterals(eqns)
+  const sortedEqns = sortByLiterals(eqns)
 
-  function propagateSatisfiedDefinitions() {
+  // (was propagateSatisfiedDefinitions)
+  function propagateDefs() {
     let changed = false
     for (const eqn of sortedEqns) {
       if (eqn.length !== 2) continue
@@ -970,7 +981,7 @@ function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
     solvedFromStableThisPass = new Set()
 
     for (let i = 0; i < 10; i++) {
-      if (!propagateSatisfiedDefinitions()) break
+      if (!propagateDefs()) break
     }
 
     for (const eqn of sortedEqns) {
@@ -1092,11 +1103,11 @@ function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
   }
 
   // Handle self-referential equations (e.g., 1/phi = phi - 1)
-  solveSelfReferential(eqns, values, constrained, trustworthy, inf, sup)
+  solveSelfRef(eqns, values, constrained, trustworthy, inf, sup)
 
   // Fallback: 1D search on root variables
   if (!eqnsSatisfied(eqns, values)) {
-    fallbackRootSearch(eqns, values, constrained, tol)
+    rootSearch(eqns, values, constrained, tol)
   }
 
   const zij = zidge(eqns, values)

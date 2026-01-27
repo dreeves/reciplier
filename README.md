@@ -743,6 +743,8 @@ fields.
 * [ESC] Support syntax like "Footnote: \[1\]" if you want literal brackets in
 the recipe. Similar for curly braces of course.
 
+* [REF] (a) Move propagation logic from initSeeds into solvem. (b)
+Consolidate repetitive search loops in csolver.js findTarget
 
 ## Half-baked ideas for cell syntax: JSON objects with syntactic sugar
 

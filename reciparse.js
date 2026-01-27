@@ -59,7 +59,8 @@ function extractCells(text) {
   return cells
 }
 
-function evalConstantExpression(expr) {
+// (was evalConstantExpression)
+function evalConst(expr) {
   const trimmed = String(expr).trim()
   const numeric = toNum(trimmed)
 
@@ -82,8 +83,8 @@ function parseInequalities(content) {
   const supRaw = match ? match[5].trim() : ''
   const hasRight = attempted && />/.test(trimmed)
   const leftoverAngles = /[<>]/.test(infRaw + middleRaw + supRaw)
-  const infVal = evalConstantExpression(infRaw)
-  const supVal = evalConstantExpression(supRaw)
+  const infVal = evalConst(infRaw)
+  const supVal = evalConst(supRaw)
   const boundsOk = isFiniteNumber(infVal) && isFiniteNumber(supVal)
   const infStrict = infOp === '<'
   const supStrict = supOp === '<'
@@ -136,7 +137,7 @@ function parseCell(cell) {
   const nonConstParts = []
   const partIsConst = []
   for (const part of parts) {
-    const constVal = evalConstantExpression(part)
+    const constVal = evalConst(part)
     const isConst = constVal !== null
     isConst ? bareNumbers.push(constVal) : nonConstParts.push(part)
     partIsConst.push(isConst)

@@ -10,7 +10,8 @@ function escapeHtml(text) {
 // replace each {cell} with its computed value.
 // Slider cells (inequality bounds) use <<value>> to distinguish from fields,
 // since a recipe typically shows both a field and a slider for the same variable.
-function getScaledRecipeText() {
+// (was getScaledRecipeText)
+function scaledRecipeText() {
   const cellsByUrtext = new Map(state.cells.map(c => [c.urtext, c]))
   return state.recipeText.replace(/\{([^{}]*)\}/g, (_, urtext) => {
     const cell = cellsByUrtext.get(urtext)
@@ -25,7 +26,8 @@ function getScaledRecipeText() {
 // Slider Bounds (used for inline sliders in cells with inequality bounds)
 // =============================================================================
 
-function sliderBoundsForCell(cell) {
+// (was sliderBoundsForCell)
+function sliderBounds(cell) {
   if (cell.sliderBounds) return cell.sliderBounds
   if (cell.ineq) {
     const { inf, sup, infStrict, supStrict } = cell.ineq

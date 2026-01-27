@@ -1079,7 +1079,7 @@ async function main() {
     assert.ok(invalidCount1 >= 1)
 
     const sat1 = await page.evaluate(() => {
-      const eqns = buildInteractiveEqns(null, null)
+      const eqns = interactiveEqns(null, null)
       return eqnsSatisfied(eqns, state.solve.ass)
     })
     assert.equal(sat1, false)

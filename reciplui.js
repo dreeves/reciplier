@@ -97,7 +97,8 @@ function assignErrorsToCells(errors, cells) {
   return { byCell, global }
 }
 
-function findRenderedAnchor(rendered, cellId) {
+// (was findRenderedAnchor)
+function renderedAnchor(rendered, cellId) {
   const input = rendered.querySelector(`input.recipe-field[data-cell-id="${cellId}"]`)
   if (!input) throw new Error('renderRecipe: missing input for error banner anchor')
   let anchor = input
@@ -107,13 +108,14 @@ function findRenderedAnchor(rendered, cellId) {
   return anchor
 }
 
-function insertCriticalErrorBanners(rendered, errorAssignments) {
+// (was insertCriticalErrorBanners)
+function criticalErrorBanners(rendered, errorAssignments) {
   if (!rendered) throw new Error('renderRecipe: missing rendered container for error banners')
   for (const [cellId, messages] of errorAssignments.byCell) {
     if (!messages || messages.length === 0) {
       throw new Error('renderRecipe: empty error list for cell banner')
     }
-    const anchor = findRenderedAnchor(rendered, cellId)
+    const anchor = renderedAnchor(rendered, cellId)
     const bannerHtml = renderErrorDisplay(messages)
     if (!bannerHtml) throw new Error('renderRecipe: empty banner html for cell error')
     anchor.insertAdjacentHTML('afterend', bannerHtml)
@@ -127,15 +129,17 @@ function insertCriticalErrorBanners(rendered, errorAssignments) {
 
 const markdownRenderer = markdownit({ html: true, breaks: true })
 
-function getRecipeKeyForText(text) {
+// (was getRecipeKeyForText)
+function recipeKey(text) {
   for (const key in reciplates) {
     if (reciplates[key] === text) return key
   }
   return null
 }
 
-function updateRecipeDropdown() {
-  $('recipeSelect').value = getRecipeKeyForText(state.recipeText) || 'custom'
+// (was updateRecipeDropdown)
+function syncDropdown() {
+  $('recipeSelect').value = recipeKey(state.recipeText) || 'custom'
 }
 
 function renderRecipe() {
@@ -174,7 +178,7 @@ function renderRecipe() {
       let inputHtml
       if (cell.ineq) {
         // Cell has inequality bounds - render as slider with bounds labels
-        const bounds = sliderBoundsForCell(cell)
+        const bounds = sliderBounds(cell)
         const nearOne = Math.abs(value - 1) < 0.005
         const varName = cell.ineq.varName || ''
         const minLabel = formatNum(bounds.minLabel)
@@ -206,13 +210,14 @@ function renderRecipe() {
     // Wrap each line in paragraphs containing sliders so each line can be its
     // own flex container. This allows sliders to fill available space on their
     // line without affecting other lines.
-    html = wrapLinesInParagraphsWithSliders(html)
+    html = wrapLinesWithSliders(html)
     return `<div class="recipe-rendered">${html}</div>`
   }
 
   // Helper: For paragraphs containing sliders, wrap each line segment (separated
   // by <br>) in a <span class="recipe-line">. This allows per-line flex layout.
-  function wrapLinesInParagraphsWithSliders(html) {
+  // (was wrapLinesInParagraphsWithSliders)
+  function wrapLinesWithSliders(html) {
     return html.replace(/<p>([\s\S]*?)<\/p>/g, (match, inner) => {
       // Only process paragraphs that contain sliders
       if (!inner.includes('recipe-slider')) return match
@@ -247,7 +252,7 @@ function renderRecipe() {
   copySection.style.display = 'block'
 
   const rendered = output.querySelector('.recipe-rendered')
-  insertCriticalErrorBanners(rendered, errorAssignments)
+  criticalErrorBanners(rendered, errorAssignments)
 
   $('copyButton').disabled = criticalErrors.length > 0
   
@@ -287,7 +292,8 @@ function updateInvalidExplainBannerInDom() {
   updateBannerInDom('invalidExplainBanner', state.invalidExplainBanner)
 }
 
-function repositionNonCriticalBannersAfterLastInvalidField() {
+// (was repositionNonCriticalBannersAfterLastInvalidField)
+function repositionBanners() {
   const rendered = $('recipeOutput')?.querySelector('.recipe-rendered')
   const banners = rendered && $('nonCriticalBanners')
   if (!rendered || !banners) return
@@ -340,7 +346,7 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
     })
   }
 
-  repositionNonCriticalBannersAfterLastInvalidField()
+  repositionBanners()
 }
 
 function markInvalidInput(input, cellId, message) {
@@ -348,7 +354,7 @@ function markInvalidInput(input, cellId, message) {
   state.invalidInputCellIds.add(cellId)
   state.invalidExplainBanner = message
   updateInvalidExplainBannerInDom()
-  repositionNonCriticalBannersAfterLastInvalidField()
+  repositionBanners()
 }
 
 function clearInvalidInput(cellId) {
@@ -756,7 +762,7 @@ function handleRecipeChange() {
     state.recipeText = reciplates[selectedKey]
     $('recipeTextarea').value = state.recipeText
     parseRecipe()
-    updateRecipeDropdown()
+    syncDropdown()
     renderRecipe()
     updateUrl()
   }
@@ -765,7 +771,7 @@ function handleRecipeChange() {
 function handleTextareaInput(e) {
   state.recipeText = e.target.value
   parseRecipe()
-  updateRecipeDropdown()
+  syncDropdown()
   renderRecipe()
   updateUrl()
 }
@@ -780,7 +786,7 @@ function handleCopyToClipboard() {
     return
   }
   
-  const scaledText = getScaledRecipeText()
+  const scaledText = scaledRecipeText()
   navigator.clipboard.writeText(scaledText)
     .then(() => showNotification('Recipe copied!'))
     .catch(err => {
@@ -906,9 +912,9 @@ function updateUrl() {
   
   const params = new URLSearchParams()
   
-  const recipeKey = getRecipeKeyForText(state.recipeText)
-  if (recipeKey && recipeKey !== 'custom') {
-    params.set('recipe', recipeKey)
+  const rkey = recipeKey(state.recipeText)
+  if (rkey && rkey !== 'custom') {
+    params.set('recipe', rkey)
   } else if (state.recipeText.trim()) {
     const compressed = LZString.compressToEncodedURIComponent(state.recipeText)
     params.set('rawcipe', compressed)
@@ -948,7 +954,7 @@ function loadFromUrl() {
   if (selectedKey) $('recipeSelect').value = selectedKey
 
   parseRecipe()
-  updateRecipeDropdown()
+  syncDropdown()
   renderRecipe()
   
   urlUpdateEnabled = true
@@ -1009,7 +1015,7 @@ function init() {
       state.recipeText = reciplates[firstKey]
       $('recipeTextarea').value = state.recipeText
       parseRecipe()
-      updateRecipeDropdown()
+      syncDropdown()
       renderRecipe()
       updateUrl()
     }
