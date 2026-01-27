@@ -81,6 +81,9 @@ function buildSymbolTable(cells) {
       `Cell {${cell.urtext}} has more than one colon`)
     cell.colonError === 'rhs' && errors.push(
       `Cell {${cell.urtext}} has more than one expression after the colon`)
+    cell.colonError === 'noconst' && errors.push(
+      // TODO vet this error copy
+      `Cell {${cell.urtext}} has a colon but no constant specified after it`)
 
     cell.ceqn.length === 0 && cell.cval !== null &&
       errors.push(`Cell {${cell.urtext}} is a bare number ` +

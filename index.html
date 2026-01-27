@@ -125,59 +125,61 @@ for an example of some prior art.
   
   <div class="text-center text-gray-400 text-sm mt-4">
     <div class="text-gray-300 text-xs mt-1">
-      v2026.01.26-d
+      v2026.01.26-e
     </div>
   </div>
 
-  <!-- TEMPORARY DEBUG PANEL -->
-  <br>&nbsp;<br>
-  <br>&nbsp;<br>
-  <!-- Add "open", without quotes, as a boolean attribute on <details> to
-       default to expanded rather than collapsed. -->
-  <details id="debugPanel" class="debug-panel"> 
-    <summary class="debug-header">UI Experiments ⚠️ (normal users ignore this)</summary>
-    <div class="debug-content">
-      <div class="debug-section">
-        <div class="debug-label">Invisible triggers:</div>
-        <div class="debug-options">
-          <label><input type="checkbox" data-trigger-mode="dblclick"> <s>Double-click</s></label>
-          <label><input type="checkbox" data-trigger-mode="tripleclick"> Triple-click</label>
-          <label><input type="checkbox" data-trigger-mode="longpress"> Long-press</label>
-          <label><input type="checkbox" data-trigger-mode="borderclick"> Border-click</label>
-          <label><input type="checkbox" data-trigger-mode="modclick"> Modifier+click</label>
-          <label><input type="checkbox" data-trigger-mode="rightclick"> Right-click</label>
-        </div>
-      </div>
-      <div class="debug-section">
-        <div class="debug-label">Visual triggers:</div>
-        <div class="debug-options">
-          <label><input type="checkbox" data-trigger-mode="cornerpin"> 📌 Corner pin</label>
-          <label><input type="checkbox" data-trigger-mode="edgedots"> ● Edge dots</label>
-          <label><input type="checkbox" data-trigger-mode="brackets"> ⌜⌟ Brackets</label>
-          <label><input type="checkbox" data-trigger-mode="hoverglow"> ✨ Hover glow</label>
-        </div>
-      </div>
-      <div class="debug-section">
-        <div class="debug-label">Edge threshold (border-click &amp; hover-glow): <span id="borderThresholdValue">5</span>px</div>
-        <input type="range" id="borderThreshold" min="1" max="20" value="5">
-      </div>
-      <div class="debug-section">
-        <div class="debug-label">Pin size (corner pin): <span id="pinSizeValue">18</span>px</div>
-        <input type="range" id="pinSize" min="10" max="40" value="18">
-        <div class="debug-hint">Responsive: Mobile (&lt;768px) capped at 14px · Desktop uses slider value</div>
-      </div>
-      <div class="debug-section">
-        <div class="debug-label">Show indicators always (unchecked = focus-only):</div>
-        <div class="debug-options">
-          <label><input type="checkbox" data-indicator-visibility="background" checked> Blue background</label>
-          <label><input type="checkbox" data-indicator-visibility="cornerpin"> Corner pin</label>
-          <label><input type="checkbox" data-indicator-visibility="edgedots"> Edge dots</label>
-          <label><input type="checkbox" data-indicator-visibility="brackets"> Brackets</label>
-        </div>
+<!-- BEGIN DEBUG PANEL
+     Add "open", without quotes, as a boolean attribute on <details> to
+     default to expanded rather than collapsed. 
+
+<br>&nbsp;<br>
+<br>&nbsp;<br>
+<details id="debugPanel" class="debug-panel"> 
+  <summary class="debug-header">UI Experiments ⚠️ (normal users ignore this)</summary>
+  <div class="debug-content">
+    <div class="debug-section">
+      <div class="debug-label">Invisible triggers:</div>
+      <div class="debug-options">
+        <label><input type="checkbox" data-trigger-mode="dblclick"> <s>Double-click</s></label>
+        <label><input type="checkbox" data-trigger-mode="tripleclick"> Triple-click</label>
+        <label><input type="checkbox" data-trigger-mode="longpress"> Long-press</label>
+        <label><input type="checkbox" data-trigger-mode="borderclick"> Border-click</label>
+        <label><input type="checkbox" data-trigger-mode="modclick"> Modifier+click</label>
+        <label><input type="checkbox" data-trigger-mode="rightclick"> Right-click</label>
       </div>
     </div>
-  </details>
-  <!-- END TEMPORARY DEBUG PANEL -->
+    <div class="debug-section">
+      <div class="debug-label">Visual triggers:</div>
+      <div class="debug-options">
+        <label><input type="checkbox" data-trigger-mode="cornerpin"> 📌 Corner pin</label>
+        <label><input type="checkbox" data-trigger-mode="edgedots"> ● Edge dots</label>
+        <label><input type="checkbox" data-trigger-mode="brackets"> ⌜⌟ Brackets</label>
+        <label><input type="checkbox" data-trigger-mode="hoverglow"> ✨ Hover glow</label>
+      </div>
+    </div>
+    <div class="debug-section">
+      <div class="debug-label">Edge threshold (border-click &amp; hover-glow): <span id="borderThresholdValue">5</span>px</div>
+      <input type="range" id="borderThreshold" min="1" max="20" value="5">
+    </div>
+    <div class="debug-section">
+      <div class="debug-label">Pin size (corner pin): <span id="pinSizeValue">18</span>px</div>
+      <input type="range" id="pinSize" min="10" max="40" value="18">
+      <div class="debug-hint">Responsive: Mobile (&lt;768px) capped at 14px · Desktop uses slider value</div>
+    </div>
+    <div class="debug-section">
+      <div class="debug-label">Show indicators always (unchecked = focus-only):</div>
+      <div class="debug-options">
+        <label><input type="checkbox" data-indicator-visibility="background" checked> Blue background</label>
+        <label><input type="checkbox" data-indicator-visibility="cornerpin"> Corner pin</label>
+        <label><input type="checkbox" data-indicator-visibility="edgedots"> Edge dots</label>
+        <label><input type="checkbox" data-indicator-visibility="brackets"> Brackets</label>
+      </div>
+    </div>
+  </div>
+</details>
+
+END DEBUG PANEL -->
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>

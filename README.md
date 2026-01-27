@@ -766,7 +766,7 @@ Scaling factor: {x : 1}
 {.1 <= x <= 10, elm: 'slider'}
 
 Man, I'm torn. Having a simple syntax for cells is super slick. We could even
-say that specifying a cell with bounds makes it render as a slider.
+say that specifying a cell with bounds makes it render as a slider. [done]
 
 Maybe elegance and simplicity matter more here than full generality of
 constraint-solving. So jettison use cases like specifying bounds without
