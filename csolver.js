@@ -288,6 +288,9 @@ function boundsSatisfied(values, inf = {}, sup = {}) {
 // zidge: Compute sum-of-squared-residuals for each equation
 // =============================================================================
 
+// zij (pronounced "zidge"): per-equation residuals. Each entry is the sum of
+// squared deviations of the equation's terms from their mean. Zero means the
+// equation is satisfied; NaN means it couldn't be evaluated.
 function zidge(eqns, ass) {
   return eqns.map(eqn => {
     if (eqn.length < 2) return 0
@@ -1041,7 +1044,9 @@ function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
                     changed = true
                     continue
                   }
-                } catch (e) {}
+                } catch (e) {
+                  console.warn('unixtime inversion failed:', e)
+                }
               }
             }
           }
@@ -1118,7 +1123,10 @@ function gradientDesc(eqns, initialVars, inf, sup) {
   const compiledEqns = eqns.map(eqn =>
     eqn.map(expr => {
       try { return new Function(...varNames, `return ${prevalLocal(expr)};`) }
-      catch (e) { return () => NaN }
+      catch (e) {
+        console.error('Failed to compile expression:', expr, e)
+        return () => NaN
+      }
     })
   )
 

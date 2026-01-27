@@ -320,9 +320,9 @@ function contradictionsForEqns(eqns, ass, zij, cells) {
   return errors
 }
 
-function recomputeCellCvals(cells, ass, peggedCellIds, pinnedCellId = null) {
+function recomputeCellCvals(cells, ass, peggedCellIds, skipCellId = null) {
   for (const cell of cells) {
-    if (cell.id === pinnedCellId) continue
+    if (cell.id === skipCellId) continue
     if (peggedCellIds && peggedCellIds.has(cell.id) && isFiniteNumber(cell.cval)) {
       continue
     }
