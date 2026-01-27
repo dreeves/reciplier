@@ -1397,7 +1397,7 @@ async function main() {
     const xAfterTyping = await getInputValue(page, 'input.recipe-field[data-label="x"]')
     assert.equal(xAfterTyping, '5')
 
-    const initFromExpr = '{x : 2y} {6 = y+1} {x+0} {y}'
+    const initFromExpr = '{x = 2y} {6 = y+1} {x+0} {y}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
