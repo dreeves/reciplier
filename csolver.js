@@ -1103,7 +1103,8 @@ function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
 // =============================================================================
 // gradientDesc: Gradient descent based solver
 // =============================================================================
-// Currently disabled (SKIP_GRADIENT=true) because it's too slow (200k iterations)
+// Currently disabled (SKIP_GRADIENT=true) because it's too slow
+// This implementation might just be garbage though, unclear
 
 function gradientDesc(eqns, initialVars, inf, sup) {
   const MAX_ITERATIONS = 200000

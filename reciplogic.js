@@ -120,8 +120,6 @@ function symtab(cells) {
 // Initial Value Assignment
 // =============================================================================
 
-// Build equations list for solvem() from cells
-
 // Build equations list for solvem() from cells.
 // Each equation is an array [ceqn..., cval] of expressions that should all be equal.
 // (was buildInitialEquations)
@@ -441,7 +439,8 @@ function parseRecipe() {
 function explainInvalidity(invalidCellIds) {
   const hasErrors = state.errors.length > 0
   const hasSolveBanner = !!state.solveBanner
-  // TODO: this is presumably right but it looks backwards to me:
+  // If primary banners (critical errors or "no solution") are showing, skip the
+  // secondary explanatory banner to avoid redundant messaging.
   if (hasErrors || hasSolveBanner) { state.invalidExplainBanner = ''; return }
 
   const invalidInputId = state.invalidInputCellIds.size
@@ -535,8 +534,6 @@ function interactiveEqns(editedCellId = null, editedValue = null) {
 // (was getUnsatisfiedCellIds)
 function unsatisfiedCellIds(eqns, zij) {
   const unsatisfied = new Set()
-  if (!Array.isArray(zij)) return unsatisfied
-
   const limit = Math.min(eqns.length, zij.length)
   for (let i = 0; i < limit; i++) {
     const residual = zij[i]

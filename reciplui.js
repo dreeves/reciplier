@@ -70,7 +70,7 @@ function getResponsivePinSize() {
 // =============================================================================
 
 function renderErrorDisplay(messages) {
-  if (!messages || messages.length === 0) return ''
+  if (messages.length === 0) return ''
   const items = messages.map(m => `<div class="error-message">⚠️ ${escapeHtml(m)}</div>`).join('')
   return `<div class="error-display">${items}</div>`
 }
@@ -312,27 +312,25 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
   updateInvalidExplainBannerInDom()
 
   const output = $('recipeOutput')
-  if (output) {
-    // Sync text fields
-    output.querySelectorAll('input.recipe-field').forEach(field => {
-      const isEdited = editedFieldEl && field === editedFieldEl
-      if (!isEdited) {
-        const c = state.cells.find(x => x.id === field.dataset.cellId)
-        if (c && !state.invalidInputCellIds.has(field.dataset.cellId)) field.value = formatNum(c.cval)
-      }
-      field.classList.toggle('invalid', invalidCellIds.has(field.dataset.cellId))
-    })
+  // Sync text fields
+  output.querySelectorAll('input.recipe-field').forEach(field => {
+    const isEdited = editedFieldEl && field === editedFieldEl
+    if (!isEdited) {
+      const c = state.cells.find(x => x.id === field.dataset.cellId)
+      if (c && !state.invalidInputCellIds.has(field.dataset.cellId)) field.value = formatNum(c.cval)
+    }
+    field.classList.toggle('invalid', invalidCellIds.has(field.dataset.cellId))
+  })
 
-    // Sync inline sliders
-    output.querySelectorAll('input.recipe-slider').forEach(slider => {
-      if (editedFieldEl && slider === editedFieldEl) return
-      const c = state.cells.find(x => x.id === slider.dataset.cellId)
-      if (c) {
-        slider.value = c.cval
-        slider.classList.toggle('at-one-x', Math.abs(c.cval - 1) < 0.005)
-      }
-    })
-  }
+  // Sync inline sliders
+  output.querySelectorAll('input.recipe-slider').forEach(slider => {
+    if (editedFieldEl && slider === editedFieldEl) return
+    const c = state.cells.find(x => x.id === slider.dataset.cellId)
+    if (c) {
+      slider.value = c.cval
+      slider.classList.toggle('at-one-x', Math.abs(c.cval - 1) < 0.005)
+    }
+  })
 
   repositionBanners()
 }
