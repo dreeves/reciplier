@@ -137,48 +137,6 @@ function initEqns(cells) {
   })
 }
 
-// TODO: Either we have an initial value from the user (specified in the urtext or the field) or we don't. If we don't, then we should just give null as the initial value and let solvem() do its thing. Sanity check: is solvem() using the limits (inf and sup, or maybe we should call them cmin and cmax) specified by the inequalities in the cells as part of its solving? Assuming yes, we definitely want to just pass in the bounds to solvem() and not do any work to guess seed values.
-
-// Corollary: defaulting to 1, if that makes sense, should also be inside solvem().
-
-// So what the above is saying is that we should refactor so that we pass in nulls for any variables without user-specified initial values, and let solvem do the work currently being done here in initSeeds().
-
-// Seed values for solver: pick starting points from bounds, default to 1.
-// Constant extraction and propagation used to live here but were removed as redundant
-// with literalPins/kludgeProp. Remaining TODO: ideally solvem would handle seeding too
-// (pass nulls for unknowns and let solvem pick defaults), but solvem currently expects
-// numeric initial values for all variables.
-// (was buildInitialSeedValues)
-function initSeeds(cells, bounds = {}) {
-  const { inf = {}, sup = {} } = bounds
-  const values = {}
-  const known = new Set()  // Track variables with bounded starting values
-  for (const cell of cells) {
-    const parts = cell.cval !== null ? [...cell.ceqn, cell.cval] : [...cell.ceqn]
-    for (const expr of parts) {
-      if (typeof expr !== 'string') continue
-      for (const v of varparse(expr)) {
-        if (values[v] === undefined) {
-          const lo = inf[v], hi = sup[v]
-          if (isFiniteNumber(lo) && isFiniteNumber(hi)) {
-            values[v] = (lo + hi) / 2
-            known.add(v)
-          } else if (isFiniteNumber(lo)) {
-            values[v] = lo + 1
-            known.add(v)
-          } else if (isFiniteNumber(hi)) {
-            values[v] = hi - 1
-            known.add(v)
-          } else {
-            values[v] = 1
-          }
-        }
-      }
-    }
-  }
-  return { values, known }
-}
-
 function combineBounds(cells) {
   const combined = new Map()
 
@@ -295,26 +253,26 @@ function refreshCvals(cells, ass, peggedCellIds, skipCellId = null) {
 }
 
 // Compute initial values for all variables using solvem()
+// solvem now handles seeding internally using bounds - no need to pre-compute seeds
 // (was computeInitialValues)
 function initValues(cells, bounds) {
   const errors = []
   const { inf, sup } = bounds
   const eqns = initEqns(cells)
-  const { values: seedValues, known: knownVars } = initSeeds(cells, bounds)
 
   let result
   let ass
   try {
-    result = solvem(eqns, seedValues, inf, sup, knownVars)
+    result = solvem(eqns, {}, inf, sup)
     ass = result.ass
   } catch (e) {
     errors.push(e instanceof Error ? e.message : String(e))
-    ass = { ...seedValues }
+    ass = {}
     result = { ass, zij: new Array(eqns.length).fill(NaN), sat: false }
   }
 
   if (!result.sat) {
-    logFailedSolve(eqns, seedValues, ass)
+    logFailedSolve(eqns, {}, ass)
     errors.push(...eqnContradictions(eqns, ass, result.zij, cells))
   }
 

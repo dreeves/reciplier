@@ -601,14 +601,68 @@ function runAllSolverQuals(ctx) {
     solvem([['a+b', 8]], {a: 4, b: null}).ass,
     {a: 4, b: 4})
 
-  check('solvem: missing initial vars throws',
+  // solvem now seeds missing variables instead of throwing (per TODO refactor)
+  check('solvem: seeds missing initial vars',
     (() => {
-      try {
-        solvem([['a+b+c', 8]], {a: 4, b: null})
-        return false
-      } catch (e) {
-        return true
-      }
+      const result = solvem([['a+b+c', 8]], {a: 4, b: null})
+      return result.ass.c === 1  // c was missing, seeded to 1
+    })(),
+    true)
+
+  // Seeding from bounds: both bounds → midpoint
+  check('solvem: seeds from both bounds (midpoint)',
+    (() => {
+      const result = solvem([['x', 'y']], {}, {x: 2, y: 2}, {x: 10, y: 10})
+      return result.ass.x === 6 && result.ass.y === 6  // (2+10)/2 = 6
+    })(),
+    true)
+
+  // Seeding from bounds: lower bound only → lo + 1
+  check('solvem: seeds from lower bound only',
+    (() => {
+      const result = solvem([['x', 'y']], {}, {x: 5}, {})
+      return result.ass.x === 6  // 5 + 1 = 6
+    })(),
+    true)
+
+  // Seeding from bounds: upper bound only → hi - 1
+  check('solvem: seeds from upper bound only',
+    (() => {
+      const result = solvem([['x', 'y']], {}, {}, {x: 5})
+      return result.ass.x === 4  // 5 - 1 = 4
+    })(),
+    true)
+
+  // Seeding with no bounds → default to 1
+  check('solvem: seeds to 1 without bounds',
+    (() => {
+      const result = solvem([['x', 'y']], {}, {}, {})
+      return result.ass.x === 1 && result.ass.y === 1
+    })(),
+    true)
+
+  // Singleton-only equations (like pancakes recipe) still get seeded
+  check('solvem: singleton-only eqns get seeded',
+    (() => {
+      const result = solvem([['x'], ['2*x'], ['x+1']], {}, {x: 0}, {x: 10})
+      return result.sat && result.ass.x === 5  // midpoint of [0, 10]
+    })(),
+    true)
+
+  // Explicit values are preserved (not overwritten by seeding)
+  check('solvem: explicit values preserved',
+    (() => {
+      const result = solvem([['x', 'y']], {x: 7}, {x: 0}, {x: 10})
+      return result.ass.x === 7  // 7 preserved, not replaced with midpoint 5
+    })(),
+    true)
+
+  // Null values passed through to solver (not seeded)
+  check('solvem: null values passed to solver',
+    (() => {
+      // When b=null is explicit, solver figures it out from constraint
+      const result = solvem([['a+b', 10]], {a: 3, b: null})
+      return result.ass.a === 3 && result.ass.b === 7
     })(),
     true)
 

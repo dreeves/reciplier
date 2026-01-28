@@ -760,13 +760,7 @@ function rootSearch(eqns, values, constrained, tol, inf, sup) {
 }
 
 function kludgeOrama(eqns, vars, inf, sup, knownVars = null) {
-  // Validate that all required variables are provided
-  const required = requiredVars(eqns)
-  const missing = [...required].filter(v => !Object.prototype.hasOwnProperty.call(vars, v))
-  if (missing.length > 0) {
-    throw new Error(`solvem: missing initial vars: ${missing.sort().join(', ')}`)
-  }
-
+  // solvem now ensures all required variables are seeded before calling solvers
   const values = { ...vars }
   const tol = TOL_MEDIUM
   const absTol = TOL_ABS
@@ -1343,18 +1337,45 @@ function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
     }
   }
 
-  // Clamp initial values to bounds
-  const boundedInit = { ...init }
-  for (const [name, val] of Object.entries(boundedInit)) {
-    const isNum = typeof val === 'number' && isFinite(val)
-    const lower = infimum[name]
-    const upper = supremum[name]
-    const lowerOk = typeof lower === 'number' && isFinite(lower)
-    const upperOk = typeof upper === 'number' && isFinite(upper)
-    const minBound = lowerOk ? lower : val
-    const maxBound = upperOk ? upper : val
-    const clamped = Math.min(maxBound, Math.max(minBound, val))
-    boundedInit[name] = isNum ? clamped : val
+  // Seed MISSING variables from bounds (moved here from reciplogic.js initSeeds).
+  // Variables explicitly in init (even if null) are passed through to solvers -
+  // the solver's isKnown() distinguishes user-provided values from unknowns.
+  // Only truly missing variables (not in init at all) get seeded here.
+  // NOTE: Use full eqns list (not actualEqns) to find required vars - singleton
+  // equations like ['x'] still need x seeded even though they're not constraints.
+  const seededInit = { ...init }
+  const computedKnownVars = knownVars ? new Set(knownVars) : new Set()
+  const required = requiredVars(eqns)
+
+  for (const v of required) {
+    const inInit = Object.prototype.hasOwnProperty.call(seededInit, v)
+    const val = seededInit[v]
+    const hasVal = typeof val === 'number' && isFinite(val)
+    const lo = infimum[v], hi = supremum[v]
+    const hasLo = typeof lo === 'number' && isFinite(lo)
+    const hasHi = typeof hi === 'number' && isFinite(hi)
+
+    if (hasVal) {
+      // Clamp provided value to bounds
+      const minBound = hasLo ? lo : val
+      const maxBound = hasHi ? hi : val
+      seededInit[v] = Math.min(maxBound, Math.max(minBound, val))
+    } else if (!inInit) {
+      // Variable is truly missing - seed from bounds or default to 1
+      if (hasLo && hasHi) {
+        seededInit[v] = (lo + hi) / 2
+        if (!knownVars) computedKnownVars.add(v)
+      } else if (hasLo) {
+        seededInit[v] = lo + 1
+        if (!knownVars) computedKnownVars.add(v)
+      } else if (hasHi) {
+        seededInit[v] = hi - 1
+        if (!knownVars) computedKnownVars.add(v)
+      } else {
+        seededInit[v] = 1
+      }
+    }
+    // If inInit but !hasVal (e.g., null), leave it for solvers to handle
   }
 
   // Helper to map zij back to original indices (0 for singletons)
@@ -1367,7 +1388,7 @@ function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
 
   let bestResult = null
   for (const solver of SOLVERS) {
-    const result = solver(actualEqns, boundedInit, infimum, supremum, knownVars)
+    const result = solver(actualEqns, seededInit, infimum, supremum, computedKnownVars)
     if (result.sat) {
       return { ass: result.ass, zij: expandZij(result.zij), sat: true }
     }
