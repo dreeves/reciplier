@@ -32,9 +32,9 @@ Codex can't seem to execute "npm run quals" unless it "escalates permissions" wh
 Humans above, robots below
 ---
 
+Meta-rule: When tempted to add a rule, comment, or instruction explaining how to deal with a problem, ask: can I change the code so this rule is unnecessary? Fix the system, don't document the workaround.
 
-TODO: Can we revamp the way quals are run so that the following is moot?
-Always check the **exit code** of `npm run quals`, not just the last few lines of output. The quals suite has multiple stages (unit quals, browser/puppeteer quals) and a passing summary from an earlier stage can mask a failure in a later one. Specifically: run `npm run quals 2>&1` and check for **both** `0 failed` **and** `All browser/puppeteer quals passed`. If you're tailing output, use enough lines to see both summaries. Never conclude quals pass based on a partial view of the output.
+The quals runner now prints a clear final summary: "QUALS: ALL PASSED" or "QUALS: FAILED - [which stages]". Check for this line at the very end of output.
 
 # Scratchpad / Implementation Plan
 
