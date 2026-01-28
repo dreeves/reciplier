@@ -3,23 +3,28 @@
 
 /* 
 Kitchen-sink solver: Try as many solvers as we can scrounge up. The outer
-solvem function can call out to each solver and if any return a satisfying 
+solvem function calls each solver in turn and if one returns a satisfying 
 assignment, Bob is one's uncle. The beauty of NP-complete problems is it's easy
 to check candidate solutions. 
 
 Idea: keep track of which sub-solvers give valid solutions.
+*/
 
-Solver registry (tried in order):
-  1. gaussJordan - Gaussian elimination for linear systems (fast, exact)
-  2. newtonRaph  - Newton-Raphson for non-linear systems
-  3. kludgeProp  - Algebraic propagation + special cases (handles everything)
+// Solver registry: try each in order, return first satisfying result
+const SOLVERS = [
+  gaussJordan, // Aka Gaussian elimination; fast and exact for linear systems
+  newtRaphson, // Newton-Raphson for non-linear systems
+  kludgeOrama, // Algebraic propagation + special cases
+]
+
+/*
 Ideas for later:
   * binarySearch - Arbitrarily pick values for any nulls in the initial 
                    assignment and then do binary search on each variable in turn
                    until one yields a satisfying assignment. 
-                   This probably exists buried in the kludgeProp spaghetti but
+                   This probably exists buried in the kludgeOrama spaghetti but
                    we should pull it out and then understand what, if anything,
-                   kludgeProp does beyond that.
+                   kludgeOrama does beyond that.
   * gradientDesc - Gradient descent: Maybe a slightly fancier version of 
                    binary search that checks which direction each variable 
                    should be nudged to reduce overall residual error...
@@ -355,10 +360,10 @@ function gaussJordan(eqns, vars, inf, sup, knownVars = null) {
   }
   
   // gaussJordan only handles fully determined linear systems.
-  // For underconstrained systems, fall through to kludgeProp which has
+  // For underconstrained systems, fall through to kludgeOrama which has
   // heuristics for choosing among infinitely many solutions.
   
-  // If any variables are null/undefined/NaN, let kludgeProp handle it with its heuristics
+  // If any variables are null/undefined/NaN, let kludgeOrama handle it with its heuristics
   const hasUnknowns = varNames.some(v => !(typeof vars[v] === 'number' && isFinite(vars[v])))
   if (hasUnknowns) {
     return { ass: { ...vars }, zij: zidge(eqns, vars), sat: false }
@@ -460,8 +465,8 @@ function gaussJordan(eqns, vars, inf, sup, knownVars = null) {
   }
   
   // Check if system is underconstrained (fewer constraints than variables)
-  // If so, return sat=false to let kludgeProp handle it with its heuristics
-  // (kludgeProp preserves seed values for underdetermined systems)
+  // If so, return sat=false to let kludgeOrama handle it with its heuristics
+  // (kludgeOrama preserves seed values for underdetermined systems)
   if (pivotCols.length < n) {
     return { ass: { ...vars }, zij: zidge(eqns, vars), sat: false }
   }
@@ -478,7 +483,7 @@ function gaussJordan(eqns, vars, inf, sup, knownVars = null) {
 }
 
 // =============================================================================
-// kludgeProp: Algebraic propagation + special cases
+// kludgeOrama: Algebraic propagation + special cases
 // =============================================================================
 // This is the original monstrosity that LLMs wrought.
 // Future work: extract special cases into separate solvers.
@@ -754,7 +759,7 @@ function rootSearch(eqns, values, constrained, tol, inf, sup) {
   }
 }
 
-function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
+function kludgeOrama(eqns, vars, inf, sup, knownVars = null) {
   // Validate that all required variables are provided
   const required = requiredVars(eqns)
   const missing = [...required].filter(v => !Object.prototype.hasOwnProperty.call(vars, v))
@@ -1110,13 +1115,13 @@ function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
 }
 
 // =============================================================================
-// newtonRaph: Newton-Raphson for non-linear systems
+// newtRaphson: Newton-Raphson for non-linear systems
 // =============================================================================
 // For fully-determined non-linear systems (n equations, n unknowns), use
 // Newton's method to find a solution. This handles cases like w*h=A, w²+h²=z²
-// that gaussJordan can't handle and kludgeProp solves greedily.
+// that gaussJordan can't handle and kludgeOrama solves greedily.
 
-function newtonRaph(eqns, vars, inf, sup, knownVars = null) {
+function newtRaphson(eqns, vars, inf, sup, knownVars = null) {
   const values = { ...vars }
 
   // Build list of constraint equations: pairs of expressions that should be equal
@@ -1154,8 +1159,8 @@ function newtonRaph(eqns, vars, inf, sup, knownVars = null) {
   // with pegged)
   const allSolveVars = [...allVars].filter(v => !pinnedVars.has(v)).sort()
 
-  // For potentially underdetermined systems with knownVars, let kludgeProp handle it.
-  // kludgeProp's trustworthy mechanism preserves init values when multiple solutions exist.
+  // For potentially underdetermined systems with knownVars, let kludgeOrama handle it.
+  // kludgeOrama's trustworthy mechanism preserves init values when multiple solutions exist.
   // Use a margin of 2 to account for redundant/dependent constraints that simple counting misses.
   // For clearly overdetermined systems, Newton is needed to find the unique solution.
   const potentiallyUnderdetermined = constraints.length <= allSolveVars.length + 1
@@ -1165,7 +1170,7 @@ function newtonRaph(eqns, vars, inf, sup, knownVars = null) {
   const solveVars = allSolveVars
 
   // Newton is for multi-variable non-linear systems only.
-  // Single-variable problems are better handled by kludgeProp's solveFor.
+  // Single-variable problems are better handled by kludgeOrama's solveFor.
   // Need at least 2 unknowns and at least as many constraints.
   if (solveVars.length < 2 || constraints.length < solveVars.length) {
     return { ass: values, zij: zidge(eqns, values), sat: false }
@@ -1359,14 +1364,6 @@ function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
       result[nonSingletonIndices[i]] = compactZij[i]
     return result
   }
-
-  // Solver registry: try each in order, return first satisfying result
-  // TODO: put this up top to DRY up the solver list
-  const SOLVERS = [
-    gaussJordan,  // Fast, exact for linear systems
-    newtonRaph,   // Newton-Raphson for non-linear systems
-    kludgeProp,   // Algebraic propagation + special cases
-  ]
 
   let bestResult = null
   for (const solver of SOLVERS) {
