@@ -278,10 +278,9 @@ function renderRecipe() {
 
 function updateBannerInDom(bannerId, message) {
   const banner = $(bannerId)
-  const msg = banner && banner.querySelector('.error-message')
-  // TODO: more crypto-if-statements and anti-postel-violating fallback. revamp!
-  banner && (banner.hidden = !message)
-  msg && (msg.textContent = message ? `⚠️ ${message}` : '')
+  const msg = banner.querySelector('.error-message')
+  banner.hidden = !message
+  msg.textContent = message ? `⚠️ ${message}` : ''
 }
 
 function updateSolveBannerInDom() {

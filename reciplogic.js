@@ -146,9 +146,13 @@ function initEqns(cells) {
 
 // Corollary: defaulting to 1, if that makes sense, should also be inside solvem().
 
+// So what the above is saying is that we should refactor so that we pass in nulls for any variables without user-specified initial values, and let solvem do the work currently being done here in initSeeds().
+
 // Seed values for solver: pick starting points from bounds, default to 1.
-// Constant extraction and propagation are handled by solvem's solvers (literalPins,
-// kludgeProp propagation), not here.
+// Constant extraction and propagation used to live here but were removed as redundant
+// with literalPins/kludgeProp. Remaining TODO: ideally solvem would handle seeding too
+// (pass nulls for unknowns and let solvem pick defaults), but solvem currently expects
+// numeric initial values for all variables.
 // (was buildInitialSeedValues)
 function initSeeds(cells, bounds = {}) {
   const { inf = {}, sup = {} } = bounds
@@ -265,8 +269,7 @@ function eqnContradictions(eqns, ass, zij, cells) {
     const tolerance = Math.abs(first) * 1e-4 + 1e-4
     for (let j = 1; j < results.length; j++) {
       if (Math.abs(results[j] - first) > tolerance) {
-        // TODO: what is this fallback-iness on the next line? ANTI-POSTEL.
-        const cellRef = cells[i] ? `{${cells[i].urtext}}` : `{${eqn.join(' = ')}}`
+        const cellRef = `{${cells[i].urtext}}`
         const valuesStr = results.map(r => formatNum(r)).join(' ≠ ')
         errors.push(`Contradiction: ${cellRef} evaluates to ${valuesStr}`)
         break
@@ -438,22 +441,21 @@ function parseRecipe() {
 }
 
 // (was setInvalidExplainBannerFromInvalidity)
-// TODO: there's a lot of anti-postel-violating fallback-ing in here :(
+// TODO: there's a lot of anti-postel-violating fallback-ing in here, it looks like :(
 function explainInvalidity(invalidCellIds) {
-  const hasErrors = (state.errors || []).length > 0
+  const hasErrors = state.errors.length > 0
   const hasSolveBanner = !!state.solveBanner
-  const invalidInputId = state.invalidInputCellIds?.size
+  const invalidInputId = state.invalidInputCellIds.size
     ? [...state.invalidInputCellIds][state.invalidInputCellIds.size - 1]
     : null
-  const invalidInputCell = invalidInputId ? state.cells.find(c => c.id === invalidInputId) : null
+  const invalidInputCell = invalidInputId 
+    ? state.cells.find(c => c.id === invalidInputId) 
+    : null
   const label = invalidInputCell?.ceqn?.length
-    ? String(invalidInputCell.ceqn[0] || '').trim()
-    : ''
+    ? String(invalidInputCell.ceqn[0]).trim()
+    : '' // something smells pretty wrong here
   const shownLabel = label || '?'
-  // TODO: Need replicata for this error. I have in fact seen ERROR1753 before.
-  const invalidInputMessage = invalidInputId 
-    ? `ERROR1753: ${shownLabel} is invalid input?` 
-    : `ERROR1754: ${shownLabel} is invalid input?`
+  const invalidInputMessage = `ERROR1753: ${shownLabel} is invalid input?`
   const invalidCellId = invalidCellIds?.size
     ? [...invalidCellIds][invalidCellIds.size - 1]
     : null

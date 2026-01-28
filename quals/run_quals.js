@@ -637,12 +637,6 @@ async function main() {
     const unsatCopyDisabled = await page.$eval('#copyButton', el => el.disabled)
     assert.equal(unsatCopyDisabled, true)
 
-    // TODO: These tests wait for .error-display which may not be visible.
-    // Skipping for now - the errors are correctly captured in state.errors.
-    // The UI display of errors is a separate issue from solver correctness.
-    console.log('  (skipping error display tests - errors are in state.errors, UI display TBD)')
-    // TODO: put them back?
-    /*
     // Bare constant cell should error
     const bareConstantTemplate = '{1}'
     await page.$eval('#recipeTextarea', (el, v) => {
@@ -681,7 +675,6 @@ async function main() {
     assert.ok(/Nested braces|Unclosed brace|Unmatched closing brace/i.test(nestedErrText))
     const nestedCopyDisabled = await page.$eval('#copyButton', el => el.disabled)
     assert.equal(nestedCopyDisabled, true)
-    */
 
     // Qual: test recipe editing x/2 cell infers x
     // Reset to a known state first
