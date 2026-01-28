@@ -75,19 +75,17 @@ function symtab(cells) {
     'Inequalities must start and end with a constant')
 
   for (const cell of cells) {
-    // TODO: are these ham-handed avoidings of if-statements? aka crypto-ifs?
-    cell.multipleNumbers && errors.push(
+    if (cell.multipleNumbers) errors.push(
       `Cell {${cell.urtext}} has more than one numerical value`)
-    cell.colonError === 'multi' && errors.push(
+    if (cell.colonError === 'multi') errors.push(
       `Cell {${cell.urtext}} has more than one colon`)
-    cell.colonError === 'rhs' && errors.push(
+    if (cell.colonError === 'rhs') errors.push(
       `Cell {${cell.urtext}} has more than one expression after the colon`)
-    cell.colonError === 'noconst' && errors.push(
+    if (cell.colonError === 'noconst') errors.push(
       `Cell {${cell.urtext}} has a colon but no constant specified after it`)
-
-    cell.ceqn.length === 0 && cell.cval !== null &&
-      errors.push(`Cell {${cell.urtext}} is a bare number ` +
-                  `which doesn't make sense to put in a cell`)
+    if (cell.ceqn.length === 0 && cell.cval !== null) errors.push(
+      `Cell {${cell.urtext}} is a bare number ` +
+      `which doesn't make sense to put in a cell`)
 
     const cellVars = new Set()
     for (const expr of cell.ceqn) {
@@ -111,8 +109,7 @@ function symtab(cells) {
   // cell. Cells in HTML comments count (that's the documented workaround if you
   // want to make this error shut up).
   for (const [v, info] of varInfo) {
-    // TODO: more crypto-if-statements?
-    info.count === 1 && errors.push(
+    if (info.count === 1) errors.push(
 `Variable ${v} in {${info.firstCell.urtext}} not referenced in any other cell`)
   }
 
