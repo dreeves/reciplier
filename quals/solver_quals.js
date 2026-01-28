@@ -2347,6 +2347,73 @@ function runAllSolverQuals(ctx) {
     check('solvem: {2x : 6} z unchanged', rep.ass.z, 1, 1e-9)
   })()
 
+  // ==========================================================================
+  // knownVars / seed propagation (tests that solvem works with minimal seeds)
+  // ==========================================================================
+
+  // Chain propagation with bad seeds but no knownVars — solver must still find it
+  ;(() => {
+    const eqns = [
+      ['x', 5],
+      ['y', '2*x'],
+    ]
+    const rep = solvem(eqns, { x: 1, y: 1 })
+    check('solvem: chain no knownVars (sat)', rep.sat, true)
+    check('solvem: chain no knownVars x=5', rep.ass.x, 5, 1e-9)
+    check('solvem: chain no knownVars y=10', rep.ass.y, 10, 1e-9)
+  })()
+
+  // Chain with knownVars — same result expected
+  ;(() => {
+    const eqns = [
+      ['x', 5],
+      ['y', '2*x'],
+    ]
+    const rep = solvem(eqns, { x: 1, y: 1 }, {}, {}, new Set(['x']))
+    check('solvem: chain with knownVars (sat)', rep.sat, true)
+    check('solvem: chain with knownVars x=5', rep.ass.x, 5, 1e-9)
+    check('solvem: chain with knownVars y=10', rep.ass.y, 10, 1e-9)
+  })()
+
+  // Nonlinear chain with bad seeds and no knownVars
+  ;(() => {
+    const eqns = [
+      ['x', 3],
+      ['y', 'x^2'],
+    ]
+    const rep = solvem(eqns, { x: 1, y: 1 })
+    check('solvem: nonlinear chain no knownVars (sat)', rep.sat, true)
+    check('solvem: nonlinear chain x=3', rep.ass.x, 3, 1e-9)
+    check('solvem: nonlinear chain y=9', rep.ass.y, 9, 1e-6)
+  })()
+
+  // Underdetermined system with and without knownVars
+  ;(() => {
+    const eqns = [
+      ['x', 'y'],  // x = y, but which value?
+    ]
+    // Without knownVars: solver picks some solution
+    const rep1 = solvem(eqns, { x: 7, y: 1 })
+    check('solvem: underdetermined (sat)', rep1.sat, true)
+    check('solvem: underdetermined x=y', rep1.ass.x, rep1.ass.y, 1e-9)
+    // With knownVars: solver should prefer the known value
+    const rep2 = solvem(eqns, { x: 7, y: 1 }, {}, {}, new Set(['x']))
+    check('solvem: underdetermined knownVars (sat)', rep2.sat, true)
+    check('solvem: underdetermined knownVars x=y', rep2.ass.x, rep2.ass.y, 1e-9)
+  })()
+
+  // Bounds + constants together
+  ;(() => {
+    const eqns = [
+      ['x', 5],
+      ['y', '2*x'],
+    ]
+    const rep = solvem(eqns, { x: 3, y: 3 }, { x: 0 }, { x: 10 }, new Set(['x']))
+    check('solvem: bounds+const (sat)', rep.sat, true)
+    check('solvem: bounds+const x=5', rep.ass.x, 5, 1e-9)
+    check('solvem: bounds+const y=10', rep.ass.y, 10, 1e-9)
+  })()
+
   console.log('\n=== Summary ===')
   console.log(`${results.passed} passed, ${results.failed} failed`)
   if (results.failed > 0) {

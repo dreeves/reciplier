@@ -33,6 +33,15 @@ Humans above, robots below
 ---
 
 
+# Proposed Rule Addition (for human to move above the line)
+
+17. Always check the **exit code** of `npm run quals`, not just the last few lines of
+output. The quals suite has multiple stages (unit quals, browser/puppeteer quals) and
+a passing summary from an earlier stage can mask a failure in a later one. Specifically:
+run `npm run quals 2>&1` and check for **both** `0 failed` **and** `All browser/puppeteer
+quals passed`. If you're tailing output, use enough lines to see both summaries. Never
+conclude quals pass based on a partial view of the output.
+
 # Scratchpad / Implementation Plan
 
 ## [ISL] Inline Sliders for Cells with Inequality Bounds

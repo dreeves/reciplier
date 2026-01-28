@@ -75,7 +75,7 @@ function symtab(cells) {
     'Inequalities must start and end with a constant')
 
   for (const cell of cells) {
-    // Error case 7: multiple bare numbers in a cell
+    // TODO: are these ham-handed avoidings of if-statements? aka crypto-ifs?
     cell.multipleNumbers && errors.push(
       `Cell {${cell.urtext}} has more than one numerical value`)
     cell.colonError === 'multi' && errors.push(
@@ -83,7 +83,6 @@ function symtab(cells) {
     cell.colonError === 'rhs' && errors.push(
       `Cell {${cell.urtext}} has more than one expression after the colon`)
     cell.colonError === 'noconst' && errors.push(
-      // TODO vet this error copy
       `Cell {${cell.urtext}} has a colon but no constant specified after it`)
 
     cell.ceqn.length === 0 && cell.cval !== null &&
@@ -112,8 +111,9 @@ function symtab(cells) {
   // cell. Cells in HTML comments count (that's the documented workaround if you
   // want to make this error shut up).
   for (const [v, info] of varInfo) {
+    // TODO: more crypto-if-statements?
     info.count === 1 && errors.push(
-      `Variable ${v} in {${info.firstCell.urtext}} not referenced in any other cell`)
+`Variable ${v} in {${info.firstCell.urtext}} not referenced in any other cell`)
   }
 
   return { symbols, errors }
@@ -124,19 +124,6 @@ function symtab(cells) {
 // =============================================================================
 
 // Build equations list for solvem() from cells
-// Each equation is an array of expressions that should all be equal
-// Note: solvem also filters singletons internally (see csolver.js TODO about this)
-// (was buildEquations)
-function cellsToEqns(cells) {
-  const eqns = []
-  for (const cell of cells) {
-    const eqn = [...cell.ceqn]
-    if (eqn.length >= 2) {  // Filter out singletons
-      eqns.push(eqn)
-    }
-  }
-  return eqns
-}
 
 // Build equations list for solvem() from cells.
 // Each equation is an array [ceqn..., cval] of expressions that should all be equal.
@@ -155,25 +142,28 @@ function initEqns(cells) {
   })
 }
 
-// TODO: ugh, this propagation stuff is wrong-headed. this is in solvem's purview.
+// TODO: Either we have an initial value from the user (specified in the urtext or the field) or we don't. If we don't, then we should just give null as the initial value and let solvem() do its thing. Sanity check: is solvem() using the limits (inf and sup, or maybe we should call them cmin and cmax) specified by the inequalities in the cells as part of its solving? Assuming yes, we definitely want to just pass in the bounds to solvem() and not do any work to guess seed values.
+
+// Corollary: defaulting to 1, if that makes sense, should also be inside solvem().
+
+// Seed values for solver: pick starting points from bounds, default to 1.
+// Constant extraction and propagation are handled by solvem's solvers (literalPins,
+// kludgeProp propagation), not here.
 // (was buildInitialSeedValues)
 function initSeeds(cells, bounds = {}) {
   const { inf = {}, sup = {} } = bounds
   const values = {}
-  const known = new Set()  // Track values from constants (not defaults)
-  const eqns = []  // Collect equations for propagation
+  const known = new Set()  // Track variables with bounded starting values
   for (const cell of cells) {
     const parts = cell.cval !== null ? [...cell.ceqn, cell.cval] : [...cell.ceqn]
-    if (parts.length >= 2) eqns.push(parts)
     for (const expr of parts) {
       if (typeof expr !== 'string') continue
       for (const v of varparse(expr)) {
         if (values[v] === undefined) {
-          // Use midpoint of bounds if available, else default to 1
           const lo = inf[v], hi = sup[v]
           if (isFiniteNumber(lo) && isFiniteNumber(hi)) {
             values[v] = (lo + hi) / 2
-            known.add(v)  // Bounded values are "known"
+            known.add(v)
           } else if (isFiniteNumber(lo)) {
             values[v] = lo + 1
             known.add(v)
@@ -186,46 +176,6 @@ function initSeeds(cells, bounds = {}) {
         }
       }
     }
-    // For equations with a single variable equaling a constant, use the constant.
-    for (const expr of parts) {
-      if (typeof expr !== 'string') continue
-      const constVal = evalConst(expr)
-      if (!isFiniteNumber(constVal)) continue
-      for (const otherExpr of parts) {
-        if (typeof otherExpr !== 'string' || otherExpr === expr) continue
-        const vars = varparse(otherExpr)
-        if (vars.size === 1) {
-          const [varName] = vars
-          values[varName] = constVal
-          known.add(varName)
-        }
-      }
-    }
-  }
-  // Forward propagation: only propagate from known values to unknown variables
-  for (let iter = 0; iter < 10; iter++) {
-    let changed = false
-    for (const eqn of eqns) {
-      for (const expr of eqn) {
-        // Only evaluate if all variables in expr are known
-        const exprVars = varparse(String(expr))
-        if (![...exprVars].every(v => known.has(v))) continue
-        const result = vareval(String(expr), values)
-        if (result.error || !isFiniteNumber(result.value)) continue
-        // Assign to bare variables that aren't yet known
-        for (const otherExpr of eqn) {
-          if (typeof otherExpr !== 'string' || otherExpr === expr) continue
-          if (!isbarevar(otherExpr)) continue
-          const varName = otherExpr.trim()
-          if (!known.has(varName)) {
-            values[varName] = result.value
-            known.add(varName)
-            changed = true
-          }
-        }
-      }
-    }
-    if (!changed) break
   }
   return { values, known }
 }
@@ -315,6 +265,7 @@ function eqnContradictions(eqns, ass, zij, cells) {
     const tolerance = Math.abs(first) * 1e-4 + 1e-4
     for (let j = 1; j < results.length; j++) {
       if (Math.abs(results[j] - first) > tolerance) {
+        // TODO: what is this fallback-iness on the next line? ANTI-POSTEL.
         const cellRef = cells[i] ? `{${cells[i].urtext}}` : `{${eqn.join(' = ')}}`
         const valuesStr = results.map(r => formatNum(r)).join(' ≠ ')
         errors.push(`Contradiction: ${cellRef} evaluates to ${valuesStr}`)
@@ -487,6 +438,7 @@ function parseRecipe() {
 }
 
 // (was setInvalidExplainBannerFromInvalidity)
+// TODO: there's a lot of anti-postel-violating fallback-ing in here :(
 function explainInvalidity(invalidCellIds) {
   const hasErrors = (state.errors || []).length > 0
   const hasSolveBanner = !!state.solveBanner
@@ -498,13 +450,19 @@ function explainInvalidity(invalidCellIds) {
     ? String(invalidInputCell.ceqn[0] || '').trim()
     : ''
   const shownLabel = label || '?'
-  const invalidInputMessage = invalidInputId ? 
-    `ERROR1753: ${shownLabel} is invalid input?` : ''
+  // TODO: Need replicata for this error. I have in fact seen ERROR1753 before.
+  const invalidInputMessage = invalidInputId 
+    ? `ERROR1753: ${shownLabel} is invalid input?` 
+    : `ERROR1754: ${shownLabel} is invalid input?`
   const invalidCellId = invalidCellIds?.size
     ? [...invalidCellIds][invalidCellIds.size - 1]
     : null
-  const invalidCell = invalidCellId ? state.cells.find(c => c.id === invalidCellId) : null
-  const syntaxMessage = invalidCell ? `Syntax error in template: {${invalidCell.urtext}}` : ''
+  const invalidCell = invalidCellId 
+    ? state.cells.find(c => c.id === invalidCellId) 
+    : null
+  const syntaxMessage = invalidCell 
+    ? `Syntax error in template: {${invalidCell.urtext}}`
+    : `ERROR1755: Syntax error but no invalid cell?`
   state.invalidExplainBanner = (hasErrors || hasSolveBanner)
     ? ''
     : (invalidInputId ? invalidInputMessage : (invalidCellId ? syntaxMessage : ''))
@@ -515,7 +473,8 @@ function solveBannerFromSat(sat) {
   const anyPegged = state.peggedCellIds.size > 0
   state.solveBanner = sat
     ? ''
-    : (anyPegged ? 'No solution found (try unpegging cells)' : 'No solution found')
+    : (anyPegged ? 'No solution found (try unpegging cells)' 
+                 : 'No solution found')
 }
 
 function solveAndApply({

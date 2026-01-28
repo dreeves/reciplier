@@ -11,8 +11,9 @@ Idea: keep track of which sub-solvers give valid solutions.
 
 Solver registry (tried in order):
   1. gaussianElim  - Gaussian elimination for linear systems (fast, exact)
-  2. kludgeProp    - Algebraic propagation + special cases (handles everything)
-  3. gradientDesc  - Gradient descent (disabled: too slow)
+  2. newtonSolver  - Newton-Raphson for non-linear systems
+  3. kludgeProp    - Algebraic propagation + special cases (handles everything)
+  4. gradientDesc  - Gradient descent (disabled: too slow)
 */
 
 var {
@@ -269,19 +270,12 @@ function eqnsSatisfied(eqns, values, tol = TOL_MEDIUM, absTol = TOL_ABS) {
 }
 
 function boundsSatisfied(values, inf = {}, sup = {}) {
-  const lowerOk = Object.entries(inf || {}).every(([name, lower]) => {
-    const isBound = typeof lower === 'number' && isFinite(lower)
+  const check = (bounds, cmp) => Object.entries(bounds || {}).every(([name, bound]) => {
+    if (typeof bound !== 'number' || !isFinite(bound)) return true
     const val = values[name]
-    const valOk = typeof val === 'number' && isFinite(val)
-    return !isBound || (valOk && val >= lower)
+    return typeof val === 'number' && isFinite(val) && cmp(val, bound)
   })
-  const upperOk = Object.entries(sup || {}).every(([name, upper]) => {
-    const isBound = typeof upper === 'number' && isFinite(upper)
-    const val = values[name]
-    const valOk = typeof val === 'number' && isFinite(val)
-    return !isBound || (valOk && val <= upper)
-  })
-  return lowerOk && upperOk
+  return check(inf, (v, b) => v >= b) && check(sup, (v, b) => v <= b)
 }
 
 // =============================================================================
@@ -375,18 +369,13 @@ function gaussianElim(eqns, vars, inf, sup, knownVars = null) {
       const right = eqn[i + 1]
       
       // Handle numeric constants
-      const leftIsNum = typeof left === 'number'
-      const rightIsNum = typeof right === 'number'
-      
-      if (leftIsNum && rightIsNum) continue
-      
-      const leftCoeffs = leftIsNum 
-        ? { coeffs: varNames.map(() => 0), constant: left }
-        : linearCoeffs(left, varNames, vars)
-      
-      const rightCoeffs = rightIsNum
-        ? { coeffs: varNames.map(() => 0), constant: right }
-        : linearCoeffs(right, varNames, vars)
+      if (typeof left === 'number' && typeof right === 'number') continue
+
+      const toCoeffs = e => typeof e === 'number'
+        ? { coeffs: varNames.map(() => 0), constant: e }
+        : linearCoeffs(e, varNames, vars)
+      const leftCoeffs = toCoeffs(left)
+      const rightCoeffs = toCoeffs(right)
       
       if (!leftCoeffs || !rightCoeffs) continue
       
@@ -1645,10 +1634,6 @@ function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
 // Exports (for browser use, these become globals)
 // =============================================================================
 
-// Make functions available globally if in browser context
-if (typeof window !== 'undefined') {
-  // Intentionally empty: non-module scripts already expose top-level functions.
-}
 
 // For Node.js module exports
 if (typeof module !== 'undefined' && module.exports) {

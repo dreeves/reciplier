@@ -695,7 +695,7 @@ insufficiently anti-magical. But having the UI complain at you for entering
 values incompatible with the constraints might be annoying. I suspect there's a
 best-of-all-worlds solution but I haven't found it yet.
 
-* [SYN] Bug: If you make a cell like `{12(}` the field is shown in red with a
+* [SER] Bug: If you make a cell like `{12(}` the field is shown in red with a
 question mark but no error is displayed.
 
 * [SAP] List of apps that this can or does subsume:
@@ -745,6 +745,9 @@ the recipe. Similar for curly braces of course.
 
 * [REF] (a) Move propagation logic from initSeeds into solvem. (b)
 Consolidate repetitive search loops in csolver.js findTarget
+
+* [SYH] Syntax highlighting in the template textarea will be super nice, so you
+can see that you've formatted cells correctly, etc.
 
 ## Half-baked ideas for cell syntax: JSON objects with syntactic sugar
 

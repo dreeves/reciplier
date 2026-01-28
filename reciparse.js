@@ -63,13 +63,10 @@ function extractCells(text) {
 function evalConst(expr) {
   const trimmed = String(expr).trim()
   const numeric = toNum(trimmed)
-
-  const vars = varparse(trimmed)
-
-  const shouldEval = numeric === null && vars.size === 0
-  const r = shouldEval ? vareval(trimmed, {}) : { error: true, value: null }
-  const evalOk = !r.error && isFiniteNumber(r.value)
-  return numeric !== null ? numeric : (evalOk ? r.value : null)
+  if (numeric !== null) return numeric
+  if (varparse(trimmed).size > 0) return null
+  const r = vareval(trimmed, {})
+  return !r.error && isFiniteNumber(r.value) ? r.value : null
 }
 
 function parseInequalities(content) {
@@ -135,12 +132,9 @@ function parseCell(cell) {
   // Per spec: bare numbers go to cval field, not ceqn
   const bareNumbers = []
   const nonConstParts = []
-  const partIsConst = []
   for (const part of parts) {
     const constVal = evalConst(part)
-    const isConst = constVal !== null
-    isConst ? bareNumbers.push(constVal) : nonConstParts.push(part)
-    partIsConst.push(isConst)
+    constVal !== null ? bareNumbers.push(constVal) : nonConstParts.push(part)
   }
 
   const hasConstant = bareNumbers.length > 0

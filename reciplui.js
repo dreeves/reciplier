@@ -279,9 +279,9 @@ function renderRecipe() {
 function updateBannerInDom(bannerId, message) {
   const banner = $(bannerId)
   const msg = banner && banner.querySelector('.error-message')
-  const hidden = !message
-  banner && (banner.hidden = hidden)
-  msg && (msg.textContent = hidden ? '' : `⚠️ ${message}`)
+  // TODO: more crypto-if-statements and anti-postel-violating fallback. revamp!
+  banner && (banner.hidden = !message)
+  msg && (msg.textContent = message ? `⚠️ ${message}` : '')
 }
 
 function updateSolveBannerInDom() {
@@ -317,22 +317,12 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
   if (output) {
     // Sync text fields
     output.querySelectorAll('input.recipe-field').forEach(field => {
-      if (editedFieldEl && field === editedFieldEl) {
-        if (invalidCellIds.has(field.dataset.cellId)) {
-          field.classList.add('invalid')
-        } else {
-          field.classList.remove('invalid')
-        }
-        return
+      const isEdited = editedFieldEl && field === editedFieldEl
+      if (!isEdited) {
+        const c = state.cells.find(x => x.id === field.dataset.cellId)
+        if (c && !state.invalidInputCellIds.has(field.dataset.cellId)) field.value = formatNum(c.cval)
       }
-
-      const c = state.cells.find(x => x.id === field.dataset.cellId)
-      if (c && !state.invalidInputCellIds.has(field.dataset.cellId)) field.value = formatNum(c.cval)
-      if (invalidCellIds.has(field.dataset.cellId)) {
-        field.classList.add('invalid')
-      } else {
-        field.classList.remove('invalid')
-      }
+      field.classList.toggle('invalid', invalidCellIds.has(field.dataset.cellId))
     })
 
     // Sync inline sliders
@@ -782,16 +772,16 @@ function handleTextareaInput(e) {
 
 function handleCopyToClipboard() {
   if (!navigator.clipboard) {
-    showNotification('Clipboard access not available')
+    showNotification('Clipboard access failed')
     return
   }
   
   const scaledText = scaledRecipeText()
   navigator.clipboard.writeText(scaledText)
-    .then(() => showNotification('Recipe copied!'))
+    .then(() => showNotification('Recipe instantiation copied!'))
     .catch(err => {
       console.error('Failed to copy:', err)
-      showNotification('Failed to copy recipe')
+      showNotification('Failed to copy :(')
     })
 }
 

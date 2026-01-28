@@ -111,9 +111,7 @@ function tolerance(value, relTol = 1e-9, absTol = relTol) {
   return Math.abs(value) * relTol + absTol
 }
 
-//globalThis.deoctalize = deoctalize
 typeof module !== 'undefined' && module.exports && (module.exports = {
-  //deoctalize,
   preval,
   unixtime,
   vareval,

@@ -15,6 +15,7 @@ cheesepan: "Cheese Wheels in a Pan aka Geometry Puzzles",
 quadratic: "Quadratic Quesadillas",
 gratio:    "Golden Ratio Granola",
 dial:      "Beeminder Commitment Dial Crumb Cake",
+dumbdial:  "Dumb-as-Donuts Dial",
 sugarcalc: "Sugar Calculator aka Junkfoodifier Jambalaya",
 converter: "Unit Converter Cobbler",
 auction:   "Decision Auction Au Gratin",
@@ -180,6 +181,14 @@ dial: `\
 * Goal duration: {tfin - tini}s = {(tfin - tini)/SID}d = {(tfin - tini)/SIW}w = {(tfin - tini)/SIM}mo
 * Rate in goal units per second: {r = (vfin-vini)/(tfin-tini)}
 * Seconds in a day / week / month: {SID = 86400}, {SIW = SID*7}, {SIM = SID*365.25/12}
+`,
+// -----------------------------------------------------------------------------
+dumbdial: `\
+* Start: Day {tini = 0} at {vini = 0} units
+* End: Day {tfin : 30}  at {vfin : 300} units
+* Rate: {r = (vfin-vini)/(tfin-tini)} per day
+
+{0 < r < 100}
 `,
 // -----------------------------------------------------------------------------
 sugarcalc: `\
