@@ -71,7 +71,7 @@ function symtab(cells) {
   const varInfo = new Map()
 
   // First pass: collect variables and check for errors
-  cells.some(c => c.ineqError) && errors.push(
+  if (cells.some(c => c.ineqError)) errors.push(
     'Inequalities must start and end with a constant')
 
   for (const cell of cells) {
@@ -310,7 +310,7 @@ function initValues(cells, bounds) {
     result = solvem(eqns, seedValues, inf, sup, knownVars)
     ass = result.ass
   } catch (e) {
-    errors.push(String(e && e.message ? e.message : e))
+    errors.push(e instanceof Error ? e.message : String(e))
     ass = { ...seedValues }
     result = { ass, zij: new Array(eqns.length).fill(NaN), sat: false }
   }
@@ -438,33 +438,33 @@ function parseRecipe() {
 }
 
 // (was setInvalidExplainBannerFromInvalidity)
-// TODO: there's a lot of anti-postel-violating fallback-ing in here, it looks like :(
 function explainInvalidity(invalidCellIds) {
   const hasErrors = state.errors.length > 0
   const hasSolveBanner = !!state.solveBanner
+  // TODO: this is presumably right but it looks backwards to me:
+  if (hasErrors || hasSolveBanner) { state.invalidExplainBanner = ''; return }
+
   const invalidInputId = state.invalidInputCellIds.size
     ? [...state.invalidInputCellIds][state.invalidInputCellIds.size - 1]
     : null
-  const invalidInputCell = invalidInputId 
-    ? state.cells.find(c => c.id === invalidInputId) 
-    : null
-  const label = invalidInputCell?.ceqn?.length
-    ? String(invalidInputCell.ceqn[0]).trim()
-    : '' // something smells pretty wrong here
-  const shownLabel = label || '?'
-  const invalidInputMessage = `ERROR1753: ${shownLabel} is invalid input?`
-  const invalidCellId = invalidCellIds?.size
+  if (invalidInputId) {
+    const cell = state.cells.find(c => c.id === invalidInputId)
+    const label = cell.ceqn.length ? String(cell.ceqn[0]).trim() : '?'
+    // Syntax error in a cell other than the one being edited
+    state.invalidExplainBanner = `ERROR1753: ${label} is invalid input?`
+    return
+  }
+
+  const invalidCellId = invalidCellIds.size
     ? [...invalidCellIds][invalidCellIds.size - 1]
     : null
-  const invalidCell = invalidCellId 
-    ? state.cells.find(c => c.id === invalidCellId) 
-    : null
-  const syntaxMessage = invalidCell 
-    ? `Syntax error in template: {${invalidCell.urtext}}`
-    : `ERROR1755: Syntax error but no invalid cell?`
-  state.invalidExplainBanner = (hasErrors || hasSolveBanner)
-    ? ''
-    : (invalidInputId ? invalidInputMessage : (invalidCellId ? syntaxMessage : ''))
+  if (invalidCellId) {
+    const cell = state.cells.find(c => c.id === invalidCellId)
+    state.invalidExplainBanner = `Syntax error in template: {${cell.urtext}}`
+    return
+  }
+
+  state.invalidExplainBanner = ''
 }
 
 // (was setSolveBannerFromSatisfaction)
@@ -480,9 +480,9 @@ function solveAndApply({
   editedCellId = null,
   editedValue = null,
   editedFieldEl = null,
-  seedOverrides = null,
+  seedOverrides = {},
 } = {}) {
-  const seedAss = { ...state.solve.ass, ...(seedOverrides || {}) }
+  const seedAss = { ...state.solve.ass, ...seedOverrides }
 
   const eqns = interactiveEqns(editedCellId, editedValue)
   const { inf, sup } = state.bounds
@@ -552,8 +552,9 @@ function unsatisfiedCellIds(eqns, zij) {
 function collectInvalidCellIds(eqns, zij) {
   const invalidCellIds = new Set(violatedCellIds(state.cells, state.solve.ass))
 
-  const unsatisfied = state.solveBanner && eqns && zij ? unsatisfiedCellIds(eqns, zij) : null
-  unsatisfied && unsatisfied.forEach(id => invalidCellIds.add(id))
+  if (state.solveBanner && eqns && zij) {
+    for (const id of unsatisfiedCellIds(eqns, zij)) invalidCellIds.add(id)
+  }
   for (const id of state.invalidInputCellIds) invalidCellIds.add(id)
 
   return invalidCellIds

@@ -83,7 +83,7 @@ const RESERVED_WORDS = new Set(['sqrt', 'floor', 'ceil', 'round', 'min', 'max',
 
 function varparse(expr) {
   if (typeof expr !== 'string' || expr.trim() === '') return new Set()
-  const matches = expr.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || []
+  const matches = expr.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) ?? []
   const vars = matches.filter(v => !RESERVED_WORDS.has(v))
   return new Set(vars.sort())
 }

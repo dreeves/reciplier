@@ -87,9 +87,8 @@ function assignErrorsToCells(errors, cells) {
       }
     }
     if (matchedCell) {
-      const list = byCell.get(matchedCell.id) || []
-      list.push(err)
-      byCell.set(matchedCell.id, list)
+      if (!byCell.has(matchedCell.id)) byCell.set(matchedCell.id, [])
+      byCell.get(matchedCell.id).push(err)
     } else {
       global.push(err)
     }
@@ -293,9 +292,9 @@ function updateInvalidExplainBannerInDom() {
 
 // (was repositionNonCriticalBannersAfterLastInvalidField)
 function repositionBanners() {
-  const rendered = $('recipeOutput')?.querySelector('.recipe-rendered')
-  const banners = rendered && $('nonCriticalBanners')
-  if (!rendered || !banners) return
+  const rendered = $('recipeOutput').querySelector('.recipe-rendered')
+  if (!rendered) return
+  const banners = $('nonCriticalBanners')
 
   const invalidFields = rendered.querySelectorAll('input.recipe-field.invalid')
   let anchor = invalidFields.length ? invalidFields[invalidFields.length - 1] : null

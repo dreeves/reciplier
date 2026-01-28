@@ -270,7 +270,7 @@ function eqnsSatisfied(eqns, values, tol = TOL_MEDIUM, absTol = TOL_ABS) {
 }
 
 function boundsSatisfied(values, inf = {}, sup = {}) {
-  const check = (bounds, cmp) => Object.entries(bounds || {}).every(([name, bound]) => {
+  const check = (bounds, cmp) => Object.entries(bounds).every(([name, bound]) => {
     if (typeof bound !== 'number' || !isFinite(bound)) return true
     const val = values[name]
     return typeof val === 'number' && isFinite(val) && cmp(val, bound)
@@ -1028,19 +1028,15 @@ function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
           if (uargs) {
             const inv = invertUnixtimeSeconds(target)
             if (inv) {
-              const yv = uargs.y
-              const mov = uargs.mo
-              const dv = uargs.d
-              if (!constrained.has(yv) && !constrained.has(mov) && !constrained.has(dv) &&
-                  !trustworthy.has(yv) && !trustworthy.has(mov) && !trustworthy.has(dv) &&
-                  !solvedThisPass.has(yv) && !solvedThisPass.has(mov) && !solvedThisPass.has(dv)) {
+              const dateVars = [uargs.y, uargs.mo, uargs.d]
+              const untouched = v => !constrained.has(v) && !trustworthy.has(v) && !solvedThisPass.has(v)
+              if (dateVars.every(untouched)) {
                 try {
                   const check = unixtime(inv.y, inv.mo, inv.d)
                   if (check === target) {
                     const opts = { isTrustworthy, isStable: targetIsStable, isStableNonSingleton: targetStableNonSingleton, eqnLen: eqn.length }
-                    markSolved(yv, inv.y, opts)
-                    markSolved(mov, inv.mo, opts)
-                    markSolved(dv, inv.d, opts)
+                    const invVals = [inv.y, inv.mo, inv.d]
+                    dateVars.forEach((v, i) => markSolved(v, invVals[i], opts))
                     changed = true
                     continue
                   }
@@ -1142,7 +1138,7 @@ function gradientDesc(eqns, initialVars, inf, sup) {
   let dependencies = new Map()
 
   const getDeps = (expr) => {
-    const m = expr.toString().match(/[a-zA-Z_$][\w$]*/g) || []
+    const m = expr.toString().match(/[a-zA-Z_$][\w$]*/g) ?? []
     return m.filter(v => varNames.includes(v))
   }
 
@@ -1372,18 +1368,15 @@ function newtonSolver(eqns, vars, inf, sup, knownVars = null) {
   // (not to be confused with pegged)
   const allVars = new Set()
   const pinnedVars = new Set()
-  for (const c of constraints) {
-    if (typeof c.left === 'number') {
-      if (typeof c.right === 'string' && isbarevar(c.right)) {
-        pinnedVars.add(c.right)
-        values[c.right] = c.left
-      }
-    } else if (typeof c.right === 'number') {
-      if (typeof c.left === 'string' && isbarevar(c.left)) {
-        pinnedVars.add(c.left)
-        values[c.left] = c.right
-      }
+  const tryPin = (expr, num) => {
+    if (typeof num === 'number' && typeof expr === 'string' && isbarevar(expr)) {
+      pinnedVars.add(expr)
+      values[expr] = num
     }
+  }
+  for (const c of constraints) {
+    tryPin(c.right, c.left)
+    tryPin(c.left, c.right)
     if (typeof c.left === 'string') for (const v of varparse(c.left)) allVars.add(v)
     if (typeof c.right === 'string') for (const v of varparse(c.right)) allVars.add(v)
   }
