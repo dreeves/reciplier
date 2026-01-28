@@ -10,10 +10,19 @@ to check candidate solutions.
 Idea: keep track of which sub-solvers give valid solutions.
 
 Solver registry (tried in order):
-  1. gaussianElim  - Gaussian elimination for linear systems (fast, exact)
-  2. newtonSolver  - Newton-Raphson for non-linear systems
-  3. kludgeProp    - Algebraic propagation + special cases (handles everything)
-  4. gradientDesc  - Gradient descent (disabled: too slow)
+  1. gaussJordan - Gaussian elimination for linear systems (fast, exact)
+  2. newtonRaph  - Newton-Raphson for non-linear systems
+  3. kludgeProp  - Algebraic propagation + special cases (handles everything)
+Ideas for later:
+  * binarySearch - Arbitrarily pick values for any nulls in the initial 
+                   assignment and then do binary search on each variable in turn
+                   until one yields a satisfying assignment. 
+                   This probably exists buried in the kludgeProp spaghetti but
+                   we should pull it out and then understand what, if anything,
+                   kludgeProp does beyond that.
+  * gradientDesc - Gradient descent: Maybe a slightly fancier version of 
+                   binary search that checks which direction each variable 
+                   should be nudged to reduce overall residual error...
 */
 
 var {
@@ -300,7 +309,7 @@ function zidge(eqns, ass) {
 }
 
 // =============================================================================
-// gaussianElim: Gaussian elimination for linear systems
+// gaussJordan: Gaussian elimination for linear systems
 // =============================================================================
 
 // Try to extract linear coefficients from an expression via numerical
@@ -339,13 +348,13 @@ function linearCoeffs(expr, varNames, baseValues) {
   return { coeffs, constant: f0.value }
 }
 
-function gaussianElim(eqns, vars, inf, sup, knownVars = null) {
+function gaussJordan(eqns, vars, inf, sup, knownVars = null) {
   const varNames = Object.keys(vars).sort()
   if (varNames.length === 0) {
     return { ass: { ...vars }, zij: zidge(eqns, vars), sat: eqnsSatisfied(eqns, vars) }
   }
   
-  // gaussianElim only handles fully determined linear systems.
+  // gaussJordan only handles fully determined linear systems.
   // For underconstrained systems, fall through to kludgeProp which has
   // heuristics for choosing among infinitely many solutions.
   
@@ -1101,254 +1110,13 @@ function kludgeProp(eqns, vars, inf, sup, knownVars = null) {
 }
 
 // =============================================================================
-// gradientDesc: Gradient descent based solver
-// =============================================================================
-// Currently disabled (SKIP_GRADIENT=true) because it's too slow
-// This implementation might just be garbage though, unclear
-
-function gradientDesc(eqns, initialVars, inf, sup) {
-  const MAX_ITERATIONS = 200000
-  const LEARN_RATE = 0.005
-  const DECAY = 0.95
-  const EPSILON = 1e-10
-  const STEP_CLIP = 1.0
-
-  const varNames = Object.keys(initialVars)
-
-  const prevalLocal = (s) => s.toString().replace(/(\d)([a-zA-Z_(])/g, '$1*$2').replace(/\^/g, '**')
-
-  const compiledEqns = eqns.map(eqn =>
-    eqn.map(expr => {
-      try { return new Function(...varNames, `return ${prevalLocal(expr)};`) }
-      catch (e) {
-        console.error('Failed to compile expression:', expr, e)
-        return () => NaN
-      }
-    })
-  )
-
-  let values = varNames.map(k => {
-    const v = initialVars[k]
-    return (v === null || v === undefined) ? NaN : v
-  })
-
-  let strength = new Int8Array(varNames.length).fill(0)
-  values.forEach((v, i) => { if (!isNaN(v)) strength[i] = 1 })
-
-  let pinned = new Set() // not to be confused with pegged
-  let dependencies = new Map()
-
-  const getDeps = (expr) => {
-    const m = expr.toString().match(/[a-zA-Z_$][\w$]*/g) ?? []
-    return m.filter(v => varNames.includes(v))
-  }
-
-  // Logic & algebra pass
-  for (let pass = 0; pass < varNames.length * 4; pass++) {
-    let changed = false
-
-    eqns.forEach((eqn, eqIdx) => {
-      const funcs = compiledEqns[eqIdx]
-      const currentVals = funcs.map(f => f(...values))
-
-      let anchorVal = NaN
-      let anchorH = 0
-
-      for (let i = 0; i < eqn.length; i++) {
-        const raw = eqn[i]
-        const val = currentVals[i]
-
-        if (typeof raw === 'number') {
-          anchorVal = raw
-          anchorH = 3
-          break
-        }
-
-        if (Number.isFinite(val)) {
-          let h = 1
-          const deps = getDeps(raw)
-          if (deps.length === 0) h = 3
-          else {
-            let minH = 3
-            for (let d of deps) {
-              const idx = varNames.indexOf(d)
-              const dh = strength[idx] || 0
-              if (dh < minH) minH = dh
-            }
-            h = minH
-          }
-          if (h > anchorH) { anchorH = h; anchorVal = val }
-        }
-      }
-
-      eqn.forEach((term, termIdx) => {
-        const deps = getDeps(term)
-
-        if (deps.length === 1 && deps[0] === term) {
-          const vIdx = varNames.indexOf(term)
-
-          if (eqn.length === 2 && !dependencies.has(vIdx) && !pinned.has(vIdx)) {
-            const otherIdx = (termIdx === 0) ? 1 : 0
-            const otherRaw = eqn[otherIdx]
-            const isBareVar = varNames.includes(otherRaw)
-            if (typeof otherRaw !== 'number' && !isBareVar) {
-              dependencies.set(vIdx, { eqIdx, termIdx: otherIdx })
-            }
-          }
-
-          if (anchorH > 0 && !pinned.has(vIdx)) {
-            const currH = strength[vIdx]
-            if (isNaN(values[vIdx]) || anchorH > currH || (anchorH === currH && Math.abs(values[vIdx] - anchorVal) > 1e-9)) {
-              values[vIdx] = anchorVal
-              strength[vIdx] = anchorH
-              changed = true
-              if (anchorH === 3) {
-                pinned.add(vIdx)
-                dependencies.delete(vIdx)
-              }
-            }
-          }
-          return
-        }
-
-        if (anchorH === 0) return
-
-        const nans = deps.filter(d => isNaN(values[varNames.indexOf(d)]))
-        const weaks = deps.filter(d => {
-          const i = varNames.indexOf(d)
-          return !isNaN(values[i]) && strength[i] < anchorH
-        })
-
-        let targetVar = null
-        if (nans.length === 1) {
-          targetVar = nans[0]
-        } else if (nans.length === 0 && weaks.length === 1) {
-          targetVar = weaks[0]
-        }
-
-        if (targetVar) {
-          const tIdx = varNames.indexOf(targetVar)
-
-          if (dependencies.has(tIdx) || pinned.has(tIdx)) return
-
-          let guess = isNaN(values[tIdx]) ? 0.1 : values[tIdx]
-          if (Math.abs(guess) < 1e-9) guess = 0.1
-
-          for (let n = 0; n < 10; n++) {
-            values[tIdx] = guess
-            const y1 = funcs[termIdx](...values)
-
-            const d = 1e-5
-            values[tIdx] = guess + d
-            const y2 = funcs[termIdx](...values)
-
-            const slope = (y2 - y1) / d
-            if (Math.abs(slope) < 1e-9) break
-
-            const next = guess - (y1 - anchorVal) / slope
-            if (!Number.isFinite(next)) break
-            if (Math.abs(next - guess) < 1e-9) { guess = next; break }
-            guess = next
-          }
-
-          values[tIdx] = guess
-          const check = funcs[termIdx](...values)
-          if (Math.abs(check - anchorVal) < 1e-3) {
-            strength[tIdx] = anchorH
-            changed = true
-            if (anchorH === 3) {
-              pinned.add(tIdx)
-              dependencies.delete(tIdx)
-            }
-          }
-        }
-      })
-    })
-    if (!changed) break
-  }
-
-  // Pre-optimization
-  for (let i = 0; i < values.length; i++) if (isNaN(values[i])) values[i] = 0.5
-
-  const enforceDeps = () => {
-    for (let k = 0; k < 3; k++) {
-      let passChange = false
-      dependencies.forEach(({ eqIdx, termIdx }, vIdx) => {
-        if (pinned.has(vIdx)) return
-        const val = compiledEqns[eqIdx][termIdx](...values)
-        if (Number.isFinite(val) && Math.abs(values[vIdx] - val) > 1e-9) {
-          values[vIdx] = val
-          passChange = true
-        }
-      })
-      if (!passChange) break
-    }
-  }
-
-  // Gradient descent
-  let gradCache = new Float64Array(values.length).fill(0)
-  const DELTA = 1e-6
-
-  const computeError = () => {
-    let totalError = 0
-    const results = compiledEqns.map(funcs => funcs.map(f => f(...values)))
-    for (let row of results) {
-      for (let i = 0; i < row.length - 1; i++) {
-        let diff = row[i] - row[i + 1]
-        totalError += diff * diff
-      }
-    }
-    return totalError
-  }
-
-  for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-    enforceDeps()
-
-    const totalError = computeError()
-    if (totalError < EPSILON) break
-
-    for (let i = 0; i < values.length; i++) {
-      if (pinned.has(i) || dependencies.has(i)) continue
-
-      const baseError = computeError()
-
-      let original = values[i]
-      values[i] = original + DELTA
-      enforceDeps()
-
-      const errorPlus = computeError()
-
-      values[i] = original
-      enforceDeps()
-
-      let grad = (errorPlus - baseError) / DELTA
-
-      gradCache[i] = DECAY * gradCache[i] + (1 - DECAY) * (grad * grad)
-      let step = (LEARN_RATE * grad) / (Math.sqrt(gradCache[i]) + 1e-8)
-
-      if (step > STEP_CLIP) step = STEP_CLIP
-      if (step < -STEP_CLIP) step = -STEP_CLIP
-
-      values[i] -= step
-    }
-  }
-  enforceDeps()
-
-  const ass = {}
-  varNames.forEach((k, i) => ass[k] = values[i])
-  const zij = zidge(eqns, ass)
-  const sat = eqnsSatisfied(eqns, ass) && boundsSatisfied(ass, inf, sup)
-  return { ass, zij, sat }
-}
-
-// =============================================================================
-// newtonSolver: Newton-Raphson for non-linear systems
+// newtonRaph: Newton-Raphson for non-linear systems
 // =============================================================================
 // For fully-determined non-linear systems (n equations, n unknowns), use
 // Newton's method to find a solution. This handles cases like w*h=A, w²+h²=z²
-// that gaussianElim can't handle and kludgeProp solves greedily.
+// that gaussJordan can't handle and kludgeProp solves greedily.
 
-function newtonSolver(eqns, vars, inf, sup, knownVars = null) {
+function newtonRaph(eqns, vars, inf, sup, knownVars = null) {
   const values = { ...vars }
 
   // Build list of constraint equations: pairs of expressions that should be equal
@@ -1489,7 +1257,6 @@ function newtonSolver(eqns, vars, inf, sup, knownVars = null) {
   const MAX_ITER = 50
   const test = { ...values }
 
-  // Anti-Postel: fail if starting from zeros rather than silently inventing values.
   // Newton needs non-zero starting points to compute meaningful derivatives.
   for (let i = 0; i < solveVars.length; i++) {
     const v = solveVars[i]
@@ -1588,46 +1355,41 @@ function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
   // Helper to map zij back to original indices (0 for singletons)
   function expandZij(compactZij) {
     const result = new Array(eqns.length).fill(0)
-    for (let i = 0; i < nonSingletonIndices.length; i++) {
+    for (let i = 0; i < nonSingletonIndices.length; i++)
       result[nonSingletonIndices[i]] = compactZij[i]
-    }
     return result
   }
 
   // Solver registry: try each in order, return first satisfying result
+  // TODO: put this up top to DRY up the solver list
   const SOLVERS = [
-    gaussianElim,   // Fast, exact for linear systems
-    newtonSolver,   // Newton-Raphson for non-linear systems
-    kludgeProp,     // Algebraic propagation + special cases
-    // gradientDesc, // Disabled: too slow (200k iterations)
+    gaussJordan,  // Fast, exact for linear systems
+    newtonRaph,   // Newton-Raphson for non-linear systems
+    kludgeProp,   // Algebraic propagation + special cases
   ]
 
   let bestResult = null
-
   for (const solver of SOLVERS) {
     const result = solver(actualEqns, boundedInit, infimum, supremum, knownVars)
     if (result.sat) {
       return { ass: result.ass, zij: expandZij(result.zij), sat: true }
     }
-
     // Prefer results with actual values over results with nulls
-    const hasNulls = Object.values(result.ass).some(v => v === null || v === undefined)
-    if (!bestResult || !hasNulls) {
-      bestResult = result
-    }
+    const hasNulls = Object.values(result.ass).some(v => v === null || 
+                                                         v === undefined)
+    if (!bestResult || !hasNulls) bestResult = result
   }
 
   // No solver found a satisfying assignment, return best attempt
-  const finalZij = bestResult ? expandZij(bestResult.zij) : expandZij(zidge(actualEqns, boundedInit))
-  return bestResult
-    ? { ass: bestResult.ass, zij: finalZij, sat: false }
-    : { ass: boundedInit, zij: finalZij, sat: false }
+  const finalZij = bestResult ? expandZij(bestResult.zij) 
+                              : expandZij(zidge(actualEqns, boundedInit))
+  return bestResult ? { ass: bestResult.ass, zij: finalZij, sat: false }
+                    : { ass: boundedInit,    zij: finalZij, sat: false }
 }
 
 // =============================================================================
 // Exports (for browser use, these become globals)
 // =============================================================================
-
 
 // For Node.js module exports
 if (typeof module !== 'undefined' && module.exports) {
@@ -1637,6 +1399,6 @@ if (typeof module !== 'undefined' && module.exports) {
     varparse,
     isconstant,
     isbarevar,
-    solvem
+    solvem,
   }
 }

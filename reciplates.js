@@ -152,7 +152,7 @@ Rest stop 2:     {b2} hours = {b2*60 : 37} minutes
 Rest stop 3:     {b3} hours = {b3*60 :  0} minutes
 Total breaks:    {b = b1+b2+b3} hours
 Riding time:     {t = w-b} hours = {floor(t)}h{(t-floor(t))*60}m
-Avg speed:       {d/t} mph [8 <= v <= 34] [TODO: sliders]
+Avg speed:       {d/t} mph [8 <= v <= 34] [HUMAN-TODO: sliders]
 Unadjusted spd:  {d/w} mph [8 <= u <= 34] (includes stops)
 `,
 // -----------------------------------------------------------------------------
@@ -241,7 +241,7 @@ converter: `\
 // -----------------------------------------------------------------------------
 auction: `\
 Fraction of the thing/decision that's yours: 
-{r = .5} ({100*(1-r)}/{100r} them/you) [TODO: slider 0 <= r <= 1]
+{r = .5} ({100*(1-r)}/{100r} them/you) [HUMAN-TODO: slider 0 <= r <= 1]
 
 Your Bid: (any of these imply the other two)
 * Fair Market Value (FMV): {fmv}
@@ -265,7 +265,7 @@ quadratic: `\
 // -----------------------------------------------------------------------------
 gratio: `\
 The reciprocal of {phi} is {1/phi = phi - 1}, same as subtracting 1.
-[-2 < phi < 2] [TODO: slider]
+[-2 < phi < 2] [HUMAN-TODO: slider]
 `,
 // -----------------------------------------------------------------------------
 test: `\
