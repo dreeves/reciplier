@@ -47,6 +47,11 @@ const TOL_TIGHT = 1e-9   // For solveFor binary search convergence
 const TOL_MEDIUM = 1e-6  // For equation satisfaction checks
 const TOL_ABS = 1e-12    // Absolute tolerance floor
 
+// Helper: check if value is a finite number (DRY - used throughout solver)
+function isFiniteNum(x) {
+  return typeof x === 'number' && isFinite(x)
+}
+
 // =============================================================================
 // solveFor: Solve for a single variable to make expr equal target
 // =============================================================================
@@ -54,8 +59,8 @@ const TOL_ABS = 1e-12    // Absolute tolerance floor
 function solveFor(expr, varName, target, values, inf = null, sup = null) {
   const test = { ...values }
   const tol = tolerance(target, TOL_TIGHT)
-  const hasInf = typeof inf === 'number' && isFinite(inf)
-  const hasSup = typeof sup === 'number' && isFinite(sup)
+  const hasInf = isFiniteNum(inf)
+  const hasSup = isFiniteNum(sup)
 
   function evalAt(x) {
     test[varName] = x
@@ -143,7 +148,7 @@ function solveFor(expr, varName, target, values, inf = null, sup = null) {
   // Expand bracket around current value for discontinuities
   if (lo === null || hi === null) {
     const x0 = values[varName]
-    const y0 = (typeof x0 === 'number' && isFinite(x0)) ? evalAt(x0) : null
+    const y0 = isFiniteNum(x0) ? evalAt(x0) : null
     if (y0 !== null) {
       const f0 = y0 - target
       const scales = []
@@ -285,9 +290,9 @@ function eqnsSatisfied(eqns, values, tol = TOL_MEDIUM, absTol = TOL_ABS) {
 
 function boundsSatisfied(values, inf = {}, sup = {}) {
   const check = (bounds, cmp) => Object.entries(bounds).every(([name, bound]) => {
-    if (typeof bound !== 'number' || !isFinite(bound)) return true
+    if (!isFiniteNum(bound)) return true
     const val = values[name]
-    return typeof val === 'number' && isFinite(val) && cmp(val, bound)
+    return isFiniteNum(val) && cmp(val, bound)
   })
   return check(inf, (v, b) => v >= b) && check(sup, (v, b) => v <= b)
 }
@@ -364,7 +369,7 @@ function gaussJordan(eqns, vars, inf, sup, knownVars = null) {
   // heuristics for choosing among infinitely many solutions.
   
   // If any variables are null/undefined/NaN, let kludgeOrama handle it with its heuristics
-  const hasUnknowns = varNames.some(v => !(typeof vars[v] === 'number' && isFinite(vars[v])))
+  const hasUnknowns = varNames.some(v => !isFiniteNum(vars[v]))
   if (hasUnknowns) {
     return { ass: { ...vars }, zij: zidge(eqns, vars), sat: false }
   }
@@ -398,7 +403,7 @@ function gaussJordan(eqns, vars, inf, sup, knownVars = null) {
       const rowRhs = rightCoeffs.constant - leftCoeffs.constant
       
       // Skip trivial rows (all zeros)
-      if (rowCoeffs.every(c => Math.abs(c) < 1e-12) && Math.abs(rowRhs) < 1e-12) continue
+      if (rowCoeffs.every(c => Math.abs(c) < TOL_ABS) && Math.abs(rowRhs) < TOL_ABS) continue
       
       rows.push(rowCoeffs)
       rhs.push(rowRhs)
@@ -428,7 +433,7 @@ function gaussJordan(eqns, vars, inf, sup, knownVars = null) {
       }
     }
     
-    if (maxVal < 1e-12) continue
+    if (maxVal < TOL_ABS) continue
     
     [A[pivotRow], A[maxRow]] = [A[maxRow], A[pivotRow]]
     
@@ -454,13 +459,19 @@ function gaussJordan(eqns, vars, inf, sup, knownVars = null) {
     for (let j = col + 1; j < n; j++) {
       if (solution[j] !== null) {
         sum -= A[row][j] * solution[j]
-      } else if (Math.abs(A[row][j]) > 1e-12) {
-        solution[j] = vars[varNames[j]] ?? 1
+      } else if (Math.abs(A[row][j]) > TOL_ABS) {
+        // solvem guarantees all required vars are seeded before calling solvers.
+        // Per anti-Postel: crash if invariant violated rather than silently use 1.
+        const seedVal = vars[varNames[j]]
+        if (seedVal === undefined) {
+          throw new Error(`gaussJordan: variable ${varNames[j]} not seeded`)
+        }
+        solution[j] = seedVal
         sum -= A[row][j] * solution[j]
       }
     }
     
-    if (Math.abs(A[row][col]) < 1e-12) break
+    if (Math.abs(A[row][col]) < TOL_ABS) break
     solution[col] = sum / A[row][col]
   }
   
@@ -949,7 +960,7 @@ function kludgeOrama(eqns, vars, inf, sup, knownVars = null) {
     if (probe.value === 0) return null
 
     const degree = Math.log(Math.abs(probe.value / current)) / Math.log(probeFactor)
-    if (!isFinite(degree) || Math.abs(degree) < 1e-12) return null
+    if (!isFinite(degree) || Math.abs(degree) < TOL_ABS) return null
 
     const scale = ratio === 0 ? 0 : Math.pow(ratio, 1 / degree)
     if (!isFinite(scale)) return null
@@ -959,8 +970,8 @@ function kludgeOrama(eqns, vars, inf, sup, knownVars = null) {
       const next = values[v] * scale
       const lower = inf[v]
       const upper = sup[v]
-      if (typeof lower === 'number' && isFinite(lower) && next < lower) return null
-      if (typeof upper === 'number' && isFinite(upper) && next > upper) return null
+      if (isFiniteNum(lower) && next < lower) return null
+      if (isFiniteNum(upper) && next > upper) return null
       scaled[v] = next
     }
 
@@ -1233,7 +1244,7 @@ function newtRaphson(eqns, vars, inf, sup, knownVars = null) {
       }
       [aug[col], aug[maxRow]] = [aug[maxRow], aug[col]]
 
-      if (Math.abs(aug[col][col]) < 1e-12) continue
+      if (Math.abs(aug[col][col]) < TOL_ABS) continue
 
       for (let row = col + 1; row < n; row++) {
         const factor = aug[row][col] / aug[col][col]
@@ -1246,7 +1257,7 @@ function newtRaphson(eqns, vars, inf, sup, knownVars = null) {
     for (let i = n - 1; i >= 0; i--) {
       let sum = aug[i][n]
       for (let j = i + 1; j < n; j++) sum -= aug[i][j] * delta[j]
-      delta[i] = Math.abs(aug[i][i]) > 1e-12 ? sum / aug[i][i] : 0
+      delta[i] = Math.abs(aug[i][i]) > TOL_ABS ? sum / aug[i][i] : 0
     }
 
     return delta
@@ -1347,10 +1358,10 @@ function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
   for (const v of required) {
     const inInit = Object.prototype.hasOwnProperty.call(seededInit, v)
     const val = seededInit[v]
-    const hasVal = typeof val === 'number' && isFinite(val)
+    const hasVal = isFiniteNum(val)
     const lo = infimum[v], hi = supremum[v]
-    const hasLo = typeof lo === 'number' && isFinite(lo)
-    const hasHi = typeof hi === 'number' && isFinite(hi)
+    const hasLo = isFiniteNum(lo)
+    const hasHi = isFiniteNum(hi)
 
     if (hasVal) {
       // Clamp provided value to bounds

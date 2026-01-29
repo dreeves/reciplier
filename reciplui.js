@@ -179,7 +179,8 @@ function renderRecipe() {
         // Cell has inequality bounds - render as slider with bounds labels
         const bounds = sliderBounds(cell)
         const nearOne = Math.abs(value - 1) < 0.005
-        const varName = cell.ineq.varName || ''
+        // cell.ineq.varName guaranteed by parser when cell.ineq exists (reciparse.js:150-151)
+        const varName = cell.ineq.varName
         const minLabel = formatNum(bounds.minLabel)
         const maxLabel = formatNum(bounds.maxLabel)
         inputHtml = `<span class="slider-group"><span class="slider-bound">${minLabel}</span><input type="range" class="recipe-slider${nearOne ? ' at-one-x' : ''}" min="${bounds.min}" max="${bounds.max}" step="0.01" value="${displayValue}" data-cell-id="${cell.id}" data-var-name="${varName}" title="${title}"${disabledAttr}><span class="slider-bound">${maxLabel}</span></span>`
