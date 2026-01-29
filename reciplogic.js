@@ -122,11 +122,16 @@ function symtab(cells) {
 
 // Build equations list for solvem() from cells.
 // Each equation is an array [ceqn..., cval] of expressions that should all be equal.
+// Filters out singletons (length < 2) since they're display-only, not constraints.
+// Returns { eqns, cellIndices } where cellIndices[i] is the cell index for eqns[i].
 // (was buildInitialEquations)
 function initEqns(cells) {
-  return cells.map(c => {
+  const eqns = []
+  const cellIndices = []
+  for (let i = 0; i < cells.length; i++) {
+    const c = cells[i]
     const parts = c.cval !== null ? [...c.ceqn, c.cval] : [...c.ceqn]
-    return parts.map(p => {
+    const eqn = parts.map(p => {
       if (typeof p !== 'string') return p
       const vars = varparse(p)
       if (vars.size !== 0) return p
@@ -134,7 +139,22 @@ function initEqns(cells) {
       if (r.error || !isFiniteNumber(r.value)) return p
       return r.value
     })
-  })
+    if (eqn.length >= 2) {  // Filter singletons - they're display-only, not constraints
+      eqns.push(eqn)
+      cellIndices.push(i)
+    }
+  }
+  return { eqns, cellIndices }
+}
+
+// Expand compact zij (parallel to filtered eqns) back to cell-parallel array.
+// Singletons get zij=0 since they have no residual.
+function expandZij(compactZij, cellIndices, cellCount) {
+  const fullZij = new Array(cellCount).fill(0)
+  for (let i = 0; i < cellIndices.length; i++) {
+    fullZij[cellIndices[i]] = compactZij[i]
+  }
+  return fullZij
 }
 
 function combineBounds(cells) {
@@ -200,7 +220,8 @@ function effectiveBounds(cells) {
 }
 
 // (was contradictionsForEqns)
-function eqnContradictions(eqns, ass, zij, cells) {
+// cellIndices maps equation index to cell index (when eqns are filtered)
+function eqnContradictions(eqns, ass, zij, cells, cellIndices = null) {
   const errors = []
 
   for (let i = 0; i < eqns.length; i++) {
@@ -222,7 +243,8 @@ function eqnContradictions(eqns, ass, zij, cells) {
     const tolerance = Math.abs(first) * 1e-4 + 1e-4
     for (let j = 1; j < results.length; j++) {
       if (Math.abs(results[j] - first) > tolerance) {
-        const cellRef = `{${cells[i].urtext}}`
+        const cellIdx = cellIndices ? cellIndices[i] : i
+        const cellRef = `{${cells[cellIdx].urtext}}`
         const valuesStr = results.map(r => formatNum(r)).join(' ≠ ')
         errors.push(`Contradiction: ${cellRef} evaluates to ${valuesStr}`)
         break
@@ -253,17 +275,20 @@ function refreshCvals(cells, ass, peggedCellIds, skipCellId = null) {
 }
 
 // Compute initial values for all variables using solvem()
-// solvem now handles seeding internally using bounds - no need to pre-compute seeds
+// solvem handles seeding internally using bounds.
 // (was computeInitialValues)
 function initValues(cells, bounds) {
   const errors = []
   const { inf, sup } = bounds
-  const eqns = initEqns(cells)
+  const { eqns, cellIndices } = initEqns(cells)
+
+  // Pass empty init so solvem seeds all required vars from bounds/defaults
+  const init = {}
 
   let result
   let ass
   try {
-    result = solvem(eqns, {}, inf, sup)
+    result = solvem(eqns, init, inf, sup)
     ass = result.ass
   } catch (e) {
     errors.push(e instanceof Error ? e.message : String(e))
@@ -271,12 +296,15 @@ function initValues(cells, bounds) {
     result = { ass, zij: new Array(eqns.length).fill(NaN), sat: false }
   }
 
+  // Expand zij back to cell-parallel array for error reporting
+  const fullZij = expandZij(result.zij, cellIndices, cells.length)
+
   if (!result.sat) {
-    logFailedSolve(eqns, {}, ass)
-    errors.push(...eqnContradictions(eqns, ass, result.zij, cells))
+    logFailedSolve(eqns, init, ass)
+    errors.push(...eqnContradictions(eqns, ass, result.zij, cells, cellIndices))
   }
 
-  const solve = { ass, eqns, zij: result.zij, sat: result.sat }
+  const solve = { ass, eqns, zij: fullZij, sat: result.sat }
   return { solve, errors }
 }
 
@@ -441,12 +469,13 @@ function solveAndApply({
 } = {}) {
   const seedAss = { ...state.solve.ass, ...seedOverrides }
 
-  const eqns = interactiveEqns(editedCellId, editedValue)
+  const { eqns, cellIndices } = interactiveEqns(editedCellId, editedValue)
   const { inf, sup } = state.bounds
   const solveResult = solvem(eqns, seedAss, inf, sup)
   const solvedAss = solveResult.ass
   const sat = solveResult.sat
-  const zij = solveResult.zij
+  // Expand compact zij (parallel to filtered eqns) to full cell-parallel array
+  const zij = expandZij(solveResult.zij, cellIndices, state.cells.length)
 
   if (!sat) {
     logFailedSolve(eqns, seedAss, solvedAss)
@@ -467,7 +496,7 @@ function solveAndApply({
     refreshCvals(state.cells, state.solve.ass, state.peggedCellIds, skipRecomputeCellId)
   }
 
-  const invalidCellIds = collectInvalidCellIds(eqns, zij)
+  const invalidCellIds = collectInvalidCellIds(zij)
 
   explainInvalidity(invalidCellIds)
 
@@ -475,8 +504,12 @@ function solveAndApply({
 }
 
 // (was buildInteractiveEqns)
+// Returns { eqns, cellIndices } with singletons filtered out.
 function interactiveEqns(editedCellId = null, editedValue = null) {
-  return state.cells.map(c => {
+  const eqns = []
+  const cellIndices = []
+  for (let i = 0; i < state.cells.length; i++) {
+    const c = state.cells[i]
     const eqn = [...c.ceqn]
 
     if (editedCellId !== null && c.id === editedCellId) {
@@ -485,15 +518,19 @@ function interactiveEqns(editedCellId = null, editedValue = null) {
       eqn.push(c.cval)
     }
 
-    return eqn
-  })
+    if (eqn.length >= 2) {  // Filter singletons
+      eqns.push(eqn)
+      cellIndices.push(i)
+    }
+  }
+  return { eqns, cellIndices }
 }
 
 // (was getUnsatisfiedCellIds)
-function unsatisfiedCellIds(eqns, zij) {
+// zij is now cell-parallel (expanded from compact solver output)
+function unsatisfiedCellIds(zij) {
   const unsatisfied = new Set()
-  const limit = Math.min(eqns.length, zij.length)
-  for (let i = 0; i < limit; i++) {
+  for (let i = 0; i < state.cells.length; i++) {
     const residual = zij[i]
     if (Number.isFinite(residual) && residual === 0) continue
     const cell = state.cells[i]
@@ -504,11 +541,11 @@ function unsatisfiedCellIds(eqns, zij) {
 }
 
 // Combine per-cell violations, solver residuals, and invalid input markers.
-function collectInvalidCellIds(eqns, zij) {
+function collectInvalidCellIds(zij) {
   const invalidCellIds = new Set(violatedCellIds(state.cells, state.solve.ass))
 
-  if (state.solveBanner && eqns && zij) {
-    for (const id of unsatisfiedCellIds(eqns, zij)) invalidCellIds.add(id)
+  if (state.solveBanner && zij) {
+    for (const id of unsatisfiedCellIds(zij)) invalidCellIds.add(id)
   }
   for (const id of state.invalidInputCellIds) invalidCellIds.add(id)
 

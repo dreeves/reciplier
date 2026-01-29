@@ -234,7 +234,8 @@ converter: `\
 <!-- The fully exact definition of a pound is {LB = 0.45359237} kilograms -->
 
 ### Grams-per-square-meter vs Ounces-per-square-yard
-{m} g/m^2 = {m*YD^2/OZ} oz/yd^2
+{m : 100} g/m^2 = {m*YD^2/OZ} oz/yd^2 
+<!-- HUMAN-TODO: leave out initial value for the {m} cell -->
 <!-- The fully exact definition of an ounce is {OZ = 28.349523125} grams -->
 <!-- The fully exact definition of a yard is {YD = 0.9144} meters -->
 `,

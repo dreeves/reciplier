@@ -325,9 +325,13 @@ function runAllSolverQuals(ctx) {
 
   console.log('\n=== solvem quals ===')
 
-  check('solvem: README #1 (a=2b assignment)',
-    solvem([['a', '2b']], {a: null, b: null}).ass,
-    {a: 1, b: 0.5})
+  // With seeding, both vars get seeded to 1, then solver finds a=2b
+  check('solvem: README #1 (a=2b satisfied)',
+    (() => {
+      const r = solvem([['a', '2b']], {a: null, b: null})
+      return r.ass.a === 2 * r.ass.b
+    })(),
+    true)
   check('solvem: README #1 (sat)',
     solvem([['a', '2b']], {a: null, b: null}).sat,
     true)
@@ -346,14 +350,8 @@ function runAllSolverQuals(ctx) {
     solvem([['x', 5]], {x: 1}).ass,
     {x: 5})
 
-  // Singleton equations are filtered out (not actual constraints)
-  // solvem returns sat: true since no real constraints remain
-  check('solvem: singleton filtered out (sat)',
-    solvem([['x']], {x: 100}).sat,
-    true)
-  check('solvem: singleton filtered out (preserves seed)',
-    solvem([['x']], {x: 100}).ass,
-    {x: 100})
+  // Note: solvem now throws if singletons are passed (anti-robustness).
+  // Callers (initEqns, interactiveEqns) filter singletons before calling solvem.
 
   check('solvem: bounds pick negative root',
     solvem([['x^2', 9]], {x: 1}, {x: -10}, {x: -1}).ass,
@@ -641,11 +639,13 @@ function runAllSolverQuals(ctx) {
     })(),
     true)
 
-  // Singleton-only equations (like pancakes recipe) still get seeded
-  check('solvem: singleton-only eqns get seeded',
+  // Empty eqns with bounds: vars with bounds still get seeded.
+  // (Callers filter singletons before calling solvem, so this tests empty eqns case.)
+  check('solvem: empty eqns with bounds (seeded from bounds)',
     (() => {
-      const result = solvem([['x'], ['2*x'], ['x+1']], {}, {x: 0}, {x: 10})
-      return result.sat && result.ass.x === 5  // midpoint of [0, 10]
+      const result = solvem([], {}, {x: 0}, {x: 10})
+      // x seeded to midpoint of [0, 10] = 5
+      return result.sat && result.ass.x === 5
     })(),
     true)
 
@@ -2466,6 +2466,166 @@ function runAllSolverQuals(ctx) {
     check('solvem: bounds+const (sat)', rep.sat, true)
     check('solvem: bounds+const x=5', rep.ass.x, 5, 1e-9)
     check('solvem: bounds+const y=10', rep.ass.y, 10, 1e-9)
+  })()
+
+  // ==========================================================================
+  // solvem contract: expects only constraint equations (callers filter singletons)
+  // ==========================================================================
+
+  // Empty equations list (all singletons were filtered by caller)
+  ;(() => {
+    const eqns = []
+    const rep = solvem(eqns, { x: 42 })
+    check('solvem: empty eqns (sat)', rep.sat, true)
+    check('solvem: empty eqns preserves init', rep.ass.x, 42)
+    check('solvem: empty eqns zij length', rep.zij.length, 0)
+  })()
+
+  // zij is parallel to eqns (no internal expansion since callers handle it)
+  ;(() => {
+    const eqns = [
+      ['x', 5],
+      ['y', '2*x'],
+      ['z', 'x+y'],
+    ]
+    const rep = solvem(eqns, { x: 1, y: 1, z: 1 })
+    check('solvem: zij parallel to eqns (sat)', rep.sat, true)
+    check('solvem: zij length matches eqns', rep.zij.length, eqns.length)
+    check('solvem: satisfied zij all zero', rep.zij.every(z => z === 0), true)
+  })()
+
+  // Impossible constraint produces nonzero zij
+  ;(() => {
+    // x=5 AND x=10 is impossible - use different approach to force conflict
+    const eqns = [
+      ['x', 5],   // eqn 0: x = 5
+      ['x', 10],  // eqn 1: x = 10 (conflict!)
+    ]
+    const rep = solvem(eqns, { x: 1 })
+    check('solvem: impossible conflict (unsat)', rep.sat, false)
+    // At least one zij should be nonzero since constraints conflict
+    const hasNonzero = rep.zij.some(z => z !== 0)
+    check('solvem: impossible has nonzero zij', hasNonzero, true)
+  })()
+
+  // Multiple constraints with different satisfaction states
+  ;(() => {
+    const eqns = [
+      ['a', 10],         // satisfied
+      ['b', 'a + 5'],    // satisfied: b = 15
+      ['c', 'a * 2'],    // satisfied: c = 20
+    ]
+    const rep = solvem(eqns, { a: 10, b: 1, c: 1 })
+    check('solvem: multi-constraint (sat)', rep.sat, true)
+    check('solvem: multi-constraint a=10', rep.ass.a, 10)
+    check('solvem: multi-constraint b=15', rep.ass.b, 15)
+    check('solvem: multi-constraint c=20', rep.ass.c, 20)
+    check('solvem: multi-constraint all zij zero', rep.zij.every(z => z === 0), true)
+  })()
+
+  // Verify vars only from equations are seeded (bounds-only handled separately)
+  ;(() => {
+    const eqns = [
+      ['x', 'y + 1'],  // x depends on y
+    ]
+    // y is in equation but not in init - should be seeded
+    const rep = solvem(eqns, { x: 1 })
+    check('solvem: missing var seeded (sat)', rep.sat, true)
+    check('solvem: missing var y seeded', typeof rep.ass.y, 'number')
+    check('solvem: seeded y is finite', isFinite(rep.ass.y), true)
+  })()
+
+  // Verify bounds-only vars (not in equations) are seeded
+  ;(() => {
+    const eqns = [
+      ['x', 5],  // only x in equations
+    ]
+    // y has bounds but isn't in any equation
+    const rep = solvem(eqns, { x: 1 }, { y: 0 }, { y: 10 })
+    check('solvem: bounds-only var seeded (sat)', rep.sat, true)
+    check('solvem: bounds-only y exists', typeof rep.ass.y, 'number')
+    check('solvem: bounds-only y in range', rep.ass.y >= 0 && rep.ass.y <= 10, true)
+  })()
+
+  // Three-way equality constraint
+  ;(() => {
+    const eqns = [
+      ['a', 'b', 'c'],  // a = b = c
+      ['a', 7],         // a = 7
+    ]
+    const rep = solvem(eqns, { a: 1, b: 1, c: 1 })
+    check('solvem: 3-way equality (sat)', rep.sat, true)
+    check('solvem: 3-way a=7', rep.ass.a, 7)
+    check('solvem: 3-way b=7', rep.ass.b, 7)
+    check('solvem: 3-way c=7', rep.ass.c, 7)
+  })()
+
+  // Four-way equality from single equation
+  ;(() => {
+    const eqns = [
+      ['w', 'x', 'y', 'z', 5],  // w = x = y = z = 5
+    ]
+    const rep = solvem(eqns, { w: 1, x: 1, y: 1, z: 1 })
+    check('solvem: 4-way equality (sat)', rep.sat, true)
+    check('solvem: 4-way w=5', rep.ass.w, 5)
+    check('solvem: 4-way x=5', rep.ass.x, 5)
+    check('solvem: 4-way y=5', rep.ass.y, 5)
+    check('solvem: 4-way z=5', rep.ass.z, 5)
+  })()
+
+  // ==========================================================================
+  // Anti-robustness: solvem throws if given singletons (contract violation)
+  // ==========================================================================
+
+  // solvem must throw if given a singleton (length < 2)
+  ;(() => {
+    let threw = false
+    let errorMsg = ''
+    try {
+      solvem([['x']], { x: 5 })  // singleton - should throw
+    } catch (e) {
+      threw = true
+      errorMsg = e.message
+    }
+    check('solvem: throws on singleton', threw, true)
+    check('solvem: singleton error mentions equation index', errorMsg.includes('equation 0'), true)
+    check('solvem: singleton error mentions length', errorMsg.includes('length 1'), true)
+  })()
+
+  // solvem throws if any equation is a singleton (not just first)
+  ;(() => {
+    let threw = false
+    let errorMsg = ''
+    try {
+      solvem([['x', 5], ['y']], { x: 1, y: 1 })  // second eqn is singleton
+    } catch (e) {
+      threw = true
+      errorMsg = e.message
+    }
+    check('solvem: throws on singleton in middle', threw, true)
+    check('solvem: middle singleton error mentions equation 1', errorMsg.includes('equation 1'), true)
+  })()
+
+  // solvem accepts empty array (no equations to violate)
+  ;(() => {
+    let threw = false
+    try {
+      solvem([], { x: 5 })
+    } catch (e) {
+      threw = true
+    }
+    check('solvem: empty eqns does not throw', threw, false)
+  })()
+
+  // solvem accepts length-2 equations (minimum valid)
+  ;(() => {
+    let threw = false
+    try {
+      solvem([['x', 5]], { x: 1 })
+    } catch (e) {
+      threw = true
+    }
+    check('solvem: length-2 eqn does not throw', threw, false)
   })()
 
   console.log('\n=== Summary ===')

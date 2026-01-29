@@ -749,6 +749,17 @@ Consolidate repetitive search loops in csolver.js findTarget
 * [SYH] Syntax highlighting in the template textarea will be super nice, so you
 can see that you've formatted cells correctly, etc.
 
+* [DVL] Add a section of the debug panel that shows the current assignment of
+all the variables.
+
+* [NOQ] If we have a reciplate with two cells, {2x} and {3x}, and no constraints
+or initial values, currently both fields are shown in red with a question mark
+in them. I think instead they should just be blank.
+
+* [ADV] Idea for advanced syntax: a way to specify that a field starts in focus
+when the reciplate is rendered.
+
+
 ## Half-baked ideas for cell syntax: JSON objects with syntactic sugar
 
 What if every cell were a JSON object:
@@ -801,6 +812,8 @@ Scaled by a factor of {x : 1} {.1 <= x <= 10}
 
 
 SCRATCH AREA: ------------------------------------------------------------------
+
+can you find the 10 symbol names you're most sure I came up with and the 10 you're most sure an ai agent came up with?
 
 Brainstorming ways to indicate an initially pegged field:
 * NIX: number first in urtext: {6.28 = tau} or {0 < 6.18 = tau < 7}
@@ -867,3 +880,28 @@ BUG REPORT: simeq correctly uses gauss-jordan to find a solution when the recipl
 BUG REPORT: 
 Load breakaway reciplate and slide the peloton (vpm) slider.
 Also possible to mess it up with just changing the fields.
+
+---
+
+can we talk about the subtlety you mentioned? about how we need the full list of variables, including those that occur only in singletons (recall: a singleton is a degenerate equation, namely an equation with only one expression. to count as an equation there should be 2 or more expressions equated).
+
+i believe that's false. if there's a singleton like "3x+4" and x doesn't occur in any non-singleton equation then the solver need not consider x.
+
+perhaps the subtlety is that in reciplogic we may need to pick a value for x and if x is never sent to solvem then where does that happen?
+
+let's think about this carefully from first principles...
+
+maybe this only matters for the initial call to solvem after parsing the reciplate. that's when we have a bunch of equations and singletons:
+
+1. equations are like 2x=3y or 7=4z or w=4 or a=b=5.
+2. a colon can be used instead of an equal sign. the only difference is whether cpeg=true or not.
+3. if an equation includes a constant, cval is set to that constant.
+4. if a cell is unpegged (cpeg=false), send ceqn to solvem; if a cell is pegged (cpeg=true) or its field is in focus, send ceqn+cval to solvem [this is a rare if-statement that, so far, we believe we want to keep, but let's keep questioning that]
+5. a pegged cell can't be a singleton: even if the urtext is a single expression, being pegged means the cval is appended to ceqn when sending the constraints to solvem.
+6. an unpegged cell where the urtext is a single expression is a singleton.
+
+idea 1: suppose we have cells {3x} and {2x} but in no cell is x ever part of an equation. then x is not sent to solvem and does not end up with a numeric value. can that just be an error when rendering the reciplate? the fields for {3x} and {2x} don't yield numeric values and we see the error banner, "Undefined variable x". 
+
+idea 2: those fields are just blank. if the user types, say, 12, into the cell for {3x} then, while that cell is in focus, "3x=12" will go to solvem, which will yield x=4, which will make the {2x} cell appear as 8.
+
+are there other ideas besides those? which is best?

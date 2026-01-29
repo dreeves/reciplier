@@ -1120,9 +1120,9 @@ function newtRaphson(eqns, vars, inf, sup, knownVars = null) {
 
   // Build list of constraint equations: pairs of expressions that should be equal
   // Each equation [a, b, c, ...] means a=b, b=c, etc.
+  // Note: solvem guarantees eqns contains only constraint equations (length >= 2)
   const constraints = []
   for (const eqn of eqns) {
-    if (eqn.length < 2) continue
     for (let i = 0; i < eqn.length - 1; i++) {
       constraints.push({ left: eqn[i], right: eqn[i + 1] })
     }
@@ -1323,29 +1323,26 @@ function newtRaphson(eqns, vars, inf, sup, knownVars = null) {
 // Try each solver in order. First one to return sat=true wins.
 
 function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
-  // Filter out singletons (length 0 or 1) - they're display-only cells, not constraints.
-  // We keep track of original indices to produce parallel zij array.
-  // TODO: A cleaner design would have callers filter singletons before calling solvem,
-  // making solvem more like Mathematica's Solve (expects a simple list of equations).
-  // That's more anti-postel and better separation of concerns.
-  const nonSingletonIndices = []
-  const actualEqns = []
+  // Callers are responsible for filtering singletons before calling solvem.
+  // solvem expects only constraint equations (length >= 2), like Mathematica's Solve.
+  // Per anti-robustness principle: fail loudly if contract is violated.
   for (let i = 0; i < eqns.length; i++) {
-    if (eqns[i].length >= 2) {
-      nonSingletonIndices.push(i)
-      actualEqns.push(eqns[i])
+    if (eqns[i].length < 2) {
+      throw new Error(`solvem: equation ${i} is a singleton (length ${eqns[i].length}). Callers must filter singletons.`)
     }
   }
 
-  // Seed MISSING variables from bounds (moved here from reciplogic.js initSeeds).
-  // Variables explicitly in init (even if null) are passed through to solvers -
-  // the solver's isKnown() distinguishes user-provided values from unknowns.
+  // Seed MISSING variables from bounds.
+  // Variables in init (even with null) are passed through - null means "unknown, solve for this".
   // Only truly missing variables (not in init at all) get seeded here.
-  // NOTE: Use full eqns list (not actualEqns) to find required vars - singleton
-  // equations like ['x'] still need x seeded even though they're not constraints.
+  // Also seed vars that have bounds but aren't in equations (e.g., bounds-only cells).
   const seededInit = { ...init }
   const computedKnownVars = knownVars ? new Set(knownVars) : new Set()
   const required = requiredVars(eqns)
+
+  // Include vars with bounds that might not be in equations
+  const allBoundedVars = new Set([...Object.keys(infimum), ...Object.keys(supremum)])
+  for (const v of allBoundedVars) required.add(v)
 
   for (const v of required) {
     const inInit = Object.prototype.hasOwnProperty.call(seededInit, v)
@@ -1378,31 +1375,21 @@ function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
     // If inInit but !hasVal (e.g., null), leave it for solvers to handle
   }
 
-  // Helper to map zij back to original indices (0 for singletons)
-  function expandZij(compactZij) {
-    const result = new Array(eqns.length).fill(0)
-    for (let i = 0; i < nonSingletonIndices.length; i++)
-      result[nonSingletonIndices[i]] = compactZij[i]
-    return result
-  }
-
   let bestResult = null
   for (const solver of SOLVERS) {
-    const result = solver(actualEqns, seededInit, infimum, supremum, computedKnownVars)
+    const result = solver(eqns, seededInit, infimum, supremum, computedKnownVars)
     if (result.sat) {
-      return { ass: result.ass, zij: expandZij(result.zij), sat: true }
+      return { ass: result.ass, zij: result.zij, sat: true }
     }
     // Prefer results with actual values over results with nulls
-    const hasNulls = Object.values(result.ass).some(v => v === null || 
+    const hasNulls = Object.values(result.ass).some(v => v === null ||
                                                          v === undefined)
     if (!bestResult || !hasNulls) bestResult = result
   }
 
   // No solver found a satisfying assignment, return best attempt
-  const finalZij = bestResult ? expandZij(bestResult.zij) 
-                              : expandZij(zidge(actualEqns, boundedInit))
-  return bestResult ? { ass: bestResult.ass, zij: finalZij, sat: false }
-                    : { ass: boundedInit,    zij: finalZij, sat: false }
+  return bestResult ? { ass: bestResult.ass, zij: bestResult.zij, sat: false }
+                    : { ass: seededInit, zij: zidge(eqns, seededInit), sat: false }
 }
 
 // =============================================================================

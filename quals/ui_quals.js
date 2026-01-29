@@ -1079,7 +1079,7 @@ async function main() {
     assert.ok(invalidCount1 >= 1)
 
     const sat1 = await page.evaluate(() => {
-      const eqns = interactiveEqns(null, null)
+      const { eqns } = interactiveEqns(null, null)
       return eqnsSatisfied(eqns, state.solve.ass)
     })
     assert.equal(sat1, false)
@@ -1890,6 +1890,107 @@ async function main() {
     // Text field should be small (not expanded), typically less than 30% of container
     assert.ok(textFieldLayout.ratio < 0.4,
       `text field should not expand to fill line, got ratio ${textFieldLayout.ratio}`)
+
+    // =========================================================================
+    // initEqns and expandZij unit tests (reciplogic.js functions)
+    // =========================================================================
+
+    // Qual: initEqns filters singletons (cells with length < 2)
+    // Test with mock cells that simulate freshly-parsed state (cval=null for non-pegged)
+    const initEqnsResult = await page.evaluate(() => {
+      // Create mock cells simulating freshly parsed template: {a} {b = 2a} {c}
+      // Before solving, cval is null for all cells (no explicit numbers)
+      const mockCells = [
+        { ceqn: ['a'], cval: null },        // singleton (length 1)
+        { ceqn: ['b', '2a'], cval: null },  // constraint (length 2)
+        { ceqn: ['c'], cval: null },        // singleton (length 1)
+      ]
+      const { eqns, cellIndices } = initEqns(mockCells)
+      return {
+        eqnsLength: eqns.length,
+        cellIndices: cellIndices,
+        eqns: eqns
+      }
+    })
+    // Only the constraint {b = 2a} should be in eqns (ceqn has length 2)
+    assert.equal(initEqnsResult.eqnsLength, 1, 'initEqns should filter singletons (only 1 eqn)')
+    assert.deepEqual(initEqnsResult.cellIndices, [1], 'cellIndices should point to cell 1')
+    assert.equal(initEqnsResult.eqns[0].length, 2, 'equation should have length 2')
+
+    // Qual: initEqns preserves constraint equations and evaluates constant expressions
+    const initEqns2Result = await page.evaluate(() => {
+      // Mock cells: {a = 5} has ceqn=['a'], cval=5 (explicit number)
+      //             {b = 2a} has ceqn=['b','2a'], cval=null
+      //             {c} has ceqn=['c'], cval=null (singleton)
+      const mockCells = [
+        { ceqn: ['a'], cval: 5 },           // constraint (length 2 with cval)
+        { ceqn: ['b', '2a'], cval: null },  // constraint (length 2)
+        { ceqn: ['c'], cval: null },        // singleton (length 1)
+      ]
+      const { eqns, cellIndices } = initEqns(mockCells)
+      return {
+        eqnsLength: eqns.length,
+        cellIndices: cellIndices,
+        eqn0Length: eqns[0]?.length,
+        eqn1Length: eqns[1]?.length
+      }
+    })
+    assert.equal(initEqns2Result.eqnsLength, 2, 'initEqns should have 2 constraint eqns')
+    assert.deepEqual(initEqns2Result.cellIndices, [0, 1], 'cellIndices should be [0, 1]')
+    assert.equal(initEqns2Result.eqn0Length, 2, 'first eqn should have length 2')
+    assert.equal(initEqns2Result.eqn1Length, 2, 'second eqn should have length 2')
+
+    // Qual: expandZij correctly maps compact zij to cell-parallel array
+    const expandZijResult = await page.evaluate(() => {
+      // Test expandZij with known inputs
+      const compactZij = [0.5, 0.1]  // compact zij parallel to filtered eqns
+      const cellIndices = [1, 3]     // eqn 0 came from cell 1, eqn 1 came from cell 3
+      const cellCount = 5
+      const full = expandZij(compactZij, cellIndices, cellCount)
+      return {
+        length: full.length,
+        values: full
+      }
+    })
+    assert.equal(expandZijResult.length, 5, 'expandZij should return array of cellCount length')
+    assert.deepEqual(expandZijResult.values, [0, 0.5, 0, 0.1, 0],
+      'expandZij should map compactZij to correct indices, zeros elsewhere')
+
+    // Qual: expandZij handles empty compactZij
+    const expandZijEmptyResult = await page.evaluate(() => {
+      const compactZij = []
+      const cellIndices = []
+      const cellCount = 3
+      const full = expandZij(compactZij, cellIndices, cellCount)
+      return full
+    })
+    assert.deepEqual(expandZijEmptyResult, [0, 0, 0],
+      'expandZij with empty input should return all zeros')
+
+    // Qual: interactiveEqns filters singletons and returns cellIndices
+    // Use template where nothing is pegged initially: {a} {b = 2a}
+    // {a} has ceqn=['a'] (length 1, singleton), {b=2a} has ceqn=['b','2a'] (length 2, constraint)
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, '{a} {b = 2a}')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    await new Promise(r => setTimeout(r, 100))
+    const interactiveEqnsResult = await page.evaluate(() => {
+      // Ensure nothing is pegged for this test
+      state.peggedCellIds.clear()
+      const { eqns, cellIndices } = interactiveEqns(null, null)
+      return {
+        eqnsLength: eqns.length,
+        cellIndices: cellIndices,
+        eqn0: eqns[0]
+      }
+    })
+    // {a} ceqn=['a'], not pegged → length 1 (singleton, filtered out)
+    // {b=2a} ceqn=['b','2a'], not pegged → length 2 (constraint, included)
+    assert.equal(interactiveEqnsResult.eqnsLength, 1, 'interactiveEqns should filter singletons')
+    assert.deepEqual(interactiveEqnsResult.cellIndices, [1],
+      'interactiveEqns cellIndices should map filtered eqns to cells')
 
     console.log('All browser/puppeteer quals passed [ui_quals.js]')
   } catch (e) {
