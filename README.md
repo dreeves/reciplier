@@ -610,6 +610,12 @@ in them. I think instead they should just be blank.
 
 ## Future Work
 
+* [BOZ] Putting an empty cell {} in the template generates a field that has no
+effect and generates no error or warning. This seems wrong but we should only
+fix it by simplifying and generalizing the code, not adding an if-statement.
+Similarly, a cell like {1/0} behaves the same as an empty cell so that's
+presumably a blatant anti-postel violation.
+
 * [CRT] Crowdsource templates. If the template text area doesn't match one of
 the existing reciplates (the dropdown shows "Custom Template" in this case) then
 a buttom becomes clickable that opens a popup that prompts the user to submit
@@ -697,11 +703,6 @@ insufficiently anti-magical. But having the UI complain at you for entering
 values incompatible with the constraints might be annoying. I suspect there's a
 best-of-all-worlds solution but I haven't found it yet.
 
-* [SER] Bug: If you make a cell like `{12(}` the field is shown in red with a
-question mark but no error is displayed. PS: Now it's just shown blank and we
-get a "no solution found" if we enter a number in the field for it, which is
-pretty dumb.
-
 * [SAP] List of apps that this can or does subsume:
   - https://bid.yootl.es/
   - https://dreeves.github.io/loanwolf/
@@ -743,6 +744,10 @@ repetitive search loops in csolver.js findTarget
 
 * [SYH] Syntax highlighting in the template textarea will be super nice, so you
 can see that you've formatted cells correctly, etc.
+
+* [SER] Possibly simpler place to start than [SYH], or maybe they should be
+tackled together, but when there's a syntax error in the reciplate it would be
+helpful if the problem were highlighted in the reciplate itself.
 
 * [ADV] Idea for advanced syntax: a way to specify that a field starts in focus
 when the reciplate is rendered.

@@ -1534,6 +1534,85 @@ async function main() {
     const unclosedError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
     assert.ok(/unclosed brace/i.test(unclosedError), 'Unclosed brace should produce error')
 
+    // Qual: unclosed parenthesis in expression should show syntax error
+    const unclosedParen = 'Test {12(}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, unclosedParen)
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    const unclosedParenError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
+    assert.ok(/syntax error/i.test(unclosedParenError), 'Unclosed parenthesis in expression should produce syntax error')
+
+    // Qual: invalid expression {2x + (3} should show syntax error
+    const invalidExpr = 'Test {2x + (3}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, invalidExpr)
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    const invalidExprError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
+    assert.ok(/syntax error/i.test(invalidExprError), 'Invalid expression with unclosed paren should produce syntax error')
+
+    // Qual: extra closing paren should show syntax error
+    const extraClose = 'Test {x + 1)}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, extraClose)
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    const extraCloseError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
+    assert.ok(/syntax error/i.test(extraCloseError), 'Extra closing paren should produce syntax error')
+
+    // Qual: dangling operator should show syntax error
+    const danglingOp = 'Test {x +}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, danglingOp)
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    const danglingOpError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
+    assert.ok(/syntax error/i.test(danglingOpError), 'Dangling operator should produce syntax error')
+
+    // Qual: double operator should show syntax error
+    const doubleOp = 'Test {x + * y}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, doubleOp)
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    const doubleOpError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
+    assert.ok(/syntax error/i.test(doubleOpError), 'Double operator should produce syntax error')
+
+    // Qual: mismatched brackets should show syntax error
+    const mismatchedBrackets = 'Test {x + (1]}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, mismatchedBrackets)
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    const mismatchedError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
+    assert.ok(/syntax error/i.test(mismatchedError), 'Mismatched brackets should produce syntax error')
+
+    // Qual: empty cell {} should render without crashing
+    const emptyCell = 'Test {}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, emptyCell)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    // Empty cell should not crash - just verify we got here without error
+
+    // Qual: unicode variable name should show syntax error
+    const unicodeVar = '{π = 3.14} {π}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, unicodeVar)
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    const unicodeError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
+    assert.ok(/syntax error/i.test(unicodeError), 'Unicode variable should produce syntax error')
+
     // Qual: unreferenced variable shows error (Error Case 4)
     const unreferencedVar = '{6.28 = tau}'
     await page.$eval('#recipeTextarea', (el, v) => {

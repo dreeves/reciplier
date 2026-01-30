@@ -94,6 +94,18 @@ function symtab(cells) {
         symbols[v] = true
         cellVars.add(v)
       }
+      // Check for syntax errors in expressions (e.g., unclosed parentheses)
+      // Try evaluating with all variables set to 1 - syntax errors will still throw
+      // TODO: Hmm, if the first thing we always do is varparse, should varparse check the syntax?
+      // Or maybe we should always call a separate isvalid() function?
+      // Or maybe the following is fine? It just seems heavy-weight.
+      const exprVars = varparse(expr)
+      const testVars = {}
+      for (const v of exprVars) testVars[v] = 1
+      const testResult = vareval(expr, testVars)
+      if (testResult.error) {
+        errors.push(`Syntax error in {${cell.urtext}}`)
+      }
     }
 
     for (const v of cellVars) {
