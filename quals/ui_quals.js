@@ -17,6 +17,13 @@ function fileUrl(p) {
   return `file://${abs}`
 }
 
+// Track and display qual progress
+let qualsPassed = 0
+function pass(name) {
+  qualsPassed++
+  console.log(`✓ ${name}`)
+}
+
 async function waitForNextFrame(page) {
   await page.evaluate(() => new Promise(requestAnimationFrame))
 }
@@ -124,6 +131,7 @@ async function main() {
     // Qual: help text includes Calca.io link
     const hasCalcaLink = await page.$eval('a[href="https://calca.io"]', el => !!el)
     assert.equal(hasCalcaLink, true)
+    pass('help text includes Calca.io link')
 
     // Qual: browser_quals.js runQuals() passes
     // NOTE: This qual is intentionally disabled; see note above.
@@ -198,6 +206,7 @@ async function main() {
       assert.equal(stateSummary.sat, true, `recipe ${key}: sat`)
       assert.equal(stateSummary.solveBanner, '', `recipe ${key}: solveBanner`)
       assert.ok(stateSummary.cellCount > 0, `recipe ${key}: cellCount`)
+      pass(`recipe ${key} loads sanely`)
     }
 
     // Qual: underdetermined a drives x/y without errors
@@ -215,6 +224,7 @@ async function main() {
     assert.equal(aDrivenX, '1')
     assert.equal(aDrivenY, '2')
     assert.equal(aDrivenSum, '3')
+    pass('underdetermined a drives x/y without errors')
 
     // Qual: Cheese Wheels tau constant should not drift to 0
     await page.waitForSelector('#recipeSelect', { visible: true })
@@ -222,6 +232,7 @@ async function main() {
     await page.waitForSelector('#recipeOutput', { visible: true })
     const tauVal = await getInputValue(page, 'input.recipe-field[data-label="tau"]')
     assert.equal(tauVal, '6.28')
+    pass('Cheese Wheels tau constant should not drift to 0')
 
     // Qual: cheesepan editing x should scale area (no overconstrained)
     await setInputValue(page, 'input.recipe-field[data-label="x"]', '10')
@@ -231,6 +242,7 @@ async function main() {
     assert.equal(aAfter, '635.85')
     const areaInvalid = await page.$eval('input.recipe-field[data-label="A"]', el => el.classList.contains('invalid'))
     assert.equal(areaInvalid, false)
+    pass('cheesepan editing x should scale area')
 
     // Qual: cheesepan editing {d} should persist on tab (no snapback)
     await page.waitForSelector('#recipeSelect', { visible: true })
@@ -280,6 +292,7 @@ async function main() {
     assert.equal(xAfter, '1.0223')
 
     await dBareHandle.dispose()
+    pass('cheesepan editing d should persist on tab')
 
     // Qual: simeq edit unpegged x to 60 then tab should not redden everything
     await page.waitForSelector('#recipeSelect', { visible: true })
@@ -313,6 +326,7 @@ async function main() {
     assert.ok(invalidAfterCount > 0)
 
     await xUnpegged.dispose()
+    pass('simeq edit unpegged x to 60 then tab')
 
     // Qual: simeq edit x=6 cell then y=7 should keep 6&7 on blur
     await page.waitForSelector('#recipeSelect', { visible: true })
@@ -353,6 +367,7 @@ async function main() {
 
     await xDefHandle.dispose()
     await yHandle.dispose()
+    pass('simeq edit x=6 then y=7 keeps values on blur')
 
     // Qual 1: Pythagorean Pizza regression
     await page.waitForSelector('#recipeSelect', { visible: true })
@@ -383,6 +398,7 @@ async function main() {
     assert.equal(sanityInvalid, false)
 
     await sanityHandle.dispose()
+    pass('Pythagorean Pizza regression')
 
     // Qual: decimal input should work (period shouldn't get eaten)
     await setInputValue(page, 'input.recipe-field[data-label="a"]', '5.5')
@@ -399,6 +415,7 @@ async function main() {
     assert.equal(badVal, '12..3')
     const badInvalid = await page.$eval('input.recipe-field[data-label="a"]', el => el.classList.contains('invalid'))
     assert.equal(badInvalid, true)
+    pass('decimal input and invalid numeric handling')
 
     // Qual: inline slider updates cell value (using ineqtest which has inequality bounds)
     await page.select('#recipeSelect', 'ineqtest')
@@ -459,6 +476,7 @@ async function main() {
     assert.equal(legacySlider, null)
     const legacyDisplay = await page.$('#scalingDisplay')
     assert.equal(legacyDisplay, null)
+    pass('inline slider quals (ineqtest)')
 
     // Qual: crepes has one slider (the {.1 <= x <= 10} cell with inequality bounds)
     await page.select('#recipeSelect', 'crepes')
@@ -512,6 +530,7 @@ async function main() {
     }
 
     await flourNoteHandle.dispose()
+    pass('crepes slider and editing quals')
 
     // Qual: dial peg vini/vfin/start date then changing rate updates end date
     await page.waitForSelector('#recipeSelect', { visible: true })
@@ -701,6 +720,7 @@ async function main() {
     assert.equal(dialRateZeroInvalid, false, 'dial rate=0: expected edited r*SID field to remain valid')
 
     await dialRateZeroHandle.dispose()
+    pass('dial recipe quals')
 
     await page.select('#recipeSelect', 'blank')
     await page.select('#recipeSelect', 'crepes')
@@ -948,6 +968,7 @@ async function main() {
     }, unclosedBraceTemplate)
     await page.waitForSelector('.error-display:not([hidden])', { visible: true })
     assert.equal(pageErrors.length, 0)
+    pass('error banner edge cases')
 
     // Qual: test recipe editing x/2 cell infers x
     await page.select('#recipeSelect', 'test')
@@ -1213,6 +1234,7 @@ async function main() {
     assert.equal(afterBlurInvalid, true)
 
     await aEqBHandle.dispose()
+    pass('violated constraint fields stay red')
 
     // Qual: empty expressions fail loudly (no silent "0" fallback)
     const emptyExprError = await page.evaluate(() => {
@@ -1261,6 +1283,7 @@ async function main() {
     assert.equal(cSquaredInvalidAfterEdit, false, 'c^2 cell should NOT be invalid after x change')
 
     await cSquaredHandle.dispose()
+    pass('pyzza quals (x change, c^2 not invalid)')
 
     // Qual: pyzza editing c should persist when nothing is pegged
     await page.select('#recipeSelect', 'pyzza')
@@ -1566,6 +1589,7 @@ async function main() {
     // y only appears in one cell, so it SHOULD have an unreferenced error
     const hasUnreferencedErrorForY = (referencedInExprErrors || []).some(e => /not referenced/i.test(e) && /\by\b/.test(e))
     assert.equal(hasUnreferencedErrorForY, true, 'y only appears in one cell, SHOULD produce unreferenced error')
+    pass('syntax error and unreferenced variable quals')
 
     // Qual: b+0 behaves same as bare b
     const bPlusZero = '{5 = a} {b+0} {10 = a + b}'
@@ -1750,6 +1774,7 @@ async function main() {
     })
     const ineqSliderCellId = await page.$eval('input.recipe-slider', el => el.dataset.cellId)
     assert.ok(ineqCellIds.includes(ineqSliderCellId), 'inline slider cellId should match a cell in state')
+    pass('reciplates switching and ERROR1753')
 
     // =========================================================================
     // Slider Layout Tests - verify sliders fill available space correctly
@@ -1991,6 +2016,7 @@ async function main() {
     assert.equal(interactiveEqnsResult.eqnsLength, 1, 'interactiveEqns should filter singletons')
     assert.deepEqual(interactiveEqnsResult.cellIndices, [1],
       'interactiveEqns cellIndices should map filtered eqns to cells')
+    pass('slider layout and initEqns/expandZij/interactiveEqns')
 
     // =========================================================================
     // Blank Field Behavior Quals ([NOQ] feature)
@@ -2122,8 +2148,9 @@ async function main() {
     const fourAAfterClear = await getInputValue(page, 'input.recipe-field[data-label="4a"]')
     assert.equal(twoAAfterClear, '', '2a should go blank when a is cleared')
     assert.equal(fourAAfterClear, '', '4a should go blank when a is cleared')
+    pass('blank field behavior quals [NOQ]')
 
-    console.log('All browser/puppeteer quals passed [ui_quals.js]')
+    console.log(`\n=== UI Quals Summary ===\nPassed: ${qualsPassed}\nFailed: 0`)
   } catch (e) {
     if (pageConsoleLogs.length > 0) {
       console.log(pageConsoleLogs.join('\n'))
