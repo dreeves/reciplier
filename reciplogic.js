@@ -19,7 +19,8 @@ function isFiniteNumber(value) {
 }
 
 function formatNum(num) {
-  if (!isFiniteNumber(num)) return '?'
+  if (num === null || num === undefined) return ''  // No value → blank field
+  if (!isFiniteNumber(num)) return '?'              // NaN/Infinity → error
   // Snap to nearest integer if within 0.0001 (handles solver precision issues)
   if (Math.abs(num - Math.round(num)) < 0.0001) {
     num = Math.round(num)
@@ -269,7 +270,11 @@ function refreshCvals(cells, ass, peggedCellIds, skipCellId = null) {
       return r.error ? null : r.value
     }).filter(isFiniteNumber)
 
-    if (results.length === 0) continue
+    if (results.length === 0) {
+      // Can't evaluate any expression (e.g., variable not in ass) → cval becomes null
+      cell.cval = null
+      continue
+    }
     cell.cval = results.reduce((a, b) => a + b, 0) / results.length
   }
 }
@@ -316,7 +321,8 @@ function initValues(cells, bounds) {
 // Per spec: "cell's field is shown in red if cval differs from any of the expressions in ceqn"
 function isCellViolated(cell, ass) {
   const cval = cell.cval
-  if (!isFiniteNumber(cval)) return true
+  if (cval === null || cval === undefined) return false  // No value → not violated
+  if (!isFiniteNumber(cval)) return true                 // NaN/Infinity → violated
 
   const tol = 1e-6  // Matches solver tolerance for practical floating-point comparisons
   const tolerance = Math.abs(cval) * tol + tol
@@ -338,7 +344,9 @@ function isCellViolated(cell, ass) {
     if (!expr || expr.trim() === '') continue
 
     const result = vareval(expr, ass)
-    if (result.error) return true
+    // Skip expressions that can't be evaluated (e.g., variable not in solver output).
+    // A cell is only violated if an expression that CAN be evaluated doesn't match.
+    if (result.error) continue
 
     if (Math.abs(result.value - cval) > tolerance) return true
   }
@@ -469,6 +477,19 @@ function solveAndApply({
 } = {}) {
   const seedAss = { ...state.solve.ass, ...seedOverrides }
 
+  // When user clears a field, remove its variables from seedAss so dependent
+  // cells can't compute (their cval will become null in refreshCvals)
+  if (editedCellId !== null && editedValue === null) {
+    const editedCell = state.cells.find(c => c.id === editedCellId)
+    if (editedCell && editedCell.ceqn) {
+      for (const expr of editedCell.ceqn) {
+        for (const v of varparse(expr)) {
+          delete seedAss[v]
+        }
+      }
+    }
+  }
+
   const { eqns, cellIndices } = interactiveEqns(editedCellId, editedValue)
   const { inf, sup } = state.bounds
   const solveResult = solvem(eqns, seedAss, inf, sup)
@@ -512,7 +533,7 @@ function interactiveEqns(editedCellId = null, editedValue = null) {
     const c = state.cells[i]
     const eqn = [...c.ceqn]
 
-    if (editedCellId !== null && c.id === editedCellId) {
+    if (editedCellId !== null && c.id === editedCellId && editedValue !== null) {
       eqn.push(editedValue)
     } else if (state.peggedCellIds.has(c.id)) {
       eqn.push(c.cval)

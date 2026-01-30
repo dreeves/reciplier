@@ -291,6 +291,30 @@ function updateInvalidExplainBannerInDom() {
   updateBannerInDom('invalidExplainBanner', state.invalidExplainBanner)
 }
 
+// Update the variable assignments display in the debug panel
+function updateVarAssignments() {
+  const container = $('varAssignments')
+  if (!container) return
+  const ass = state.solve.ass || {}
+  // Collect ALL variables from all cell expressions (not just solved ones)
+  const allVars = new Set()
+  for (const cell of state.cells) {
+    for (const expr of (cell.ceqn || [])) {
+      for (const v of varparse(expr)) allVars.add(v)
+    }
+  }
+  const vars = [...allVars].sort()
+  if (vars.length === 0) {
+    container.textContent = '(no variables)'
+    return
+  }
+  // Show "x = 5" if has value, just "x" if no value
+  container.textContent = vars.map(v => {
+    const val = ass[v]
+    return (val === null || val === undefined) ? v : `${v} = ${formatNum(val)}`
+  }).join(', ')
+}
+
 // (was repositionNonCriticalBannersAfterLastInvalidField)
 function repositionBanners() {
   const rendered = $('recipeOutput').querySelector('.recipe-rendered')
@@ -311,6 +335,7 @@ function repositionBanners() {
 function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
   updateSolveBannerInDom()
   updateInvalidExplainBannerInDom()
+  updateVarAssignments()
 
   const output = $('recipeOutput')
   // Sync text fields
@@ -353,6 +378,20 @@ function handleFieldInput(e) {
   const cellId = input.dataset.cellId
   const cell = state.cells.find(c => c.id === cellId)
   if (!cell) return
+
+  // Blank input = no value (same as blank from parsing, removes constraint)
+  if (input.value.trim() === '') {
+    clearInvalidInput(cellId)
+    cell.cval = null
+    const solveResult = solveAndApply({
+      editedCellId: cellId,
+      editedValue: null,
+      editedFieldEl: input,
+    })
+    syncAfterSolve(solveResult.invalidCellIds, input)
+    updateUrl()
+    return
+  }
 
   let newValue = toNum(input.value)
 

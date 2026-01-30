@@ -354,13 +354,13 @@ async function main() {
     await page.select('#recipeSelect', 'crepes')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    await setSliderValue(page, 'input.slider-input[data-var-name="x"]', '2')
+    await setSliderValue(page, 'input.recipe-slider[data-var-name="x"]', '2')
     const sliderXValue = await getInputValue(page, 'input.recipe-field[data-label="x"]')
     assert.equal(sliderXValue, '2')
 
     // Qual: slider updates in real time when x changes
     await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="x"]', '3')
-    const sliderDisplayAfterTyping = await page.$eval('input.slider-input[data-var-name="x"]', el => el.value)
+    const sliderDisplayAfterTyping = await page.$eval('input.recipe-slider[data-var-name="x"]', el => el.value)
     assert.equal(sliderDisplayAfterTyping, '3')
 
     // Qual: dragging slider emits multiple input events
@@ -368,10 +368,10 @@ async function main() {
     await page.waitForSelector('#recipeOutput', { visible: true })
     await page.evaluate(() => {
       window.__sliderInputs = 0
-      const slider = document.querySelector('input.slider-input[data-var-name="x"]')
+      const slider = document.querySelector('input.recipe-slider[data-var-name="x"]')
       slider.addEventListener('input', () => { window.__sliderInputs += 1 })
     })
-    const sliderHandle = await page.$('input.slider-input[data-var-name="x"]')
+    const sliderHandle = await page.$('input.recipe-slider[data-var-name="x"]')
     const sliderBox = await sliderHandle.boundingBox()
     await page.mouse.move(sliderBox.x + 2, sliderBox.y + sliderBox.height / 2)
     await page.mouse.down()
@@ -388,25 +388,25 @@ async function main() {
     await page.select('#recipeSelect', 'ineqtest')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    const xSliderExists = await page.$eval('input.slider-input[data-var-name="x"]', el => !!el)
-    const pSliderExists = await page.$eval('input.slider-input[data-var-name="p"]', el => !!el)
-    const tempSliderExists = await page.$eval('input.slider-input[data-var-name="temp"]', el => !!el)
+    const xSliderExists = await page.$eval('input.recipe-slider[data-var-name="x"]', el => !!el)
+    const pSliderExists = await page.$eval('input.recipe-slider[data-var-name="p"]', el => !!el)
+    const tempSliderExists = await page.$eval('input.recipe-slider[data-var-name="temp"]', el => !!el)
     assert.equal(xSliderExists, true)
     assert.equal(pSliderExists, true)
     assert.equal(tempSliderExists, true)
 
-    const xMin = await page.$eval('input.slider-input[data-var-name="x"]', el => Number(el.min))
-    const xMax = await page.$eval('input.slider-input[data-var-name="x"]', el => Number(el.max))
+    const xMin = await page.$eval('input.recipe-slider[data-var-name="x"]', el => Number(el.min))
+    const xMax = await page.$eval('input.recipe-slider[data-var-name="x"]', el => Number(el.max))
     assert.ok(Math.abs(xMin - 0.5) < 1e-6, `x min ${xMin}`)
     assert.ok(Math.abs(xMax - 10) < 1e-6, `x max ${xMax}`)
 
-    const pMin = await page.$eval('input.slider-input[data-var-name="p"]', el => Number(el.min))
-    const pMax = await page.$eval('input.slider-input[data-var-name="p"]', el => Number(el.max))
+    const pMin = await page.$eval('input.recipe-slider[data-var-name="p"]', el => Number(el.min))
+    const pMax = await page.$eval('input.recipe-slider[data-var-name="p"]', el => Number(el.max))
     assert.ok(pMin > 0 && pMin < 0.01, `p min ${pMin}`)
     assert.ok(Math.abs(pMax - 100) < 1e-6, `p max ${pMax}`)
 
-    const tMin = await page.$eval('input.slider-input[data-var-name="temp"]', el => Number(el.min))
-    const tMax = await page.$eval('input.slider-input[data-var-name="temp"]', el => Number(el.max))
+    const tMin = await page.$eval('input.recipe-slider[data-var-name="temp"]', el => Number(el.min))
+    const tMax = await page.$eval('input.recipe-slider[data-var-name="temp"]', el => Number(el.max))
     assert.ok(Math.abs(tMin - 32) < 1e-6, `temp min ${tMin}`)
     assert.ok(Math.abs(tMax - 212) < 1e-6, `temp max ${tMax}`)
 
@@ -891,7 +891,7 @@ async function main() {
     await page.select('#recipeSelect', 'pyzza')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    await setSliderValue(page, 'input.slider-input[data-var-name="x"]', '2')
+    await setSliderValue(page, 'input.recipe-slider[data-var-name="x"]', '2')
 
     const cSquaredHandle = await findFieldByTitleSubstring(page, 'a^2 + b^2 = c^2')
     const cSquaredIsNull = await cSquaredHandle.evaluate(el => el === null)

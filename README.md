@@ -749,15 +749,27 @@ Consolidate repetitive search loops in csolver.js findTarget
 * [SYH] Syntax highlighting in the template textarea will be super nice, so you
 can see that you've formatted cells correctly, etc.
 
-* [DVL] Add a section of the debug panel that shows the current assignment of
-all the variables.
-
 * [NOQ] If we have a reciplate with two cells, {2x} and {3x}, and no constraints
 or initial values, currently both fields are shown in red with a question mark
 in them. I think instead they should just be blank.
 
 * [ADV] Idea for advanced syntax: a way to specify that a field starts in focus
 when the reciplate is rendered.
+
+* [DEQ] A reciplate consisting of just `{A = B} {B = A}` yields initial values,
+as shown in the fields of the rendered reciplate, of 1.015. That is weird and
+surprising. If they were both initialized to zero, that would probably be least
+surprising. Of course we don't adhere to POLA here, we adhere to anti-magic. So
+let's just think what's the simplest thing for this to do:
+  solvem([['A', 'B'], ['B', 'A']], {A: null, B: null})
+Wait, never mind, that returns {A: 1, B: 1} which is expected. So there's
+soemthing else going on. Let's find out what exactly is getting sent to the
+solver for an initial reciplate of `{A = B} {B = A}`. Are we sometimes sending
+null as one of the expressions in one of the equations sent to solvem()? Let's
+add an assert to ensure that never happens and debug it.
+
+* [QAS] It would be nice if the UI quals displayed one at a time like the solver
+quals do, in order to see the progress getting through the qual suite.
 
 
 ## Half-baked ideas for cell syntax: JSON objects with syntactic sugar
@@ -905,3 +917,9 @@ idea 1: suppose we have cells {3x} and {2x} but in no cell is x ever part of an 
 idea 2: those fields are just blank. if the user types, say, 12, into the cell for {3x} then, while that cell is in focus, "3x=12" will go to solvem, which will yield x=4, which will make the {2x} cell appear as 8.
 
 are there other ideas besides those? which is best?
+
+Current testing:
+
+{x}
+{2x}
+{A = B} {B = A}

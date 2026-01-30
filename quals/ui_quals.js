@@ -1992,6 +1992,137 @@ async function main() {
     assert.deepEqual(interactiveEqnsResult.cellIndices, [1],
       'interactiveEqns cellIndices should map filtered eqns to cells')
 
+    // =========================================================================
+    // Blank Field Behavior Quals ([NOQ] feature)
+    // =========================================================================
+
+    // Qual: blanking a field should not show "no solution found"
+    // Template: {x} {2x} - type 5 in x, then clear x
+    const blankFieldTemplate = '{x} {2x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, blankFieldTemplate)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Type 5 in x field
+    await setInputValue(page, 'input.recipe-field[data-label="x"]', '5')
+    const xAfter5 = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    const twoXAfter5 = await getInputValue(page, 'input.recipe-field[data-label="2x"]')
+    assert.equal(xAfter5, '5', 'x should show 5 after typing')
+    assert.equal(twoXAfter5, '10', '2x should show 10 after typing 5 in x')
+
+    // Clear x field (select all and delete)
+    const xField = await page.$('input.recipe-field[data-label="x"]')
+    await xField.click({ clickCount: 3 })
+    await page.keyboard.press('Backspace')
+    await xField.evaluate(e => e.blur())
+    await waitForNextFrame(page)
+
+    // Should NOT show "no solution found"
+    const blankBanner = await page.evaluate(() => state.solveBanner)
+    assert.equal(blankBanner, '', 'Blanking a field should NOT show "no solution found"')
+
+    // x should be blank after clearing
+    const xAfterBlank = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.equal(xAfterBlank, '', 'x should be blank after clearing')
+
+    // Qual: blanking with pegged cells should still work
+    const blankWithPegged = '{x} {2x} {A = 3} {A = 3}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, blankWithPegged)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Type 5 in x field
+    await setInputValue(page, 'input.recipe-field[data-label="x"]', '5')
+
+    // Clear x field
+    const xFieldPegged = await page.$('input.recipe-field[data-label="x"]')
+    await xFieldPegged.click({ clickCount: 3 })
+    await page.keyboard.press('Backspace')
+    await xFieldPegged.evaluate(e => e.blur())
+    await waitForNextFrame(page)
+
+    // Should NOT show "no solution found"
+    const blankPeggedBanner = await page.evaluate(() => state.solveBanner)
+    assert.equal(blankPeggedBanner, '', 'Blanking with pegged cells should NOT show "no solution found"')
+
+    // Qual: null cval should display as blank, not "?"
+    const nullCvalTemplate = '{x} {y = 2x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, nullCvalTemplate)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Clear x field to make it null
+    const xFieldNull = await page.$('input.recipe-field[data-label="x"]')
+    await xFieldNull.click({ clickCount: 3 })
+    await page.keyboard.press('Backspace')
+    await xFieldNull.evaluate(e => e.blur())
+    await waitForNextFrame(page)
+
+    // x should show blank, not "?"
+    const xNullDisplay = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.ok(xNullDisplay !== '?', 'Null cval should display as blank, not "?"')
+    assert.equal(xNullDisplay, '', 'Null cval should display as empty string')
+
+    // Qual: dependent field should go blank when parent is cleared
+    // Template: {x} {2x} - type 5 in x (2x becomes 10), then clear x (2x should go blank)
+    const dependentTemplate = '{x} {2x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, dependentTemplate)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Type 5 in x field
+    await setInputValue(page, 'input.recipe-field[data-label="x"]', '5')
+    const twoXAfterType = await getInputValue(page, 'input.recipe-field[data-label="2x"]')
+    assert.equal(twoXAfterType, '10', '2x should show 10 after typing 5 in x')
+
+    // Clear x field
+    const xFieldDep = await page.$('input.recipe-field[data-label="x"]')
+    await xFieldDep.click({ clickCount: 3 })
+    await page.keyboard.press('Backspace')
+    await xFieldDep.evaluate(e => e.blur())
+    await waitForNextFrame(page)
+
+    // 2x should now be blank (not showing old value 10)
+    const twoXAfterClear = await getInputValue(page, 'input.recipe-field[data-label="2x"]')
+    assert.equal(twoXAfterClear, '', 'Dependent field 2x should go blank when x is cleared')
+
+    // Qual: clearing a value from a longer chain should blank all dependents
+    // Template: {a} {2a} {4a} - type 3 in a, then clear a
+    const chainTemplate = '{a} {2a} {4a}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, chainTemplate)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Type 3 in a field
+    await setInputValue(page, 'input.recipe-field[data-label="a"]', '3')
+    const twoAAfterType = await getInputValue(page, 'input.recipe-field[data-label="2a"]')
+    const fourAAfterType = await getInputValue(page, 'input.recipe-field[data-label="4a"]')
+    assert.equal(twoAAfterType, '6', '2a should show 6 after typing 3 in a')
+    assert.equal(fourAAfterType, '12', '4a should show 12 after typing 3 in a')
+
+    // Clear a field
+    const aFieldChain = await page.$('input.recipe-field[data-label="a"]')
+    await aFieldChain.click({ clickCount: 3 })
+    await page.keyboard.press('Backspace')
+    await aFieldChain.evaluate(e => e.blur())
+    await waitForNextFrame(page)
+
+    // All dependent fields should be blank
+    const twoAAfterClear = await getInputValue(page, 'input.recipe-field[data-label="2a"]')
+    const fourAAfterClear = await getInputValue(page, 'input.recipe-field[data-label="4a"]')
+    assert.equal(twoAAfterClear, '', '2a should go blank when a is cleared')
+    assert.equal(fourAAfterClear, '', '4a should go blank when a is cleared')
+
     console.log('All browser/puppeteer quals passed [ui_quals.js]')
   } catch (e) {
     if (pageConsoleLogs.length > 0) {

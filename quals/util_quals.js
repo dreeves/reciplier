@@ -63,6 +63,7 @@ function runUtilQuals() {
     toNum,
     formatNum,
     isFiniteNumber,
+    isCellViolated,
   } = ctx
 
   const results = { passed: 0, failed: 0, errors: [] }
@@ -444,8 +445,8 @@ function runUtilQuals() {
   check('formatNum: NaN', formatNum(NaN), '?')
   check('formatNum: Infinity', formatNum(Infinity), '?')
   check('formatNum: -Infinity', formatNum(-Infinity), '?')
-  check('formatNum: null', formatNum(null), '?')
-  check('formatNum: undefined', formatNum(undefined), '?')
+  check('formatNum: null', formatNum(null), '')   // [NOQ] blank for no value
+  check('formatNum: undefined', formatNum(undefined), '')  // [NOQ] blank for no value
   check('formatNum: string', formatNum('42'), '?')
 
   // Large/small numbers
@@ -551,6 +552,26 @@ function runUtilQuals() {
   check('isconstant: nested functions', isconstant('sqrt(abs(-16))'), true)
   check('isconstant: exp(0)', isconstant('exp(0)'), true)
   check('isconstant: undefined result', isconstant('sqrt(-1)'), false)
+
+  // ==========================================================================
+  // isCellViolated quals [NOQ]
+  // ==========================================================================
+  console.log('\n=== isCellViolated quals [NOQ] ===')
+
+  // [NOQ]: null cval means "no value determined", not violated
+  check('isCellViolated: null cval not violated',
+    isCellViolated({ cval: null, ceqn: ['2x'] }, {}), false)
+  check('isCellViolated: undefined cval not violated',
+    isCellViolated({ cval: undefined, ceqn: ['2x'] }, {}), false)
+  // NaN cval IS violated (computation error)
+  check('isCellViolated: NaN cval is violated',
+    isCellViolated({ cval: NaN, ceqn: ['x'] }, { x: 1 }), true)
+  // Finite cval matching constraint is not violated
+  check('isCellViolated: matching cval not violated',
+    isCellViolated({ cval: 6, ceqn: ['2x'] }, { x: 3 }), false)
+  // Finite cval NOT matching constraint IS violated
+  check('isCellViolated: mismatched cval violated',
+    isCellViolated({ cval: 5, ceqn: ['2x'] }, { x: 3 }), true)
 
   // ==========================================================================
   // Summary

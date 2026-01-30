@@ -131,13 +131,19 @@ for an example of some prior art.
 
 <!-- BEGIN DEBUG PANEL
      Add "open", without quotes, as a boolean attribute on <details> to
-     default to expanded rather than collapsed. 
-
+     default to expanded rather than collapsed.
+-->
 <br>&nbsp;<br>
 <br>&nbsp;<br>
-<details id="debugPanel" class="debug-panel"> 
-  <summary class="debug-header">UI Experiments ⚠️ (normal users ignore this)</summary>
+<details id="debugPanel" class="debug-panel" open> 
+  <summary class="debug-header">Debug Panel & UI Experiments ⚠️ (normal users ignore this)</summary>
   <div class="debug-content">
+    <div class="debug-section">
+      <div class="debug-label">Variable assignments:</div>
+      <div id="varAssignments" class="var-assignments" style="font-family: monospace; font-size: 12px; background: #f5f5f5; padding: 8px; border-radius: 4px; max-height: 150px; overflow-y: auto;">
+        <!-- Populated dynamically by updateVarAssignments() -->
+      </div>
+    </div>
     <div class="debug-section">
       <div class="debug-label">Invisible triggers:</div>
       <div class="debug-options">
@@ -178,7 +184,7 @@ for an example of some prior art.
     </div>
   </div>
 </details>
-
+<!-- 
 END DEBUG PANEL -->
 </div>
 
