@@ -445,6 +445,7 @@ function explainInvalidity(invalidCellIds) {
     : null
   if (invalidInputId) {
     const cell = state.cells.find(c => c.id === invalidInputId)
+    if (!cell) throw new Error(`explainInvalidity: no cell found for invalidInputId "${invalidInputId}"`)
     const label = cell.ceqn.length ? String(cell.ceqn[0]).trim() : '?'
     // Syntax error in a cell other than the one being edited
     state.invalidExplainBanner = `ERROR1753: ${label} is invalid input?`
@@ -456,6 +457,7 @@ function explainInvalidity(invalidCellIds) {
     : null
   if (invalidCellId) {
     const cell = state.cells.find(c => c.id === invalidCellId)
+    if (!cell) throw new Error(`explainInvalidity: no cell found for invalidCellId "${invalidCellId}"`)
     state.invalidExplainBanner = `Syntax error in template: {${cell.urtext}}`
     return
   }
@@ -499,7 +501,8 @@ function solveAndApply({
   const preserveEdited = editedCellId !== null
   if (preserveEdited) {
     const editedCell = state.cells.find(c => c.id === editedCellId)
-    if (editedCell) editedCell.cval = editedValue
+    if (!editedCell) throw new Error(`solveAndApply: no cell found for editedCellId "${editedCellId}"`)
+    editedCell.cval = editedValue
   }
 
   // When user clears a field, create a modified assignment for refreshCvals that
@@ -508,12 +511,13 @@ function solveAndApply({
   let assForRefresh = state.solve.ass
   if (editedCellId !== null && editedValue === null) {
     const editedCell = state.cells.find(c => c.id === editedCellId)
-    if (editedCell && editedCell.ceqn) {
-      assForRefresh = { ...state.solve.ass }
-      for (const expr of editedCell.ceqn) {
-        for (const v of varparse(expr)) {
-          delete assForRefresh[v]
-        }
+    // editedCell already validated above when preserveEdited is true
+    if (!editedCell) throw new Error(`solveAndApply: no cell found for editedCellId "${editedCellId}"`)
+    if (!Array.isArray(editedCell.ceqn)) throw new Error(`solveAndApply: editedCell.ceqn must be an array`)
+    assForRefresh = { ...state.solve.ass }
+    for (const expr of editedCell.ceqn) {
+      for (const v of varparse(expr)) {
+        delete assForRefresh[v]
       }
     }
   }

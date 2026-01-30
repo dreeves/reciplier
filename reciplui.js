@@ -295,7 +295,10 @@ function updateInvalidExplainBannerInDom() {
 function updateVarAssignments() {
   const container = $('varAssignments')
   if (!container) return
-  const ass = state.solve.ass || {}
+  if (!state.solve || typeof state.solve.ass !== 'object') {
+    throw new Error('updateVarAssignments: state.solve.ass must be an object')
+  }
+  const ass = state.solve.ass
   // Collect ALL variables from all cell expressions (not just solved ones)
   const allVars = new Set()
   for (const cell of state.cells) {
@@ -344,9 +347,10 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
   // Sync text fields
   output.querySelectorAll('input.recipe-field').forEach(field => {
     const isEdited = editedFieldEl && field === editedFieldEl
-    if (!isEdited) {
-      const c = state.cells.find(x => x.id === field.dataset.cellId)
-      if (c && !state.invalidInputCellIds.has(field.dataset.cellId)) field.value = formatNum(c.cval)
+    const c = state.cells.find(x => x.id === field.dataset.cellId)
+    if (!c) throw new Error(`syncAfterSolve: no cell found for field id "${field.dataset.cellId}"`)
+    if (!isEdited && !state.invalidInputCellIds.has(field.dataset.cellId)) {
+      field.value = formatNum(c.cval)
     }
     field.classList.toggle('invalid', invalidCellIds.has(field.dataset.cellId))
   })
@@ -355,10 +359,9 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
   output.querySelectorAll('input.recipe-slider').forEach(slider => {
     if (editedFieldEl && slider === editedFieldEl) return
     const c = state.cells.find(x => x.id === slider.dataset.cellId)
-    if (c) {
-      slider.value = c.cval
-      slider.classList.toggle('at-one-x', Math.abs(c.cval - 1) < 0.005)
-    }
+    if (!c) throw new Error(`syncAfterSolve: no cell found for slider id "${slider.dataset.cellId}"`)
+    slider.value = c.cval
+    slider.classList.toggle('at-one-x', Math.abs(c.cval - 1) < 0.005)
   })
 
   repositionBanners()
@@ -380,7 +383,7 @@ function handleFieldInput(e) {
   const input = e.target
   const cellId = input.dataset.cellId
   const cell = state.cells.find(c => c.id === cellId)
-  if (!cell) return
+  if (!cell) throw new Error(`handleFieldInput: no cell found for id "${cellId}"`)
 
   // Blank input = no value (same as blank from parsing, removes constraint)
   if (input.value.trim() === '') {
@@ -426,7 +429,7 @@ function handleFieldBlur(e) {
   const input = e.target
   const cellId = input.dataset.cellId
   const cell = state.cells.find(c => c.id === cellId)
-  if (!cell) return
+  if (!cell) throw new Error(`handleFieldBlur: no cell found for id "${cellId}"`)
   if (state.invalidInputCellIds.has(cellId)) return
   input.value = formatNum(cell.cval)
 }
@@ -441,7 +444,7 @@ function handleInlineSliderInput(e) {
   const input = e.target
   const cellId = input.dataset.cellId
   const cell = state.cells.find(c => c.id === cellId)
-  if (!cell) return
+  if (!cell) throw new Error(`handleInlineSliderInput: no cell found for id "${cellId}"`)
 
   const newValue = toNum(input.value)
   if (!isFiniteNumber(newValue)) return

@@ -627,7 +627,8 @@ peg cells until that's no longer the case?
 values to variables? Or should you just include something like 
 `Variables: a={a}, b={b}, ...` in the reciplate if you want to see that? (We
 could even have a macro that expands to the above string using the profile of
-variables defined in the reciplate.)
+variables defined in the reciplate.) PS: These are now visible in the debug
+panel.
 
 * [MTH] Make it easy to add any new math functions or other utilities that we
 want available for defining cells. Like how we currently have `unixtime()`.
@@ -636,8 +637,8 @@ Maybe even have that code available in the UI, unobtrusively so as not to
 clutter the UI for the simple recipe use case. Just an idea for now.
 
 * [CON] Syntax like {tau := 6.28} could define a constant and it's just
-uneditable, rendering as normal text, no field. Another option is [MTH] above
-about defining new functions and constants. Just an idea for now.
+uneditable, rendering as normal text, no field. Aka static. Another option is
+[MTH] above about defining new functions and constants. Just an idea for now.
 
 * [ERB] Then could we support something like {goal_units := "kg"} and then ... I
 guess that's turning this thing into a whole templating engine like ERB.
@@ -658,11 +659,11 @@ in an html comment in order to suppress the "unreferenced variable" banner.
 (I don't think "in order to make a slider for it" makes sense currently. Ignore
 this one for now.)
 
-* [IMM] The preval function should handle things like `2(a+b)`. And what about
-`x(a+b)`? That's ambiguous between multiplication and a function named `x`.
-Which is why Mathematica uses square brackets for function, which, maybe we want
-to just embrace that? In the meantime, numbers followed by parentheses should be
-treated as multiplication, I think. Add lots of quals before fussing with this.
+* [IMM] The preval function handles things like `2(a+b)`. What about `x(a+b)`?
+That's ambiguous between multiplication and a function named `x`. Which is why
+Mathematica uses square brackets for function, which, maybe we want to just
+embrace that? In the meantime, numbers followed by parentheses should be treated
+as multiplication, I think. Add lots of quals before fussing with this.
 
 * [PER] While we're at it, supporting "23%" to mean 0.23 might be handy. Or
 maybe we want the percent sign to mean mod. TBD.
@@ -677,18 +678,15 @@ Mathematica syntax:
 Solve[{r == 0.5, pay == (1-}, {fmv, get, pay, r}]
 ```
 I need to find replicata for this. Maybe in pyzza?
+PS: This is probably fixed now.
 
 * [BTB] Bike Tour Burritos doesn't properly infer an earlier or later start time
 when the user bumps the average speed down or up.
 
-* [SLE] The length of the excerpts shown for the sliders should depend on the
-display width. Also it should show as rendered, eg, it shouldn't show html
-comments. But ignore this; we may be revamping sliders.
-
 * [OPA] If you try to enter a 5-12-13 triangle in the pyzza recipe, it doesn't
 work because it's constrained to be similar to a 3-4-5 triangle. Which is fine
 but we should find a way to make the problem more transparent to the user. See
-also [SEE].
+also [SEE]. PS: This might be fine now.
 
 * [TVR] Sometimes, as in the Beeminder commitment dial with goal date, goal
 value, and goal rate, we want to say that exactly 1 out of 3 cells needs to be
@@ -700,7 +698,9 @@ values incompatible with the constraints might be annoying. I suspect there's a
 best-of-all-worlds solution but I haven't found it yet.
 
 * [SER] Bug: If you make a cell like `{12(}` the field is shown in red with a
-question mark but no error is displayed.
+question mark but no error is displayed. PS: Now it's just shown blank and we
+get a "no solution found" if we enter a number in the field for it, which is
+pretty dumb.
 
 * [SAP] List of apps that this can or does subsume:
   - https://bid.yootl.es/
@@ -712,11 +712,12 @@ question mark but no error is displayed.
 thinking that the template textarea should be collapsible and the collapsed/
 expanded state should be encoded in the URL. So if you share, for example, 
 reciplier.dreev.es/recipe=crepes&template=collapsed then the template textarea
-loads in the collapsed state. I'm not sure what the default should be. Related
-idea: just have the template textarea below the rendered recipe.
+loads in the collapsed state. I'm not sure what the default should be. Or maybe
+the template should just always be collapsed on page load? Related idea: just
+have the template textarea below the rendered recipe.
 
 * [BFL] I changed my mind: I think the syntax for inequalities should require 
-that the be bounds occur first and last in the cell:
+that the bounds occur first and last in the cell:
   {0 < x : 5 < 10}
   {0 < x = 5 < 10}
 Anything else should be a syntax error.
@@ -731,14 +732,14 @@ variable so they're... linked? We can't say that pegging one pegs the other
 because then if you tried to change one of them, it would fail, since the other
 is pegged at its current value. Tricky! Need to think this through better.
 
-* [SPG] Probably sliders need to have the UI for pegging/unpegging, same as
-fields.
+* [SPG] Probably sliders should have the UI for pegging/unpegging, same as
+fields. For consistency at least?
 
 * [ESC] Support syntax like "Footnote: \[1\]" if you want literal brackets in
 the recipe. Similar for curly braces of course.
 
-* [REF] (a) Move propagation logic from initSeeds into solvem. (b)
-Consolidate repetitive search loops in csolver.js findTarget
+* [REF] (a) Move propagation logic from initSeeds into solvem. (b) Consolidate
+repetitive search loops in csolver.js findTarget
 
 * [SYH] Syntax highlighting in the template textarea will be super nice, so you
 can see that you've formatted cells correctly, etc.
@@ -746,7 +747,7 @@ can see that you've formatted cells correctly, etc.
 * [ADV] Idea for advanced syntax: a way to specify that a field starts in focus
 when the reciplate is rendered.
 
-* [PYZ] Play with the pyzza replicate in the UI and watch the browser console to
+* [PYZ] Play with the pyzza reciplate in the UI and watch the browser console to
 see if we can still make it generate spurious solver failures.
 
 
