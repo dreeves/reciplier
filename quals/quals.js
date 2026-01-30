@@ -41,6 +41,7 @@ function runNode(scriptRelPath) {
 }
 
 async function main() {
+  console.log("Running util, parser, solver, and UI quals...\n")
   const util = await runNode('util_quals.js')
   const parser = await runNode('parser_quals.js')
   const solver = await runNode('solver_quals.js')

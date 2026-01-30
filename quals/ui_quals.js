@@ -8,7 +8,7 @@ Usage:
 */
 
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
+//const fs = require('node:fs') // TODO: why did we want this?
 const path = require('node:path')
 const puppeteer = require('puppeteer')
 

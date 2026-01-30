@@ -739,7 +739,11 @@ Anything else should be a syntax error.
 slider for the shares that are both treated as pegged? Like you want to change
 either the number in the field or slide the slider and have the two stay in sync
 which implies they're not pegged. But then when you change the other fields, the
-shares shouldn't change, because they *are* pegged.
+shares shouldn't change, because they *are* pegged. We could do something like
+peg propagation. For example, {x} and {2x} are both expressions of the same
+variable so they're... linked? We can't say that pegging one pegs the other
+because then if you tried to change one of them, it would fail, since the other
+is pegged at its current value. Tricky! Need to think this through better.
 
 * [SPG] Probably sliders need to have the UI for pegging/unpegging, same as
 fields.
@@ -755,28 +759,6 @@ can see that you've formatted cells correctly, etc.
 
 * [ADV] Idea for advanced syntax: a way to specify that a field starts in focus
 when the reciplate is rendered.
-
-* [DEQ] A reciplate consisting of just `{A = B} {B = A}` yields initial values,
-as shown in the fields of the rendered reciplate, of 1.015. That is weird and
-surprising. If they were both initialized to zero, that would probably be least
-surprising. Of course we don't adhere to POLA here, we adhere to anti-magic. So
-let's just think what's the simplest thing for this to do:
-  solvem([['A', 'B'], ['B', 'A']], {A: null, B: null})
-Wait, never mind, that returns {A: 1, B: 1} which is expected. So there's
-soemthing else going on. Let's find out what exactly is getting sent to the
-solver for an initial reciplate of `{A = B} {B = A}`. Are we sometimes sending
-null as one of the expressions in one of the equations sent to solvem()? Let's
-add an assert to ensure that never happens and debug it.
-
----
-
-this is if-statement thinking: "The fix is to have newtRaphson always defer to kludgeOrama for potentially underdetermined systems".
-
-(i seem to be failing miserably at conveying the anti-magic principle. i worry that terms like "if-statement thinking" are not capturing it well. do you have better ideas? please jot them down in the agents section of AGENTS.md.)
-
-back to the object-level, i now see that you're actually removing conditions from an if-statement, not adding them, so that's laudable. thank you. but let's go deeper. i doubt we want any conditionals. just try each subsolver. if it can come up with a satisfying assignment, great. if not, try the next one. if there are detectable conditions that indicate one solver will fare better than another, like a simple check for an underconstrained system that will cause gaussJordan to barf, put that check at the top of gaussJordan itself. let it return early, let solvem see that it failed to return a satisfying assignment, and let it try the next subsolver. see what i mean? if complexity is needed (big if, haha) then at least keep it contained in the appropriate black box, like one of the subsolvers, keeping the higher-level business logic as simple as possible.
-
-but in this case, maybe gaussJordan could work fine? it's returning {A: 1, B: 1} with sat=false, you say? why isn't it returning {A: 1, B: 1} with sat=true? there may be a good reason, i'm just asking. obviously don't just change gaussJordan's behavior by adding an if-statement without discussing why it's currently doing what it's doing.
 
 
 ## Half-baked ideas for cell syntax: JSON objects with syntactic sugar
@@ -833,6 +815,30 @@ Scaled by a factor of {x : 1} {.1 <= x <= 10}
 SCRATCH AREA: ------------------------------------------------------------------
 
 can you find the 10 symbol names you're most sure I came up with and the 10 you're most sure an ai agent came up with?
+
+* [DEQ] A reciplate consisting of just `{A = B} {B = A}` yields initial values,
+as shown in the fields of the rendered reciplate, of 1.015. That is weird and
+surprising. If they were both initialized to zero, that would probably be least
+surprising. Of course we don't adhere to POLA here, we adhere to anti-magic. So
+let's just think what's the simplest thing for this to do:
+  solvem([['A', 'B'], ['B', 'A']], {A: null, B: null})
+Wait, never mind, that returns {A: 1, B: 1} which is expected. So there's
+soemthing else going on. Let's find out what exactly is getting sent to the
+solver for an initial reciplate of `{A = B} {B = A}`. Are we sometimes sending
+null as one of the expressions in one of the equations sent to solvem()? Let's
+add an assert to ensure that never happens and debug it.
+
+---
+
+this is if-statement thinking: "The fix is to have newtRaphson always defer to kludgeOrama for potentially underdetermined systems".
+
+(i seem to be failing miserably at conveying the anti-magic principle. i worry that terms like "if-statement thinking" are not capturing it well. do you have better ideas? please jot them down in the agents section of AGENTS.md.)
+
+back to the object-level, i now see that you're actually removing conditions from an if-statement, not adding them, so that's laudable. thank you. but let's go deeper. i doubt we want any conditionals. just try each subsolver. if it can come up with a satisfying assignment, great. if not, try the next one. if there are detectable conditions that indicate one solver will fare better than another, like a simple check for an underconstrained system that will cause gaussJordan to barf, put that check at the top of gaussJordan itself. let it return early, let solvem see that it failed to return a satisfying assignment, and let it try the next subsolver. see what i mean? if complexity is needed (big if, haha) then at least keep it contained in the appropriate black box, like one of the subsolvers, keeping the higher-level business logic as simple as possible.
+
+but in this case, maybe gaussJordan could work fine? it's returning {A: 1, B: 1} with sat=false, you say? why isn't it returning {A: 1, B: 1} with sat=true? there may be a good reason, i'm just asking. obviously don't just change gaussJordan's behavior by adding an if-statement without discussing why it's currently doing what it's doing.
+
+---
 
 Brainstorming ways to indicate an initially pegged field:
 * NIX: number first in urtext: {6.28 = tau} or {0 < 6.18 = tau < 7}
@@ -925,8 +931,3 @@ idea 2: those fields are just blank. if the user types, say, 12, into the cell f
 
 are there other ideas besides those? which is best?
 
-Current testing:
-
-{x}
-{2x}
-{A = B} {B = A}

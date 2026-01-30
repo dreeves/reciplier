@@ -85,10 +85,13 @@ function runParserQuals() {
       results.errors.push(name)
     }
   }
+  
+  console.log("BEGIN PARSER QUALS")
 
   // ==========================================================================
   // checkBraceSyntax quals
   // ==========================================================================
+
   console.log('\n=== checkBraceSyntax quals ===')
 
   // Valid cases (should return empty array)

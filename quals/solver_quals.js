@@ -38,192 +38,6 @@ function makeContext() {
   return vm.createContext(ctx)
 }
 
-function approxEqual(a, b, tol = 1e-3) {
-  return Math.abs(a - b) <= tol
-}
-
-function runSolvemQuals(solvemImpl, label) {
-  const cases = [
-    {
-      name: 'simple equation',
-      eqns: [['x', 5]],
-      vars: { x: 1 },
-      expected: { x: 5 },
-    },
-    {
-      name: 'derived value',
-      eqns: [['x', 2], ['y', '3x']],
-      vars: { x: 1, y: 1 },
-      expected: { x: 2, y: 6 },
-    },
-    {
-      name: 'simultaneous equations',
-      eqns: [['2x+3y', 33], ['5x-4y', 2]],
-      vars: { x: 6, y: 0 },
-      expected: { x: 6, y: 7 },
-    },
-    {
-      name: 'Pythagorean chain',
-      eqns: [['x', 1], ['a', '3x'], ['b', '4x'], ['v1', 'a^2+b^2', 'c^2']],
-      vars: { x: 1, a: 1, b: 1, c: 1, v1: 1 },
-      expected: { x: 1, a: 3, b: 4, c: 5, v1: 25 },
-    },
-    {
-      name: 'pyzza: A=30',
-      eqns: [['a', 30], ['a', '3x'], ['b', '4x'], ['v1', 'a^2+b^2', 'c^2']],
-      vars: { x: 1, a: 30, b: 1, c: 1, v1: 1 },
-      expected: { x: 10, a: 30, b: 40, c: 50, v1: 2500 },
-    },
-    {
-      name: 'pyzza: B=40',
-      eqns: [['b', 40], ['a', '3x'], ['b', '4x'], ['v1', 'a^2+b^2', 'c^2']],
-      vars: { x: 1, a: 1, b: 40, c: 1, v1: 1 },
-      expected: { x: 10, a: 30, b: 40, c: 50, v1: 2500 },
-    },
-    {
-      name: 'pyzza: C=50',
-      eqns: [['c', 50], ['a', '3x'], ['b', '4x'], ['v1', 'a^2+b^2', 'c^2']],
-      vars: { x: 1, a: 1, b: 1, c: 50, v1: 1 },
-      expected: { x: 10, a: 30, b: 40, c: 50, v1: 2500 },
-    },
-    {
-      name: 'chain propagation',
-      eqns: [['a', 2], ['b', 'a+1'], ['c', 'b+1']],
-      vars: { a: 1, b: 1, c: 1 },
-      expected: { a: 2, b: 3, c: 4 },
-    },
-    {
-      name: 'scaling factor',
-      eqns: [['x', 2], ['scaled', '10x']],
-      vars: { x: 1, scaled: 1 },
-      expected: { x: 2, scaled: 20 },
-    },
-    {
-      name: 'crepes eggs implies x',
-      eqns: [['eggs', 24, '12x'], ['milk', '5.333x'], ['flour', '3x']],
-      vars: { x: 1, eggs: 12, milk: 5.333, flour: 3 },
-      expected: { x: 2, eggs: 24, milk: 10.666, flour: 6 },
-    },
-    {
-      name: 'chain derivation from area to diameter',
-      eqns: [
-        ['A', 63.585],
-        ['r', 'd/2'],
-        ['_v', 'A', '1/2*6.28*r^2'],
-      ],
-      vars: { A: 63.585, r: 1, d: 1, _v: 1 },
-      expected: { A: 63.585, r: 4.5, d: 9 },
-    },
-    {
-      name: 'cheesepan r1 derivation',
-      eqns: [
-        ['d1', 9], ['r1', 'd1/2'], ['tau', 6.28], ['x', 1],
-        ['r', 'd/2'],
-        ['_v', 'A', '1/2*tau*r^2', '1/2*tau*r1^2*x'],
-      ],
-      vars: { d1: 9, r1: 1, tau: 6.28, x: 1, r: 1, d: 1, A: 1, _v: 1 },
-      expected: { d1: 9, r1: 4.5, tau: 6.28, x: 1, r: 4.5, d: 9, A: 63.585 },
-    },
-    {
-      name: 'cheesepan r1 with x pegged at 1',
-      eqns: [
-        ['d1', 9], ['r1', 'd1/2'], ['tau', 6.28], ['x', 1],
-        ['r', 'd/2'],
-        ['_v', 'A', '1/2*tau*r^2', '1/2*tau*r1^2*x'],
-      ],
-      vars: { d1: 9, r1: 1, tau: 6.28, x: 1, r: 1, d: 1, A: 1, _v: 1 },
-      expected: { d1: 9, r1: 4.5, tau: 6.28, x: 1, r: 4.5, d: 9, A: 63.585 },
-    },
-    {
-      name: 'r=d/2 derives r from d',
-      eqns: [['d', 10], ['r', 'd/2']],
-      vars: { d: 10, r: 1 },
-      expected: { d: 10, r: 5 },
-    },
-    {
-      name: 'd=2r derives d from r',
-      eqns: [['r', 5], ['d', '2*r']],
-      vars: { d: 1, r: 5 },
-      expected: { d: 10, r: 5 },
-    },
-    {
-      name: 'both r=d/2 and d=2r with d pegged',
-      eqns: [['d', 10], ['r', 'd/2'], ['_v', 'd', '2*r']],
-      vars: { d: 10, r: 1, _v: 1 },
-      expected: { d: 10, r: 5 },
-    },
-    {
-      name: 'both r=d/2 and d=2r with r pegged',
-      eqns: [['r', 5], ['d', '2*r'], ['_v', 'd/2', 'r']],
-      vars: { d: 1, r: 5, _v: 1 },
-      expected: { d: 10, r: 5 },
-    },
-    {
-      name: 'Mixed Nulls & Propagation (subset)',
-      eqns: [
-        ['var01', 'x'],
-        ['var02', 'y'],
-        ['var03', 33, '2*x + 3*y'],
-        ['var04', 'x'],
-        ['var05', 'y'],
-        ['var06', 2, '5*x - 4*y'],
-      ],
-      vars: { var01: 6, var02: null, var03: 33, var04: null, var05: null, var06: 2, x: null, y: null },
-      expected: { var01: 6, var02: 7, x: 6, y: 7 },
-    },
-    {
-      name: 'Impossible Conflict (Pinned) (subset)',
-      eqns: [['sum', 'x+y'], ['sum', 10], ['sum', 20]],
-      vars: { x: 0, y: 0, sum: 0 },
-      expected: { sum: 10 },
-    },
-    {
-      name: 'bounds clamp negative seed',
-      eqns: [['x']],
-      vars: { x: 100 },
-      inf: { x: -10 },
-      sup: { x: -1 },
-      expected: { x: -1 },
-    },
-    {
-      name: 'bounds pick negative root',
-      eqns: [['x^2', 9]],
-      vars: { x: 1 },
-      inf: { x: -10 },
-      sup: { x: -1 },
-      expected: { x: -3 },
-    },
-  ]
-
-  const failures = []
-
-  for (const tc of cases) {
-    let res
-    try {
-      const result = solvemImpl(tc.eqns, tc.vars, tc.inf || {}, tc.sup || {})
-      // solvem now returns {ass, zij, sat}, extract ass for backward compatibility
-      res = result.ass || result
-    } catch (e) {
-      failures.push(`${tc.name}: threw ${e && e.message ? e.message : String(e)}`)
-      continue
-    }
-
-    for (const [k, v] of Object.entries(tc.expected)) {
-      const actual = res[k]
-      if (!Number.isFinite(actual) || !approxEqual(actual, v, 1e-2)) {
-        failures.push(`${tc.name}: ${k} expected ${v}, got ${actual}`)
-      }
-    }
-  }
-
-  if (failures.length) {
-    const msg = `${label}: ${failures.length} failures\n- ${failures.join('\n- ')}`
-    return { ok: false, message: msg }
-  }
-
-  return { ok: true, message: `${label}: all solvem quals passed` }
-}
-
 function runAllSolverQuals(ctx) {
   const results = { passed: 0, failed: 0, errors: [] }
 
@@ -2456,6 +2270,71 @@ function runAllSolverQuals(ctx) {
     check('solvem: underdetermined knownVars x=y', rep2.ass.x, rep2.ass.y, 1e-9)
   })()
 
+  // {A = B} {B = A} reciplate pattern - two cells each saying A=B
+  // This is underdetermined (A=B is the only constraint) so solver uses seeds
+  ;(() => {
+    const eqns = [
+      ['A', 'B'],  // Cell 1: A = B
+      ['B', 'A'],  // Cell 2: B = A (redundant, same constraint)
+    ]
+    const rep = solvem(eqns, { A: 1, B: 1 })
+    check('solvem: A=B B=A (sat)', rep.sat, true)
+    check('solvem: A=B B=A values equal', rep.ass.A, rep.ass.B, 1e-9)
+    check('solvem: A=B B=A preserves seed', rep.ass.A, 1, 1e-9)
+  })()
+
+  // Same pattern with different seeds - should preserve those seeds
+  ;(() => {
+    const eqns = [
+      ['A', 'B'],
+      ['B', 'A'],
+    ]
+    const rep = solvem(eqns, { A: 5, B: 5 })
+    check('solvem: A=B B=A seed=5 (sat)', rep.sat, true)
+    check('solvem: A=B B=A seed=5 values equal', rep.ass.A, rep.ass.B, 1e-9)
+    check('solvem: A=B B=A seed=5 preserves seed', rep.ass.A, 5, 1e-9)
+  })()
+
+  // Expression-based equations: {x/2+1 = 5} solves to x=8
+  ;(() => {
+    const eqns = [
+      ['x/2+1', 5],
+    ]
+    const rep = solvem(eqns, { x: 1 })
+    check('solvem: x/2+1=5 (sat)', rep.sat, true)
+    check('solvem: x/2+1=5 gives x=8', rep.ass.x, 8, 1e-9)
+  })()
+
+  // Two expression-based equations that share a variable
+  // {x/2+1} {1-3x} both pinned to same value would constrain x
+  ;(() => {
+    // x/2+1 = 1-3x  →  x/2 + 3x = 0  →  3.5x = 0  →  x = 0
+    // If both expressions equal the same value v: x/2+1=v and 1-3x=v
+    // From first: x = 2(v-1) = 2v-2
+    // From second: x = (1-v)/3
+    // 2v-2 = (1-v)/3  →  6v-6 = 1-v  →  7v = 7  →  v = 1, x = 0
+    const eqns = [
+      ['x/2+1', '1-3x'],  // These must be equal
+    ]
+    const rep = solvem(eqns, { x: 1 })
+    check('solvem: x/2+1=1-3x (sat)', rep.sat, true)
+    check('solvem: x/2+1=1-3x gives x=0', rep.ass.x, 0, 1e-9)
+  })()
+
+  // Messier expression: (2a-b)/3 = b+1
+  ;(() => {
+    // (2a-b)/3 = b+1  →  2a-b = 3b+3  →  2a = 4b+3  →  a = 2b + 1.5
+    // With b=2: a = 5.5
+    const eqns = [
+      ['b', 2],
+      ['(2*a-b)/3', 'b+1'],
+    ]
+    const rep = solvem(eqns, { a: 1, b: 2 })
+    check('solvem: messy expr (sat)', rep.sat, true)
+    check('solvem: messy expr b=2', rep.ass.b, 2, 1e-9)
+    check('solvem: messy expr a=5.5', rep.ass.a, 5.5, 1e-9)
+  })()
+
   // Bounds + constants together
   ;(() => {
     const eqns = [
@@ -2649,8 +2528,6 @@ function main() {
 
   assert.equal(typeof ctx.solvem, 'function', 'csolver.js should define solvem')
 
-  // NOTE: The solvem-only qual subset remains above, but we run the full
-  // consolidated solver qual suite here.
   const res = runAllSolverQuals(ctx)
   if (res.failed > 0) process.exitCode = 1
 }
