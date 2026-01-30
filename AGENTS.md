@@ -33,3 +33,21 @@ Humans above, robots below
 ---
 
 # Scratchpad / Implementation Plan
+
+## Better terminology for the anti-magic principle?
+
+"If-statement thinking" may not fully capture it. Some alternatives to consider:
+
+1. **"Solve vs patch"** - Are you solving the problem or patching over it?
+
+2. **"Why is this case special?"** - If you're about to add a conditional, ask what makes this case different. Often the answer reveals the conditional shouldn't exist.
+
+3. **"Trust the general case"** - Write code that handles the general case correctly, then trust it. Don't second-guess with "but what if..."
+
+4. **"Complexity budget"** - Every conditional is a withdrawal. You have a limited budget. Removing a conditional is a deposit.
+
+5. **"Black box integrity"** - If a function should "do the thing", let it do the thing and check if it worked. Don't pre-screen inputs or route around it based on predictions about what will happen.
+
+6. **"Predict vs verify"** - Don't predict failure and route around it. Try, then verify success or failure. This is what we did with gaussJordan: instead of predicting "underdetermined systems won't work, bail early", we just check if the values satisfy the equations.
+
+The gaussJordan fix is a good example: the old code said "if underdetermined, return sat=false to let another solver handle it." But that's prediction-based routing. The fix just computes the values and checks if they work - verification, not prediction.

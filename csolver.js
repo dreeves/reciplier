@@ -475,21 +475,15 @@ function gaussJordan(eqns, vars, inf, sup, knownVars = null) {
     solution[col] = sum / A[row][col]
   }
   
-  // Check if system is underconstrained (fewer constraints than variables)
-  // If so, return sat=false to let kludgeOrama handle it with its heuristics
-  // (kludgeOrama preserves seed values for underdetermined systems)
-  if (pivotCols.length < n) {
-    return { ass: { ...vars }, zij: zidge(eqns, vars), sat: false }
-  }
-  
+  // Use computed solution if fully determined, otherwise keep seed values
   const ass = {}
   for (let j = 0; j < n; j++) {
-    ass[varNames[j]] = solution[j]
+    ass[varNames[j]] = pivotCols.length >= n ? solution[j] : vars[varNames[j]]
   }
-  
+
   const zij = zidge(eqns, ass)
   const sat = eqnsSatisfied(eqns, ass) && boundsSatisfied(ass, inf, sup)
-  
+
   return { ass, zij, sat }
 }
 

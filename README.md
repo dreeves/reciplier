@@ -603,6 +603,10 @@ the slider excerpts and the close buttons. Remember to think in terms of
 death-to-if-statements. We want to elegantly generalize what's currently done
 with text fields to include other UI elements, in this case sliders.
 
+* [NOQ] If we have a reciplate with two cells, {2x} and {3x}, and no constraints
+or initial values, currently both fields are shown in red with a question mark
+in them. I think instead they should just be blank.
+
 
 ## Future Work
 
@@ -749,10 +753,6 @@ Consolidate repetitive search loops in csolver.js findTarget
 * [SYH] Syntax highlighting in the template textarea will be super nice, so you
 can see that you've formatted cells correctly, etc.
 
-* [NOQ] If we have a reciplate with two cells, {2x} and {3x}, and no constraints
-or initial values, currently both fields are shown in red with a question mark
-in them. I think instead they should just be blank.
-
 * [ADV] Idea for advanced syntax: a way to specify that a field starts in focus
 when the reciplate is rendered.
 
@@ -767,6 +767,16 @@ soemthing else going on. Let's find out what exactly is getting sent to the
 solver for an initial reciplate of `{A = B} {B = A}`. Are we sometimes sending
 null as one of the expressions in one of the equations sent to solvem()? Let's
 add an assert to ensure that never happens and debug it.
+
+---
+
+this is if-statement thinking: "The fix is to have newtRaphson always defer to kludgeOrama for potentially underdetermined systems".
+
+(i seem to be failing miserably at conveying the anti-magic principle. i worry that terms like "if-statement thinking" are not capturing it well. do you have better ideas? please jot them down in the agents section of AGENTS.md.)
+
+back to the object-level, i now see that you're actually removing conditions from an if-statement, not adding them, so that's laudable. thank you. but let's go deeper. i doubt we want any conditionals. just try each subsolver. if it can come up with a satisfying assignment, great. if not, try the next one. if there are detectable conditions that indicate one solver will fare better than another, like a simple check for an underconstrained system that will cause gaussJordan to barf, put that check at the top of gaussJordan itself. let it return early, let solvem see that it failed to return a satisfying assignment, and let it try the next subsolver. see what i mean? if complexity is needed (big if, haha) then at least keep it contained in the appropriate black box, like one of the subsolvers, keeping the higher-level business logic as simple as possible.
+
+but in this case, maybe gaussJordan could work fine? it's returning {A: 1, B: 1} with sat=false, you say? why isn't it returning {A: 1, B: 1} with sat=true? there may be a good reason, i'm just asking. obviously don't just change gaussJordan's behavior by adding an if-statement without discussing why it's currently doing what it's doing.
 
 
 ## Half-baked ideas for cell syntax: JSON objects with syntactic sugar
