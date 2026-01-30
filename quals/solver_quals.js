@@ -2633,6 +2633,7 @@ function runAllSolverQuals(ctx) {
   if (results.failed > 0) {
     console.log('Failed:', results.errors.join(', '))
   }
+  console.log('\n')
 
   return results
 }

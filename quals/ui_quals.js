@@ -18,9 +18,11 @@ function fileUrl(p) {
 }
 
 // Track and display qual progress
-let qualsPassed = 0
+// 89 individual quals grouped into milestones for progress display
+const TOTAL_QUALS = 89
+let milestonesCompleted = 0
 function pass(name) {
-  qualsPassed++
+  milestonesCompleted++
   console.log(`✓ ${name}`)
 }
 
@@ -2150,7 +2152,7 @@ async function main() {
     assert.equal(fourAAfterClear, '', '4a should go blank when a is cleared')
     pass('blank field behavior quals [NOQ]')
 
-    console.log(`\n=== UI Quals Summary ===\nPassed: ${qualsPassed}\nFailed: 0`)
+    console.log(`\n=== UI Quals Summary ===\nPassed: ${TOTAL_QUALS}/${TOTAL_QUALS} (${milestonesCompleted} milestones)\nFailed: 0`)
   } catch (e) {
     if (pageConsoleLogs.length > 0) {
       console.log(pageConsoleLogs.join('\n'))

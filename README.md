@@ -768,9 +768,6 @@ solver for an initial reciplate of `{A = B} {B = A}`. Are we sometimes sending
 null as one of the expressions in one of the equations sent to solvem()? Let's
 add an assert to ensure that never happens and debug it.
 
-* [QAS] It would be nice if the UI quals displayed one at a time like the solver
-quals do, in order to see the progress getting through the qual suite.
-
 
 ## Half-baked ideas for cell syntax: JSON objects with syntactic sugar
 
