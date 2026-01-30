@@ -263,7 +263,10 @@ function refreshCvals(cells, ass, peggedCellIds, skipCellId = null) {
     if (peggedCellIds && peggedCellIds.has(cell.id) && isFiniteNumber(cell.cval)) {
       continue
     }
-    if (!cell.ceqn || cell.ceqn.length === 0) continue
+    if (!Array.isArray(cell.ceqn)) {
+      throw new Error(`cell.ceqn must be an array, got ${typeof cell.ceqn}`)
+    }
+    if (cell.ceqn.length === 0) continue
 
     const results = cell.ceqn.map(expr => {
       const r = vareval(expr, ass)
@@ -477,19 +480,6 @@ function solveAndApply({
 } = {}) {
   const seedAss = { ...state.solve.ass, ...seedOverrides }
 
-  // When user clears a field, remove its variables from seedAss so dependent
-  // cells can't compute (their cval will become null in refreshCvals)
-  if (editedCellId !== null && editedValue === null) {
-    const editedCell = state.cells.find(c => c.id === editedCellId)
-    if (editedCell && editedCell.ceqn) {
-      for (const expr of editedCell.ceqn) {
-        for (const v of varparse(expr)) {
-          delete seedAss[v]
-        }
-      }
-    }
-  }
-
   const { eqns, cellIndices } = interactiveEqns(editedCellId, editedValue)
   const { inf, sup } = state.bounds
   const solveResult = solvem(eqns, seedAss, inf, sup)
@@ -512,9 +502,25 @@ function solveAndApply({
     if (editedCell) editedCell.cval = editedValue
   }
 
+  // When user clears a field, create a modified assignment for refreshCvals that
+  // omits the cleared variable(s). This makes dependent cells go blank.
+  // state.solve.ass keeps the full assignment for the next solve.
+  let assForRefresh = state.solve.ass
+  if (editedCellId !== null && editedValue === null) {
+    const editedCell = state.cells.find(c => c.id === editedCellId)
+    if (editedCell && editedCell.ceqn) {
+      assForRefresh = { ...state.solve.ass }
+      for (const expr of editedCell.ceqn) {
+        for (const v of varparse(expr)) {
+          delete assForRefresh[v]
+        }
+      }
+    }
+  }
+
   const skipRecomputeCellId = preserveEdited ? editedCellId : null
   if (sat) {
-    refreshCvals(state.cells, state.solve.ass, state.peggedCellIds, skipRecomputeCellId)
+    refreshCvals(state.cells, assForRefresh, state.peggedCellIds, skipRecomputeCellId)
   }
 
   const invalidCellIds = collectInvalidCellIds(zij)

@@ -413,11 +413,16 @@ function runAllSolverQuals(ctx) {
     solvem([['a+b', 8]], {a: 4, b: null}).ass,
     {a: 4, b: 4})
 
-  // solvem now seeds missing variables instead of throwing (per TODO refactor)
-  check('solvem: seeds missing initial vars',
+  // solvem throws if non-empty init is missing required variables (anti-robustness)
+  check('solvem: throws on partial init',
     (() => {
-      const result = solvem([['a+b+c', 8]], {a: 4, b: null})
-      return result.ass.c === 1  // c was missing, seeded to 1
+      let threw = false
+      try {
+        solvem([['a+b+c', 8]], {a: 4, b: null})  // c is missing
+      } catch (e) {
+        threw = e.message.includes('"c"')
+      }
+      return threw
     })(),
     true)
 
@@ -466,7 +471,7 @@ function runAllSolverQuals(ctx) {
   // Explicit values are preserved (not overwritten by seeding)
   check('solvem: explicit values preserved',
     (() => {
-      const result = solvem([['x', 'y']], {x: 7}, {x: 0}, {x: 10})
+      const result = solvem([['x', 'y']], {x: 7, y: 1}, {x: 0}, {x: 10})
       return result.ass.x === 7  // 7 preserved, not replaced with midpoint 5
     })(),
     true)
@@ -2402,16 +2407,19 @@ function runAllSolverQuals(ctx) {
     check('solvem: multi-constraint all zij zero', rep.zij.every(z => z === 0), true)
   })()
 
-  // Verify vars only from equations are seeded (bounds-only handled separately)
+  // Verify vars from equations must all be in init (anti-robustness)
   ;(() => {
     const eqns = [
       ['x', 'y + 1'],  // x depends on y
     ]
-    // y is in equation but not in init - should be seeded
-    const rep = solvem(eqns, { x: 1 })
-    check('solvem: missing var seeded (sat)', rep.sat, true)
-    check('solvem: missing var y seeded', typeof rep.ass.y, 'number')
-    check('solvem: seeded y is finite', isFinite(rep.ass.y), true)
+    // y is in equation but not in init - should throw
+    let threw = false
+    try {
+      solvem(eqns, { x: 1 })
+    } catch (e) {
+      threw = e.message.includes('"y"')
+    }
+    check('solvem: missing var throws', threw, true)
   })()
 
   // Verify bounds-only vars (not in equations) are seeded
@@ -2485,6 +2493,31 @@ function runAllSolverQuals(ctx) {
     check('solvem: middle singleton error mentions equation 1', errorMsg.includes('equation 1'), true)
   })()
 
+  // solvem throws if non-empty init is missing required variables
+  ;(() => {
+    let threw = false
+    let errorMsg = ''
+    try {
+      solvem([['x', 'y']], { x: 1 })  // y is missing from init
+    } catch (e) {
+      threw = true
+      errorMsg = e.message
+    }
+    check('solvem: throws on missing var in non-empty init', threw, true)
+    check('solvem: missing var error mentions variable name', errorMsg.includes('"y"'), true)
+  })()
+
+  // solvem does NOT throw if init is empty (initial load case - seeds everything)
+  ;(() => {
+    let threw = false
+    try {
+      solvem([['x', 'y']], {})  // empty init - solvem seeds both vars
+    } catch (e) {
+      threw = true
+    }
+    check('solvem: empty init does not throw', threw, false)
+  })()
+
   // solvem accepts empty array (no equations to violate)
   ;(() => {
     let threw = false
@@ -2505,6 +2538,137 @@ function runAllSolverQuals(ctx) {
       threw = true
     }
     check('solvem: length-2 eqn does not throw', threw, false)
+  })()
+
+  // =========================================================================
+  // Additional edge case quals
+  // =========================================================================
+
+  // Negative numbers in equations
+  ;(() => {
+    const rep = solvem([['x', -5]], { x: 1 })
+    check('solvem: negative constant (sat)', rep.sat, true)
+    check('solvem: negative constant x=-5', rep.ass.x, -5, 1e-9)
+  })()
+
+  // Negative coefficients
+  ;(() => {
+    const rep = solvem([['-x', 5]], { x: 1 })
+    check('solvem: negative coef (sat)', rep.sat, true)
+    check('solvem: negative coef x=-5', rep.ass.x, -5, 1e-9)
+  })()
+
+  // Decimal precision
+  ;(() => {
+    const rep = solvem([['x', 0.001]], { x: 1 })
+    check('solvem: small decimal (sat)', rep.sat, true)
+    check('solvem: small decimal x=0.001', rep.ass.x, 0.001, 1e-9)
+  })()
+
+  // Large numbers
+  ;(() => {
+    const rep = solvem([['x', 1e6]], { x: 1 })
+    check('solvem: large number (sat)', rep.sat, true)
+    check('solvem: large number x=1e6', rep.ass.x, 1e6, 1)
+  })()
+
+  // Division in expression
+  ;(() => {
+    const rep = solvem([['x/2', 5]], { x: 1 })
+    check('solvem: division (sat)', rep.sat, true)
+    check('solvem: division x=10', rep.ass.x, 10, 1e-9)
+  })()
+
+  // Nested parentheses
+  ;(() => {
+    const rep = solvem([['((x+1)*2)', 10]], { x: 1 })
+    check('solvem: nested parens (sat)', rep.sat, true)
+    check('solvem: nested parens x=4', rep.ass.x, 4, 1e-9)
+  })()
+
+  // Multiple variables, one pinned
+  ;(() => {
+    const rep = solvem([['x+y', 10], ['x', 3]], { x: 1, y: 1 })
+    check('solvem: multi-var pinned (sat)', rep.sat, true)
+    check('solvem: multi-var x=3', rep.ass.x, 3, 1e-9)
+    check('solvem: multi-var y=7', rep.ass.y, 7, 1e-9)
+  })()
+
+  // Redundant equations (same constraint twice)
+  ;(() => {
+    const rep = solvem([['x', 5], ['x', 5]], { x: 1 })
+    check('solvem: redundant eqns (sat)', rep.sat, true)
+    check('solvem: redundant eqns x=5', rep.ass.x, 5, 1e-9)
+  })()
+
+  // Zero value
+  ;(() => {
+    const rep = solvem([['x', 0]], { x: 1 })
+    check('solvem: zero value (sat)', rep.sat, true)
+    check('solvem: zero value x=0', rep.ass.x, 0, 1e-9)
+  })()
+
+  // Variable equals itself (tautology)
+  ;(() => {
+    const rep = solvem([['x', 'x']], { x: 7 })
+    check('solvem: tautology (sat)', rep.sat, true)
+    check('solvem: tautology preserves seed', rep.ass.x, 7, 1e-9)
+  })()
+
+  // Scaling with fractions
+  ;(() => {
+    const rep = solvem([['x', 1], ['y', 'x/3']], { x: 1, y: 1 })
+    check('solvem: fraction scale (sat)', rep.sat, true)
+    check('solvem: fraction scale y=1/3', rep.ass.y, 1/3, 1e-9)
+  })()
+
+  // Three-variable linear system
+  ;(() => {
+    const rep = solvem([
+      ['x+y+z', 6],
+      ['x', 1],
+      ['y', 2],
+    ], { x: 1, y: 1, z: 1 })
+    check('solvem: 3-var linear (sat)', rep.sat, true)
+    check('solvem: 3-var x=1', rep.ass.x, 1, 1e-9)
+    check('solvem: 3-var y=2', rep.ass.y, 2, 1e-9)
+    check('solvem: 3-var z=3', rep.ass.z, 3, 1e-9)
+  })()
+
+  // Power expressions
+  ;(() => {
+    const rep = solvem([['x^2', 16]], { x: 4 })
+    check('solvem: power expr (sat)', rep.sat, true)
+    check('solvem: power expr x=4', rep.ass.x, 4, 1e-9)
+  })()
+
+  // Negative power root (seed guides sign)
+  ;(() => {
+    const rep = solvem([['x^2', 16]], { x: -4 })
+    check('solvem: negative root (sat)', rep.sat, true)
+    check('solvem: negative root x=-4', rep.ass.x, -4, 1e-9)
+  })()
+
+  // Expression on both sides
+  ;(() => {
+    const rep = solvem([['2*x', 'x+5']], { x: 1 })
+    check('solvem: expr both sides (sat)', rep.sat, true)
+    check('solvem: expr both sides x=5', rep.ass.x, 5, 1e-9)
+  })()
+
+  // Constants that simplify
+  ;(() => {
+    const rep = solvem([['x', '2+3']], { x: 1 })
+    check('solvem: const simplify (sat)', rep.sat, true)
+    check('solvem: const simplify x=5', rep.ass.x, 5, 1e-9)
+  })()
+
+  // Very tight tolerance
+  ;(() => {
+    const rep = solvem([['x', 1.0000001]], { x: 1 })
+    check('solvem: tight tolerance (sat)', rep.sat, true)
+    // Should be very close to 1.0000001
+    check('solvem: tight tolerance value', Math.abs(rep.ass.x - 1.0000001) < 1e-6, true)
   })()
 
   console.log('\n=== Summary ===')

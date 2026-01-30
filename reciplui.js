@@ -299,7 +299,10 @@ function updateVarAssignments() {
   // Collect ALL variables from all cell expressions (not just solved ones)
   const allVars = new Set()
   for (const cell of state.cells) {
-    for (const expr of (cell.ceqn || [])) {
+    if (!Array.isArray(cell.ceqn)) {
+      throw new Error(`cell.ceqn must be an array, got ${typeof cell.ceqn}`)
+    }
+    for (const expr of cell.ceqn) {
       for (const v of varparse(expr)) allVars.add(v)
     }
   }

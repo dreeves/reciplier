@@ -19,7 +19,7 @@ function fileUrl(p) {
 
 // Track and display qual progress
 // 89 individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 89
+const TOTAL_QUALS = 95
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -2151,6 +2151,50 @@ async function main() {
     assert.equal(twoAAfterClear, '', '2a should go blank when a is cleared')
     assert.equal(fourAAfterClear, '', '4a should go blank when a is cleared')
     pass('blank field behavior quals [NOQ]')
+
+    // Qual: re-typing after clearing should restore computation
+    await setInputValue(page, 'input.recipe-field[data-label="a"]', '5')
+    const twoAAfterRetype = await getInputValue(page, 'input.recipe-field[data-label="2a"]')
+    const fourAAfterRetype = await getInputValue(page, 'input.recipe-field[data-label="4a"]')
+    assert.equal(twoAAfterRetype, '10', '2a should restore after retyping a')
+    assert.equal(fourAAfterRetype, '20', '4a should restore after retyping a')
+
+    // Qual: pyzza - clearing one field shouldn't break solver
+    await page.select('#recipeSelect', 'pyzza')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Get initial values
+    const pyzzaAInitial = await getInputValue(page, 'input.recipe-field[data-label="a"]')
+    assert.ok(pyzzaAInitial !== '', 'pyzza a should have initial value')
+
+    // Clear a field
+    const pyzzaAField = await page.$('input.recipe-field[data-label="a"]')
+    await pyzzaAField.click({ clickCount: 3 })
+    await page.keyboard.press('Backspace')
+    await pyzzaAField.evaluate(e => e.blur())
+    await waitForNextFrame(page)
+
+    // Should not show error banner
+    const pyzzaBannerAfterClear = await page.$eval('#solveBanner', el => el.textContent || '')
+    assert.ok(!pyzzaBannerAfterClear.includes('No solution'), 'Clearing pyzza field should not show no solution')
+
+    // Qual: negative number entry should work
+    const negTemplate = '{x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, negTemplate)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    await setInputValue(page, 'input.recipe-field[data-label="x"]', '-5')
+    const negXValue = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.equal(negXValue, '-5', 'Negative number should be accepted')
+
+    // Qual: decimal precision should be preserved
+    await setInputValue(page, 'input.recipe-field[data-label="x"]', '3.14159')
+    const decimalXValue = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.ok(decimalXValue.startsWith('3.14'), 'Decimal should be preserved')
+    pass('additional field behavior quals')
 
     console.log(`\n=== UI Quals Summary ===\nPassed: ${TOTAL_QUALS}/${TOTAL_QUALS} (${milestonesCompleted} milestones)\nFailed: 0`)
   } catch (e) {

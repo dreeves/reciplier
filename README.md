@@ -708,20 +708,6 @@ question mark but no error is displayed.
   - https://sheeq.replit.app (eg, the [sugar calculator](https://sheeq.replit.app/?eq=%28Calories_per_gram_of_sugar%2520*%2520%250AGrams_of_sugar_per_serving_in_healthy_stuff%2520*%2520%250AGrams_of_healthy_stuff%2520%252F%2520%250AGrams_per_serving_in_healthy_stuff%2520%252B%2520%250ACalories_per_gram_of_brown_sugar%2520*%2520%250AGrams_of_brown_sugar_to_add%2520%29%2520%252F%2520%28%250ACalories_per_serving_in_healthy_stuff%2520*%2520%250AGrams_of_healthy_stuff%2520%252F%2520%250AGrams_per_serving_in_healthy_stuff%2520%252B%2520%250ACalories_per_gram_of_brown_sugar%2520*%2520%250AGrams_of_brown_sugar_to_add%2520%29%2520%250A%253D%253D%2520%250ACalories_per_gram_of_sugar%2520*%2520%250AGrams_of_sugar_per_serving_in_junk_food%2520%252F%2520%250ACalories_per_serving_in_junk_food&vars=%257B%2522Calories_per_gram_of_sugar%2522%253A3.87%252C%2522Grams_of_sugar_per_serving_in_healthy_stuff%2522%253A5%252C%2522Grams_of_healthy_stuff%2522%253A233.5%252C%2522Grams_per_serving_in_healthy_stuff%2522%253A170%252C%2522Calories_per_gram_of_brown_sugar%2522%253A3.8%252C%2522Grams_of_brown_sugar_to_add%2522%253A46.10019431698941%252C%2522Calories_per_serving_in_healthy_stuff%2522%253A120%252C%2522Grams_of_sugar_per_serving_in_junk_food%2522%253A23%252C%2522Calories_per_serving_in_junk_food%2522%253A150%257D&infer=Grams_of_brown_sugar_to_add) or [pounds vs kilograms](https://sheeq.replit.app/?eq=pounds%2520%253D%2520kilograms%2520%252F%25200.45359237&vars=%257B%2522p%2522%253A0%252C%2522po%2522%253A0%252C%2522pou%2522%253A0%252C%2522poun%2522%253A0%252C%2522pound%2522%253A0%252C%2522pounds%2522%253A154.3235835294143%252C%2522k%2522%253A0%252C%2522ki%2522%253A0%252C%2522kil%2522%253A0%252C%2522kilo%2522%253A0%252C%2522kilob%2522%253A0%252C%2522kilog%2522%253A0%252C%2522kilogr%2522%253A0%252C%2522kilogra%2522%253A0%252C%2522kilogram%2522%253A0%252C%2522kilograms%2522%253A70%257D&infer=pounds))
   - [Ride Speed Calculator](https://docs.google.com/spreadsheets/d/1LQUDFSLpxtOojcSSLMFWPyRS70eCP59TQHppnu14Px0/edit?gid=0#gid=0)
 
-* [DEV] This doesn't matter in prod but is annoying in dev: From the browser
-console:
-GET file:///assets/favicon-32x32.png net::ERR_FILE_NOT_FOUND
-GET file:///assets/favicon-16x16.png net::ERR_FILE_NOT_FOUND
-
-* [PUR] Crap something broke at some point. We need to do a complete reset when
-the reciplate changes. Let's add quals about this and then fix it. (I know I
-haven't described the bug; it involves broken sliders and stuff when switching
-between reciplates. If we always have a clean slate whenever the reciplate
-changes -- like rerender and reparse everything from scratch -- then that should
-eliminate all such bugs.) Note: not just changing reciplates with the dropdown.
-Any keystroke typed in the reciplate should trigger wiping everything and
-redoing it from scratch.
-
 * [COL] For sharing recipes, we might want to present a clean interface. I'm
 thinking that the template textarea should be collapsible and the collapsed/
 expanded state should be encoded in the URL. So if you share, for example, 
@@ -759,6 +745,9 @@ can see that you've formatted cells correctly, etc.
 
 * [ADV] Idea for advanced syntax: a way to specify that a field starts in focus
 when the reciplate is rendered.
+
+* [PYZ] Play with the pyzza replicate in the UI and watch the browser console to
+see if we can still make it generate spurious solver failures.
 
 
 ## Half-baked ideas for cell syntax: JSON objects with syntactic sugar
@@ -931,3 +920,15 @@ idea 2: those fields are just blank. if the user types, say, 12, into the cell f
 
 are there other ideas besides those? which is best?
 
+---
+
+the amount of anti-magic violations and anti-postel violations still in this codebase is depressing. can you take another pass, replacing any fallbacks with asserts, and adding lots of quals?
+
+also, new bug report: if i go to the pyzza reciplate and clear out the a field, i see this in the browser console:
+
+Uncaught Error: solvem: variable "a" required by equations but missing from init
+solvem @ csolver.js:1374
+solveAndApply @ reciplogic.js:495
+handleFieldInput @ reciplui.js:386
+
+is that a regression? what are we doing wrong that quals aren't already catching such things? please go crazy with adding quals.

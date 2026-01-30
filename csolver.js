@@ -1337,17 +1337,21 @@ function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
     }
   }
 
-  // Seed MISSING variables from bounds.
-  // Variables in init (even with null) are passed through - null means "unknown, solve for this".
-  // Only truly missing variables (not in init at all) get seeded here.
-  // Also seed vars that have bounds but aren't in equations (e.g., bounds-only cells).
+  // Handle missing variables in init.
+  // TODO: the following still sounds like too many if-statements:
+  // If init is empty: seed all required vars from bounds (initial load case).
+  // If init is non-empty: vars FROM EQUATIONS must be present (anti-robustness).
+  // Bounds-only vars (not in equations) can always be seeded.
   const seededInit = { ...init }
   const computedKnownVars = knownVars ? new Set(knownVars) : new Set()
-  const required = requiredVars(eqns)
+  const eqnVars = requiredVars(eqns)
 
   // Include vars with bounds that might not be in equations
   const allBoundedVars = new Set([...Object.keys(infimum), ...Object.keys(supremum)])
+  const required = new Set(eqnVars)
   for (const v of allBoundedVars) required.add(v)
+
+  const initIsEmpty = Object.keys(init).length === 0
 
   for (const v of required) {
     const inInit = Object.prototype.hasOwnProperty.call(seededInit, v)
@@ -1356,6 +1360,7 @@ function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
     const lo = infimum[v], hi = supremum[v]
     const hasLo = isFiniteNum(lo)
     const hasHi = isFiniteNum(hi)
+    const isFromEqns = eqnVars.has(v)
 
     if (hasVal) {
       // Clamp provided value to bounds
@@ -1363,7 +1368,12 @@ function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
       const maxBound = hasHi ? hi : val
       seededInit[v] = Math.min(maxBound, Math.max(minBound, val))
     } else if (!inInit) {
-      // Variable is truly missing - seed from bounds or default to 1
+      // Variable is truly missing from init
+      if (!initIsEmpty && isFromEqns) {
+        // Anti-robustness: vars from equations must be provided
+        throw new Error(`solvem: variable "${v}" required by equations but missing from init`)
+      }
+      // Seed from bounds or default to 1
       if (hasLo && hasHi) {
         seededInit[v] = (lo + hi) / 2
         if (!knownVars) computedKnownVars.add(v)
