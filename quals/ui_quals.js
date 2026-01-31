@@ -486,6 +486,13 @@ async function main() {
     const crepesSliderCount = await page.$$eval('input.recipe-slider', els => els.length)
     assert.equal(crepesSliderCount, 1, 'crepes should have one inline slider')
 
+    // Qual: pancakes x defaults to midpoint of bounds when no initial value given
+    // pancakes has {x} with no ": 1" and bounds {.1 <= x <= 10}, so x = (0.1 + 10) / 2 = 5.05
+    await page.select('#recipeSelect', 'pancakes')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const pancakesXValue = await getInputValue(page, 'input.recipe-field[data-label="x"]')
+    assert.ok(Math.abs(parseFloat(pancakesXValue) - 5.05) < 0.01, `pancakes x should default to ~5.05 (midpoint of bounds), got ${pancakesXValue}`)
+
     // Qual: Editing derived field should solve for underlying variable
     // Bug report: Load crepes, change eggs from 12 to 24, expect x=2 and all fields double
     await page.select('#recipeSelect', 'blank')
@@ -1474,6 +1481,46 @@ async function main() {
     const bareErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
     assert.ok((bareErrors || []).some(e => /bare number/i.test(e)))
 
+    // Qual: empty cell is an error [BOZ]
+    const emptyCellTemplate = '{} {x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, emptyCellTemplate)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const emptyErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.ok((emptyErrors || []).some(e => /is empty/i.test(e)), 'Empty cell should produce error')
+
+    // Qual: division by zero (Infinity) is an error [BOZ]
+    const divByZero = '{1/0} {x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, divByZero)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const infErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.ok((infErrors || []).some(e => /evaluates to Infinity/i.test(e)), '1/0 should show "evaluates to Infinity"')
+
+    // Qual: 0/0 (NaN) is an error [BOZ]
+    const zeroOverZero = '{0/0} {x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, zeroOverZero)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const nanErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.ok((nanErrors || []).some(e => /evaluates to NaN/i.test(e)), '0/0 should show "evaluates to NaN"')
+
+    // Qual: -1/0 (negative Infinity) is an error [BOZ]
+    const negDivByZero = '{-1/0} {x}'
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, negDivByZero)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const negInfErrors = await page.evaluate(() => (typeof state !== 'undefined' && Array.isArray(state.errors)) ? state.errors : null)
+    assert.ok((negInfErrors || []).some(e => /evaluates to -Infinity/i.test(e)), '-1/0 should show "evaluates to -Infinity"')
+
     // Qual: multiple constants in one cell is an error
     const multiConst = '{x = 1 = 2}'
     await page.$eval('#recipeTextarea', (el, v) => {
@@ -1534,7 +1581,7 @@ async function main() {
     const unclosedError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
     assert.ok(/unclosed brace/i.test(unclosedError), 'Unclosed brace should produce error')
 
-    // Qual: unclosed parenthesis in expression should show syntax error
+    // Qual: unclosed parenthesis in expression should show error
     const unclosedParen = 'Test {12(}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
@@ -1542,9 +1589,9 @@ async function main() {
     }, unclosedParen)
     await page.waitForSelector('.error-display:not([hidden])', { visible: true })
     const unclosedParenError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
-    assert.ok(/syntax error/i.test(unclosedParenError), 'Unclosed parenthesis in expression should produce syntax error')
+    assert.ok(/Error in.*12\(/i.test(unclosedParenError), 'Unclosed parenthesis in expression should produce error')
 
-    // Qual: invalid expression {2x + (3} should show syntax error
+    // Qual: invalid expression {2x + (3} should show error
     const invalidExpr = 'Test {2x + (3}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
@@ -1552,9 +1599,9 @@ async function main() {
     }, invalidExpr)
     await page.waitForSelector('.error-display:not([hidden])', { visible: true })
     const invalidExprError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
-    assert.ok(/syntax error/i.test(invalidExprError), 'Invalid expression with unclosed paren should produce syntax error')
+    assert.ok(/Error in/i.test(invalidExprError), 'Invalid expression with unclosed paren should produce error')
 
-    // Qual: extra closing paren should show syntax error
+    // Qual: extra closing paren should show error
     const extraClose = 'Test {x + 1)}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
@@ -1562,9 +1609,9 @@ async function main() {
     }, extraClose)
     await page.waitForSelector('.error-display:not([hidden])', { visible: true })
     const extraCloseError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
-    assert.ok(/syntax error/i.test(extraCloseError), 'Extra closing paren should produce syntax error')
+    assert.ok(/Error in/i.test(extraCloseError), 'Extra closing paren should produce error')
 
-    // Qual: dangling operator should show syntax error
+    // Qual: dangling operator should show error
     const danglingOp = 'Test {x +}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
@@ -1572,9 +1619,9 @@ async function main() {
     }, danglingOp)
     await page.waitForSelector('.error-display:not([hidden])', { visible: true })
     const danglingOpError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
-    assert.ok(/syntax error/i.test(danglingOpError), 'Dangling operator should produce syntax error')
+    assert.ok(/Error in/i.test(danglingOpError), 'Dangling operator should produce error')
 
-    // Qual: double operator should show syntax error
+    // Qual: double operator should show error
     const doubleOp = 'Test {x + * y}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
@@ -1582,9 +1629,9 @@ async function main() {
     }, doubleOp)
     await page.waitForSelector('.error-display:not([hidden])', { visible: true })
     const doubleOpError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
-    assert.ok(/syntax error/i.test(doubleOpError), 'Double operator should produce syntax error')
+    assert.ok(/Error in/i.test(doubleOpError), 'Double operator should produce error')
 
-    // Qual: mismatched brackets should show syntax error
+    // Qual: mismatched brackets should show error
     const mismatchedBrackets = 'Test {x + (1]}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
@@ -1592,18 +1639,19 @@ async function main() {
     }, mismatchedBrackets)
     await page.waitForSelector('.error-display:not([hidden])', { visible: true })
     const mismatchedError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
-    assert.ok(/syntax error/i.test(mismatchedError), 'Mismatched brackets should produce syntax error')
+    assert.ok(/Error in/i.test(mismatchedError), 'Mismatched brackets should produce error')
 
-    // Qual: empty cell {} should render without crashing
-    const emptyCell = 'Test {}'
+    // Qual: empty cell {} should show "is empty" error (not crash)
+    const emptyCellSyntax = 'Test {}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
-    }, emptyCell)
-    await page.waitForSelector('#recipeOutput', { visible: true })
-    // Empty cell should not crash - just verify we got here without error
+    }, emptyCellSyntax)
+    await page.waitForSelector('.error-display:not([hidden])', { visible: true })
+    const emptyCellError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
+    assert.ok(/is empty/i.test(emptyCellError), 'Empty cell should show "is empty" error')
 
-    // Qual: unicode variable name should show syntax error
+    // Qual: unicode variable name should show error
     const unicodeVar = '{π = 3.14} {π}'
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
@@ -1611,7 +1659,7 @@ async function main() {
     }, unicodeVar)
     await page.waitForSelector('.error-display:not([hidden])', { visible: true })
     const unicodeError = await page.$eval('.error-display:not([hidden])', el => el.textContent || '')
-    assert.ok(/syntax error/i.test(unicodeError), 'Unicode variable should produce syntax error')
+    assert.ok(/Error in/i.test(unicodeError), 'Unicode variable should produce error')
 
     // Qual: unreferenced variable shows error (Error Case 4)
     const unreferencedVar = '{6.28 = tau}'

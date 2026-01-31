@@ -69,7 +69,11 @@ function vareval(expr, vars) {
     const result = fn(unixtime)
     return { value: result, error: null }
   } catch (e) {
-    return { value: null, error: e.message }
+    // TODO: this smells. could we fix this by using normal eval?
+    // SyntaxErrors reference our wrapper code (e.g., the ')' in "return (expr);"),
+    // so show a generic message. Other errors (ReferenceError, etc.) are useful.
+    const msg = e instanceof SyntaxError ? "Invalid expression" : e.message
+    return { value: null, error: msg }
   }
 }
 

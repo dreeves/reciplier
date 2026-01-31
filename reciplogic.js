@@ -87,6 +87,8 @@ function symtab(cells) {
     if (cell.ceqn.length === 0 && cell.cval !== null) errors.push(
       `Cell {${cell.urtext}} is a bare number ` +
       `which doesn't make sense to put in a cell`)
+    if (cell.ceqn.length === 0 && cell.cval === null) errors.push(
+      `Cell {${cell.urtext}} is empty`)
 
     const cellVars = new Set()
     for (const expr of cell.ceqn) {
@@ -103,8 +105,13 @@ function symtab(cells) {
       const testVars = {}
       for (const v of exprVars) testVars[v] = 1
       const testResult = vareval(expr, testVars)
+      // For expressions with variables, only check for syntax errors (vareval.error).
+      // For constant expressions (no variables), also check for non-finite results like 1/0.
+      const isConstant = exprVars.size === 0
       if (testResult.error) {
-        errors.push(`Syntax error in {${cell.urtext}}`)
+        errors.push(`Error in {${cell.urtext}}: ${testResult.error}`)
+      } else if (isConstant && !isFiniteNumber(testResult.value)) {
+        errors.push(`{${cell.urtext}} evaluates to ${testResult.value}`)
       }
     }
 

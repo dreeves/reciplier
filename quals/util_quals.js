@@ -40,6 +40,9 @@ function makeContext() {
     NaN,
     Infinity,
     undefined,
+    SyntaxError,
+    ReferenceError,
+    Error,
   }
   return vm.createContext(ctx)
 }
@@ -250,6 +253,19 @@ function runUtilQuals() {
   // Error handling
   check('vareval: syntax error has error', vareval('2+', {}).error !== null, true)
   check('vareval: undefined identifier has error', vareval('unknownVar', {}).error !== null, true)
+
+  // Error message quality: SyntaxErrors become "Invalid expression" (JS errors
+  // reference our wrapper code). ReferenceErrors keep the useful message.
+  check('vareval: 1+ gives clean error', vareval('1+', {}).error, 'Invalid expression')
+  check('vareval: +1 works fine', vareval('+1', {}).value, 1)
+  check('vareval: 1++ gives clean error', vareval('1++', {}).error, 'Invalid expression')
+  check('vareval: ++1 gives clean error', vareval('++1', {}).error, 'Invalid expression')
+  check('vareval: unclosed paren gives clean error', vareval('(1+2', {}).error, 'Invalid expression')
+  // Errors with relevant tokens should still show the JS message
+  check('vareval: undefined var shows var name',
+    vareval('unknownVar', {}).error.includes('unknownVar'), true)
+  check('vareval: x not defined when missing',
+    vareval('x + 1', {}).error.includes('x'), true)
 
   // Leading zeros (deoctalize integration)
   check('vareval: leading zero 010', vareval('010', {}).value, 10)

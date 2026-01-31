@@ -593,8 +593,7 @@ Also, as the user edits fields, append the cvals to the URL as well, like
 
 * [ARI] Support arithmetic in the fields, not just the template.
 
-* [GAU] It shouldn't be hard to add a Gaussian elimination solver to the kitchen
-sink in csolver.js, why not.
+* [GAU] Mention the solvers we're using: Gauss-Jordan and Newton-Raphson.
 
 * [ISL] Render sliders iff the urtext of the cell has inequality bounds. And
 render those sliders not at the top but just inline, the same way we currently
@@ -602,10 +601,6 @@ render a text field, we render sliders right in place. This means throwing away
 the slider excerpts and the close buttons. Remember to think in terms of
 death-to-if-statements. We want to elegantly generalize what's currently done
 with text fields to include other UI elements, in this case sliders.
-
-* [NOQ] If we have a reciplate with two cells, {2x} and {3x}, and no constraints
-or initial values, currently both fields are shown in red with a question mark
-in them. I think instead they should just be blank.
 
 
 ## Future Work
@@ -615,6 +610,8 @@ effect and generates no error or warning. This seems wrong but we should only
 fix it by simplifying and generalizing the code, not adding an if-statement.
 Similarly, a cell like {1/0} behaves the same as an empty cell so that's
 presumably a blatant anti-postel violation.
+PS: Now it's saying "Syntax error in {1/0}" which isn't right.
+Probably we should just echo the Javascript error.
 
 * [CRT] Crowdsource templates. If the template text area doesn't match one of
 the existing reciplates (the dropdown shows "Custom Template" in this case) then
@@ -938,3 +935,72 @@ solveAndApply @ reciplogic.js:495
 handleFieldInput @ reciplui.js:386
 
 is that a regression? what are we doing wrong that quals aren't already catching such things? please go crazy with adding quals.
+
+
+---
+
+CODEBUFF:
+
+Most Egregious: Predict-vs-Verify Anti-patterns in Solvers
+1. gaussJordan's  hasUnknowns  check (csolver.js ~line 410):
+// javascript
+const hasUnknowns = varNames.some(v => !isFiniteNum(vars[v]))
+if (hasUnknowns) {
+  return { ass: { ...vars }, zij: zidge(eqns, vars), sat: false }
+}
+This predicts "if there are unknowns, Gauss-Jordan won't work" and bails. The AGENTS.md scratchpad explicitly describes this as wrong: "Instead of predicting 'underdetermined systems won't work, bail early', we just check if the values satisfy the equations."
+2. newtRaphson's  potentiallyUnderdetermined  check (csolver.js ~line 1199):
+// javascript
+const potentiallyUnderdetermined = constraints.length <= allSolveVars.length + 1
+if (potentiallyUnderdetermined && knownVars && knownVars.size > 0) {
+  return { ass: values, zij: zidge(eqns, values), sat: false }
+}
+Same pattern - predicting failure rather than trying and verifying.
+3. newtRaphson's zero-value bailout (csolver.js ~line 1271):
+// javascript
+if (test[v] === null || test[v] === undefined || !isFinite(test[v]) || test[v] === 0) {
+  return { ass: values, zij: zidge(eqns, values), sat: false }
+}
+Anti-Postel Violations (Silent Fallbacks Instead of Asserts)
+1. toNum (reciplogic.js) - Returns null on non-string input. Should probably throw.
+2. vareval (matheval.js) - Catches all errors and returns  {value: null, error: message} . Is swallowing errors appropriate here?
+3. Many  return null  patterns in solveFor - These silently give up rather than failing loudly.
+If-Statement Heavy Areas That Could Be Simplified
+1. reciplui.js attachPegTrigger - Long chain of  if (TRIGGER_MODES.has(...))  could be data-driven.
+2. reciplogic.js symtab error generation - Series of  if (cell.colonError === 'multi') ,  if (cell.colonError === 'rhs') , etc.
+3. The entirety of kludgeOrama - Called "an abomination" in comments. Heavy conditional logic.
+Recommended Fixes (In Priority Order)
+1. Remove predict-bail patterns in solvers: Let each solver try to find a solution and just check  sat  at the end. solvem already loops through SOLVERS and takes the first one that returns  sat=true .
+2. Replace  return null  fallbacks with assertions where the input violates the function's contract.
+3. Unify tolerance constants - There are multiple ( TOL_TIGHT ,  TOL_MEDIUM ,  TOL_ABS ) used inconsistently.
+4. Make trigger modes data-driven instead of if-chains.
+The core insight: The solvers should just try and return their best attempt with an honest  sat  value. Let solvem handle fallback to the next solver. No pre-screening needed.
+
+
+Plan: Bring Codebase in Line with AGENTS.md Principles
+Overview
+The codebase has several areas that violate the Anti-Magic (minimize if-statements), Anti-Postel (fail loudly), and "Predict vs Verify" principles outlined in AGENTS.md. The most impactful improvements focus on the constraint solvers.
+Key Violations to Address
+1. Predict-vs-Verify Anti-patterns in Solvers (High Priority)
+- gaussJordan  hasUnknowns  check (csolver.js ~line 410): Predicts "if there are unknowns, bail early" instead of just trying and checking if the result satisfies the equations.
+- newtRaphson  potentiallyUnderdetermined  check (csolver.js ~line 1199): Same pattern - predicting failure rather than attempting and verifying.
+- newtRaphson zero-value bailout (csolver.js ~line 1271): Predicts Newton won't work with zeros instead of trying.
+Fix: Let each solver attempt to find a solution unconditionally, then check  sat . The solvem loop already handles fallback to the next solver.
+2. Anti-Postel Violations (Silent Fallbacks)
+- Many  return null  patterns in  solveFor  that silently give up
+-  toNum  returns null on non-string input instead of throwing
+- Various places where invalid inputs are silently "handled" instead of crashing
+Fix: Replace silent fallbacks with asserts/throws where the contract is violated.
+3. If-Statement Heavy Code That Could Be Simplified
+-  reciplui.js attachPegTrigger : Long chain of  if (TRIGGER_MODES.has(...))  could be data-driven
+-  reciplogic.js symtab : Series of  if (cell.colonError === ...)  checks
+-  kludgeOrama : Self-described "abomination" with heavy conditional logic
+4. Missing Quals
+- The README mentions a bug where clearing a field throws an error instead of being caught by quals
+- Need more quals covering edge cases like empty fields, undefined variables, etc.
+Relevant Files
+-  csolver.js  - Primary target for predict-vs-verify fixes
+-  reciplogic.js  - Anti-Postel fixes and if-statement reduction
+-  reciplui.js  - Data-driven trigger mode handling
+-  matheval.js  - Input validation
+-  quals/solver_quals.js  - Add more edge-case quals
