@@ -605,6 +605,11 @@ with text fields to include other UI elements, in this case sliders.
 
 ## Future Work
 
+BUG REPORT:
+Replicata: Cell: {2 < x < 1}
+Expectata: "⚠️ Error in {2 < x < 1}: impossible bounds"
+Resultata: "⚠️ Inequalities must start and end with a constant"
+
 * [INC] Weird inconsistency that we should fix iff we can do so by simplifying
 and DRYing the code: A cell like {(} or {7+} in the reciplate yields an error,
 "Error in {7+}: Invalid expression" (I think "Syntax error" or echoing the

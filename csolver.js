@@ -762,7 +762,7 @@ function rootSearch(eqns, values, constrained, tol, inf, sup) {
     if (count < 2) continue
 
     let lo = 0.001, hi = 1000
-    for (let iter = 0; iter < 50; iter++) {
+    for (let iter = 0; iter < MAX_ROOT_SEARCH_ITER; iter++) {
       const mid = (lo + hi) / 2
       const { test: testValues, residual } = propagateResidual(mid, root, values, definedBy, copies, eqns, constrained)
 
@@ -912,7 +912,7 @@ function kludgeOrama(eqns, vars, inf, sup) {
       if (!isValidResult(r) || r.value === null) continue
       const allTrustworthy = [...vars].every(v => trustworthy.has(v))
       const trustworthyCount = [...vars].filter(v => trustworthy.has(v)).length
-      const score = (allTrustworthy ? 1000 : 0) + trustworthyCount
+      const score = (allTrustworthy ? TRUST_WEIGHT : 0) + trustworthyCount
       if (score > bestStableScore) {
         bestStableScore = score
         bestStable = { value: r.value, isTrustworthy: allTrustworthy, isStable: true, stableNonSingleton: (eqn.length === 2) ? true : hasNonSingletonStable }
@@ -939,7 +939,7 @@ function kludgeOrama(eqns, vars, inf, sup) {
       }
     }
     if (eqn.some(e => typeof e === 'string' && isbarevar(e))) {
-      return { value: 1, isTrustworthy: false, isStable: false, stableNonSingleton: false }
+      return { value: DEFAULT_SEED_VALUE, isTrustworthy: false, isStable: false, stableNonSingleton: false }
     }
     return null
   }

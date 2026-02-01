@@ -3515,6 +3515,31 @@ function runAllSolverQuals(ctx) {
     check('solvem: tight tolerance value', Math.abs(rep.ass.x - 1.0000001) < 1e-6, true)
   })()
 
+  // Protective quals for TOL_NEAR_ZERO edge cases (Phase 3.2)
+  // These verify tolerance-based zero checks prevent NaN/crashes
+  ;(() => {
+    // Test homogeneous expression with reasonable starting point
+    const rep1 = solvem([['x*x', '4']], { x: 0.1 })
+    check('solvem: homogeneous scaling from 0.1 (sat)', rep1.sat, true)
+    check('solvem: homogeneous scaling reaches target', Math.abs(rep1.ass.x - 2) < 1e-6, true)
+
+    // Test homogeneous expression with small target value
+    const rep2 = solvem([['x*x', 1e-8]], { x: 1 })
+    check('solvem: small target (sat)', rep2.sat, true)
+    check('solvem: small target scales down', Math.abs(rep2.ass.x - 1e-4) < 1e-5, true)
+
+    // Test that very small ratio doesn't cause NaN or crash
+    const rep3 = solvem([['x*x*x', 1e-20]], { x: 100 })
+    check('solvem: very small ratio (sat)', rep3.sat, true)
+    check('solvem: very small ratio result is finite', Number.isFinite(rep3.ass.x), true)
+    check('solvem: very small ratio gives small value', Math.abs(rep3.ass.x) < 1e-6, true)
+
+    // Test that exact zero in expression doesn't crash
+    const rep4 = solvem([['x', '5'], ['y', '0']], { x: 1, y: 1 })
+    check('solvem: zero constant (sat)', rep4.sat, true)
+    check('solvem: zero constant y=0', rep4.ass.y, 0, 1e-9)
+  })()
+
   console.log('\n=== Summary ===')
   console.log(`${results.passed} passed, ${results.failed} failed`)
   if (results.failed > 0) {

@@ -331,6 +331,14 @@ function runParserQuals() {
   check('parseCell: scientific notation',
     parseCell(makeCell('x = 1e-5')).cval, 1e-5)
 
+  // Protective quals for "is empty" fix
+  check('parseCell: impossible inequality (10 < x < 10) sets ineqError',
+    parseCell(makeCell('10 < x < 10')).ineqError, true)
+  check('parseCell: impossible inequality has empty ceqn',
+    parseCell(makeCell('10 < x < 10')).ceqn, [])
+  check('parseCell: impossible inequality has null cval',
+    parseCell(makeCell('10 < x < 10')).cval, null)
+
   // ==========================================================================
   // Summary
   // ==========================================================================
