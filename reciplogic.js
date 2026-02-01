@@ -3,7 +3,9 @@
 // =============================================================================
 
 function toNum(x) { 
-  if (typeof x !== 'string') return null
+  if (typeof x !== 'string') {
+    throw new Error(`toNum: expected string, got ${typeof x}`)
+  }
   const s = x.trim()
   if (s === '') return null
 

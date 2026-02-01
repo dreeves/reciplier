@@ -434,9 +434,27 @@ function runUtilQuals() {
   check('toNum: expression', toNum('1+2'), null)
   check('toNum: Infinity string', toNum('Infinity'), null)
   check('toNum: NaN string', toNum('NaN'), null)
-  check('toNum: non-string null', toNum(null), null)
-  check('toNum: non-string number', toNum(42), null)
-  check('toNum: non-string object', toNum({}), null)
+  // Anti-Postel: toNum throws on non-string input (programming bug, not user error)
+  ;(() => {
+    let threw = false
+    try { toNum(null) } catch (e) { threw = e.message.includes('expected string') }
+    check('toNum: non-string null throws', threw, true)
+  })()
+  ;(() => {
+    let threw = false
+    try { toNum(42) } catch (e) { threw = e.message.includes('expected string') }
+    check('toNum: non-string number throws', threw, true)
+  })()
+  ;(() => {
+    let threw = false
+    try { toNum({}) } catch (e) { threw = e.message.includes('expected string') }
+    check('toNum: non-string object throws', threw, true)
+  })()
+  ;(() => {
+    let threw = false
+    try { toNum(undefined) } catch (e) { threw = e.message.includes('expected string') }
+    check('toNum: non-string undefined throws', threw, true)
+  })()
 
   // ==========================================================================
   // formatNum quals (from reciplogic.js)

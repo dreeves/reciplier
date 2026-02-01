@@ -63,14 +63,14 @@ The gaussJordan fix is a good example: the old code said "if underdetermined, re
   - Result: 957/957 quals passing (up from 826)
 
 ### Anti-Postel Violations (Silent Fallbacks)
-- [ ] **toNum in reciplogic.js** (lines 6, 8, 11): Returns null on invalid input instead of throwing
-- [ ] **vareval error handling** in matheval.js: Catches all errors, returns {value: null, error: msg} - is this appropriate?
-- [ ] **reciplogic.js return null patterns** (lines 251, 253): Silent failures in expression parsing
+- ✅ **toNum in reciplogic.js**: Now throws on non-string input (programming bug, not user error)
+- [ ] **vareval error handling** in matheval.js: Catches all errors, returns {value: null, error: msg} - this is a proper Result type pattern, not a violation
+- [ ] **reciplogic.js return null patterns** (lines 251, 253): Silent failures in expression parsing - may be legitimate "not found" returns
 
 ### If-Statement Heavy Areas
-- [ ] **reciplui.js attachPegTrigger**: Long chain of trigger mode conditionals - could be data-driven
-- [ ] **reciplogic.js symtab error generation**: Series of `if (cell.colonError === ...)` checks
-- [ ] **solvem seeding logic** (csolver.js lines 1336-1368): Many conditionals for handling init/bounds - needs careful analysis
+- ✅ **reciplui.js attachPegTrigger**: Refactored to data-driven dispatch tables (EVENT_TRIGGERS, VISUAL_TRIGGERS)
+- ✅ **reciplogic.js symtab error generation**: Refactored to COLON_ERROR_MESSAGES lookup table
+- [ ] **solvem seeding logic** (csolver.js lines 1336-1368): Legitimate complexity handling two distinct modes - leave as-is
 
 ### Missing Quals / Test Coverage
 - [ ] Edge cases like empty fields, undefined variables
