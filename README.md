@@ -605,13 +605,12 @@ with text fields to include other UI elements, in this case sliders.
 
 ## Future Work
 
-* [BOZ] Putting an empty cell {} in the template generates a field that has no
-effect and generates no error or warning. This seems wrong but we should only
-fix it by simplifying and generalizing the code, not adding an if-statement.
-Similarly, a cell like {1/0} behaves the same as an empty cell so that's
-presumably a blatant anti-postel violation.
-PS: Now it's saying "Syntax error in {1/0}" which isn't right.
-Probably we should just echo the Javascript error.
+* [INC] Weird inconsistency that we should fix iff we can do so by simplifying
+and DRYing the code: A cell like {(} or {7+} in the reciplate yields an error,
+"Error in {7+}: Invalid expression" (I think "Syntax error" or echoing the
+Javascript error would be better but the latter means changing how we do evals
+so set that aside) whereas the same invalid syntax in a field yields "Syntax
+error".
 
 * [CRT] Crowdsource templates. If the template text area doesn't match one of
 the existing reciplates (the dropdown shows "Custom Template" in this case) then

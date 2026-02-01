@@ -44,7 +44,7 @@ var {
 
 // Tolerance constants for floating-point comparison
 const TOL_TIGHT = 1e-9   // For solveFor binary search convergence
-const TOL_MEDIUM = 1e-6  // For equation satisfaction checks
+const TOL_MEDIUM = 1e-9  // For equation satisfaction checks
 const TOL_ABS = 1e-12    // Absolute tolerance floor
 
 // Helper: check if value is a finite number (DRY - used throughout solver)
@@ -358,22 +358,15 @@ function linearCoeffs(expr, varNames, baseValues) {
   return { coeffs, constant: f0.value }
 }
 
-function gaussJordan(eqns, vars, inf, sup, knownVars = null) {
+function gaussJordan(eqns, vars, inf, sup) {
   const varNames = Object.keys(vars).sort()
   if (varNames.length === 0) {
     return { ass: { ...vars }, zij: zidge(eqns, vars), sat: eqnsSatisfied(eqns, vars) }
   }
   
-  // gaussJordan only handles fully determined linear systems.
-  // For underconstrained systems, fall through to kludgeOrama which has
-  // heuristics for choosing among infinitely many solutions.
-  
-  // If any variables are null/undefined/NaN, let kludgeOrama handle it with its heuristics
-  const hasUnknowns = varNames.some(v => !isFiniteNum(vars[v]))
-  if (hasUnknowns) {
-    return { ass: { ...vars }, zij: zidge(eqns, vars), sat: false }
-  }
-  
+  // gaussJordan handles fully determined linear systems.
+  // Just try to solve - if it fails, return sat=false and let solvem try the next solver.
+
   // Build linear system from equations
   // Each equation [a, b, c, ...] means a = b = c = ...
   // Convert to constraints: a - b = 0, b - c = 0, etc.
@@ -764,7 +757,7 @@ function rootSearch(eqns, values, constrained, tol, inf, sup) {
   }
 }
 
-function kludgeOrama(eqns, vars, inf, sup, knownVars = null) {
+function kludgeOrama(eqns, vars, inf, sup) {
   // solvem now ensures all required variables are seeded before calling solvers
   const values = { ...vars }
   const tol = TOL_MEDIUM
@@ -799,15 +792,8 @@ function kludgeOrama(eqns, vars, inf, sup, knownVars = null) {
 
   const stableDerived = new Set()
 
-  // Start with constrained vars as trustworthy, plus any known vars from seeds.
-  // Only add knownVars that are NOT already constrained by literals.
-  // Variables constrained by literals are already protected; others should preserve init values.
+  // Start with constrained vars as trustworthy
   const trustworthy = new Set(constrained)
-  if (knownVars) {
-    for (const v of knownVars) {
-      if (!constrained.has(v)) trustworthy.add(v)
-    }
-  }
   let solvedThisPass = new Set()
   let solvedFromStableThisPass = new Set()
 
@@ -1120,8 +1106,20 @@ function kludgeOrama(eqns, vars, inf, sup, knownVars = null) {
 // Newton's method to find a solution. This handles cases like w*h=A, w²+h²=z²
 // that gaussJordan can't handle and kludgeOrama solves greedily.
 
-function newtRaphson(eqns, vars, inf, sup, knownVars = null) {
+function newtRaphson(eqns, vars, inf, sup) {
   const values = { ...vars }
+
+  // Check if solution respects bounds
+  // TODO: make this a helper that any subsolver can use?
+  function respectsBounds(ass) {
+    for (const v in ass) {
+      const val = ass[v]
+      if (!isFinite(val)) continue
+      if (inf[v] !== undefined && val < inf[v] - TOL_ABS) return false
+      if (sup[v] !== undefined && val > sup[v] + TOL_ABS) return false
+    }
+    return true
+  }
 
   // Build list of constraint equations: pairs of expressions that should be equal
   // Each equation [a, b, c, ...] means a=b, b=c, etc.
@@ -1158,22 +1156,8 @@ function newtRaphson(eqns, vars, inf, sup, knownVars = null) {
   // with pegged)
   const allSolveVars = [...allVars].filter(v => !pinnedVars.has(v)).sort()
 
-  // For potentially underdetermined systems with knownVars, let kludgeOrama handle it.
-  // kludgeOrama's trustworthy mechanism preserves init values when multiple solutions exist.
-  // Use a margin of 2 to account for redundant/dependent constraints that simple counting misses.
-  // For clearly overdetermined systems, Newton is needed to find the unique solution.
-  const potentiallyUnderdetermined = constraints.length <= allSolveVars.length + 1
-  if (potentiallyUnderdetermined && knownVars && knownVars.size > 0) {
-    return { ass: values, zij: zidge(eqns, values), sat: false }
-  }
+  // Just try Newton-Raphson - if it fails, return sat=false and let solvem try the next solver.
   const solveVars = allSolveVars
-
-  // Newton is for multi-variable non-linear systems only.
-  // Single-variable problems are better handled by kludgeOrama's solveFor.
-  // Need at least 2 unknowns and at least as many constraints.
-  if (solveVars.length < 2 || constraints.length < solveVars.length) {
-    return { ass: values, zij: zidge(eqns, values), sat: false }
-  }
 
   // Evaluate residual: for each constraint, compute left - right
   function evalResiduals(testValues) {
@@ -1261,19 +1245,17 @@ function newtRaphson(eqns, vars, inf, sup, knownVars = null) {
   const MAX_ITER = 50
   const test = { ...values }
 
-  // Newton needs non-zero starting points to compute meaningful derivatives.
+  // Add small perturbation to break symmetry and avoid zeros
   for (let i = 0; i < solveVars.length; i++) {
     const v = solveVars[i]
-    if (test[v] === null || test[v] === undefined || !isFinite(test[v]) || test[v] === 0) {
-      return { ass: values, zij: zidge(eqns, values), sat: false }
-    }
-    // Add small perturbation to break symmetry (helps when Jacobian is singular at equal values)
-    test[v] = test[v] * (1 + 0.01 * (i + 1))
+    const val = test[v]
+    // If zero, use small value; otherwise perturb to break symmetry
+    test[v] = val === 0 ? 0.01 * (i + 1) : val * (1 + 0.01 * (i + 1))
   }
 
   for (let iter = 0; iter < MAX_ITER; iter++) {
-    // Check convergence
-    if (eqnsSatisfied(eqns, test)) {
+    // Check convergence - equations satisfied AND bounds respected
+    if (eqnsSatisfied(eqns, test) && respectsBounds(test)) {
       return { ass: test, zij: zidge(eqns, test), sat: true }
     }
 
@@ -1285,7 +1267,8 @@ function newtRaphson(eqns, vars, inf, sup, knownVars = null) {
     // Check if residuals are small enough
     const maxResidual = Math.max(...residuals.map(Math.abs))
     if (maxResidual < TOL_ABS) {
-      return { ass: test, zij: zidge(eqns, test), sat: eqnsSatisfied(eqns, test) }
+      const satisfied = eqnsSatisfied(eqns, test) && respectsBounds(test)
+      return { ass: test, zij: zidge(eqns, test), sat: satisfied }
     }
 
     const delta = solveLinearSystem(jacobian, residuals)
@@ -1325,9 +1308,32 @@ function newtRaphson(eqns, vars, inf, sup, knownVars = null) {
 // =============================================================================
 // solvem: Kitchen-sink solver - tries multiple solvers in sequence
 // =============================================================================
-// Try each solver in order. First one to return sat=true wins.
+// Helper: Count how many equations each variable appears in
+// =============================================================================
 
-function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
+function countEqnAppearances(eqns) {
+  const counts = {}
+  for (const eqn of eqns) {
+    const vars = new Set()
+    for (const expr of eqn) {
+      if (typeof expr === 'string') {
+        for (const v of varparse(expr)) vars.add(v)
+      }
+    }
+    for (const v of vars) {
+      counts[v] = (counts[v] || 0) + 1
+    }
+  }
+  return counts
+}
+
+// =============================================================================
+// Try each solver in order. First one to return sat=true wins.
+// Progressive relaxation: Try solving with seeds as constraints, progressively
+// removing them (ordered by fewest equations first, alphabetical for ties).
+// =============================================================================
+
+function solvem(eqns, init, infimum = {}, supremum = {}) {
   // Callers are responsible for filtering singletons before calling solvem.
   // solvem expects only constraint equations (length >= 2), like Mathematica's Solve.
   // Per anti-robustness principle: fail loudly if contract is violated.
@@ -1338,12 +1344,10 @@ function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
   }
 
   // Handle missing variables in init.
-  // TODO: the following still sounds like too many if-statements:
   // If init is empty: seed all required vars from bounds (initial load case).
   // If init is non-empty: vars FROM EQUATIONS must be present (anti-robustness).
   // Bounds-only vars (not in equations) can always be seeded.
   const seededInit = { ...init }
-  const computedKnownVars = knownVars ? new Set(knownVars) : new Set()
   const eqnVars = requiredVars(eqns)
 
   // Include vars with bounds that might not be in equations
@@ -1376,13 +1380,10 @@ function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
       // Seed from bounds or default to 1
       if (hasLo && hasHi) {
         seededInit[v] = (lo + hi) / 2
-        if (!knownVars) computedKnownVars.add(v)
       } else if (hasLo) {
         seededInit[v] = lo + 1
-        if (!knownVars) computedKnownVars.add(v)
       } else if (hasHi) {
         seededInit[v] = hi - 1
-        if (!knownVars) computedKnownVars.add(v)
       } else {
         seededInit[v] = 1
       }
@@ -1390,12 +1391,57 @@ function solvem(eqns, init, infimum = {}, supremum = {}, knownVars = null) {
     // If inInit but !hasVal (e.g., null), leave it for solvers to handle
   }
 
+  // Invariant: If seeds already satisfy equations, return them immediately
+  if (eqnsSatisfied(eqns, seededInit) && boundsSatisfied(seededInit, infimum, supremum)) {
+    return { ass: seededInit, zij: zidge(eqns, seededInit), sat: true }
+  }
+
+  // Progressive relaxation: Try with seeds as constraints, progressively removing them.
+  // Helper function to try solving with given seed constraints
+  function trySolving(seedConstraints) {
+    // Add seed constraints to equations
+    const augmentedEqns = [...eqns]
+    for (const v of seedConstraints) {
+      if (isFiniteNum(seededInit[v])) {
+        augmentedEqns.push([v, seededInit[v]])
+      }
+    }
+
+    // Try each solver with augmented equations
+    for (const solver of SOLVERS) {
+      const result = solver(augmentedEqns, seededInit, infimum, supremum)
+      if (result.sat) {
+        return result
+      }
+    }
+    return null
+  }
+
+  // Get variables that have finite seed values
+  const seededVars = Object.keys(seededInit).filter(v => isFiniteNum(seededInit[v]))
+
+  // Order seeds by: fewest equation appearances first, alphabetical for ties
+  const eqnCounts = countEqnAppearances(eqns)
+  const orderedSeeds = seededVars.sort((a, b) => {
+    const countA = eqnCounts[a] || 0
+    const countB = eqnCounts[b] || 0
+    if (countA !== countB) return countA - countB
+    return a.localeCompare(b)
+  })
+
+  // Try progressive relaxation: start with all seeds, remove one at a time
+  for (let removeCount = 0; removeCount <= orderedSeeds.length; removeCount++) {
+    const seedsToKeep = orderedSeeds.slice(removeCount)
+    const result = trySolving(seedsToKeep)
+    if (result) {
+      return result
+    }
+  }
+
+  // No satisfying assignment found, fall back to solving without seed constraints
   let bestResult = null
   for (const solver of SOLVERS) {
-    const result = solver(eqns, seededInit, infimum, supremum, computedKnownVars)
-    if (result.sat) {
-      return { ass: result.ass, zij: result.zij, sat: true }
-    }
+    const result = solver(eqns, seededInit, infimum, supremum)
     // Prefer results with actual values over results with nulls
     const hasNulls = Object.values(result.ass).some(v => v === null ||
                                                          v === undefined)
