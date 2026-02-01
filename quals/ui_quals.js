@@ -1880,7 +1880,7 @@ async function main() {
     const pyzInvalidAfterSwitch = await page.$eval('input.recipe-field[data-label="a"]', el => el.classList.contains('invalid'))
     assert.equal(pyzInvalidAfterSwitch, false, 'invalid state should reset after switching reciplates')
 
-    // Qual: ERROR1753 fires when editing a valid field while another field has invalid input
+    // Qual: Error fires when editing a valid field while another field has invalid input
     await page.select('#recipeSelect', 'pyzza')
     await page.waitForSelector('#recipeOutput', { visible: true })
     await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="a"]', 'garbage')
@@ -1892,7 +1892,8 @@ async function main() {
     await page.keyboard.press('Tab')
     await waitForNextFrame(page)
     const explainBanner = await page.$eval('#invalidExplainBanner', el => el.textContent)
-    assert.ok(explainBanner.includes('ERROR1753'), 'ERROR1753 should fire when valid edit while another field is invalid')
+    assert.ok(explainBanner.includes('Syntax error involving'), 
+      'Error should fire when valid edit while another field is invalid')
 
     // Qual: inline sliders have correct cellIds (testing with ineqtest which has inequality bounds)
     await page.select('#recipeSelect', 'ineqtest')

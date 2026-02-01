@@ -35,6 +35,20 @@ Humans above, robots below
 
 # Scratchpad / Implementation Plan
 
+## ⚠️ PRE-FLIGHT CHECKLIST (REVIEW BEFORE EVERY RESPONSE) ⚠️
+
+Before generating ANY response, tool call, or code change, ask:
+
+1. **Rule 14 - Latin Copy**: Am I generating user-facing text? If yes → USE LATIN + TODO comment
+2. **Rule 5 - Comment Preservation**: Am I touching code with comments? If yes → Preserve EXACT characters
+3. **Rule 8 - Anti-Magic**: Am I adding an if-statement? If yes → Question whether it's needed, mention to human
+4. **Rule 11 - Anti-Postel**: Am I silently handling an error? If yes → Should it throw/assert instead?
+5. **Rule 13 - Qual Protection**: Am I changing behavior? If yes → Add protective quals, never loosen existing quals
+6. **Rule 3 - Never Claim Without Trying**: Am I saying code works? If yes → Did I actually run it?
+7. **Rule 15/16 - Solve vs Patch**: Am I adding a condition? If yes → Could I remove code instead?
+
+**MANDATORY**: For ANY user-facing text (errors, labels, help), write in Latin with TODO comment.
+
 ## Better terminology for the anti-magic principle?
 
 "If-statement thinking" may not fully capture it. Some alternatives to consider:

@@ -87,13 +87,25 @@ function parseInequalities(content) {
   const supStrict = supOp === '<'
   const equalBounds = boundsOk && Math.abs(infVal - supVal) < 1e-12
   const ordered = boundsOk && (infVal < supVal || (equalBounds && !infStrict && !supStrict))
-  const invalid = attempted && (hasRight || !match || leftoverAngles || !ordered)
+
+  // Determine specific error type
+  let error = null
+  if (attempted) {
+    // TODO: ternary operator instead of if-else chain.
+    // TODO: keep it all on the same level instead of this nesting?
+    if      (hasRight)       error = 'wrong-direction'
+    else if (!match)         error = 'missing-bounds'
+    else if (leftoverAngles) error = 'extra-angles'
+    else if (!ordered && boundsOk) {
+      error = (equalBounds && (infStrict || supStrict)) ? 'equal-strict' : 'impossible'
+    }
+  }
 
   return {
     attempted,
     core: match ? middleRaw : trimmed,
-    bounds: (!attempted || invalid) ? null : { inf: infVal, sup: supVal, infStrict, supStrict },
-    error: invalid ? 'ineq' : null
+    bounds: (!attempted || error) ? null : { inf: infVal, sup: supVal, infStrict, supStrict },
+    error
   }
 }
 
@@ -150,7 +162,8 @@ function parseCell(cell) {
   const ineq = inequality.bounds && bareVars.length
     ? { ...inequality.bounds, varName: bareVars[0] }
     : null
-  const ineqError = Boolean(inequality.error || (inequality.bounds && bareVars.length === 0))
+  // Preserve specific inequality error type
+  const ineqError = inequality.error || (inequality.bounds && bareVars.length === 0 ? 'no-bare-var' : null)
   const activeParts = ineqError ? [] : parts
 
   // pegged = YN case: has constant AND no colon
@@ -171,7 +184,7 @@ function parseCell(cell) {
     ceqn,
     colonError,
     ineq: ineqError ? null : ineq,
-    ineqError: !!ineqError,
+    ineqError,  // Preserve specific error type string
     multipleNumbers,  // error flag
   }
 }

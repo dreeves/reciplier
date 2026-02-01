@@ -73,9 +73,23 @@ function symtab(cells) {
   const errors = []
   const varInfo = new Map()
 
+  // Inequality error messages lookup table
+  const INEQ_ERROR_MESSAGES = {
+    'wrong-direction': "Inequalities can only use '<' and '<='",
+    'missing-bounds': "Inequalities must have both bounds",
+    'extra-angles': "Inequalities must have exactly two bounds",
+    'equal-strict': "Inequalities with equal bounds can't be strict",
+    'impossible': "Impossible bounds",
+    'no-bare-var': "Inequalities can only have a bare variable in the middle",
+  }
+
   // First pass: collect variables and check for errors
-  if (cells.some(c => c.ineqError)) errors.push(
-    'Inequalities must start and end with a constant')
+  for (const cell of cells) {
+    if (cell.ineqError) {
+      const msg = INEQ_ERROR_MESSAGES[cell.ineqError] || 'Invalid inequality'
+      errors.push(`Error in {${cell.urtext}}: ${msg}`)
+    }
+  }
 
   for (const cell of cells) {
     if (cell.multipleNumbers) errors.push(
@@ -469,7 +483,7 @@ function explainInvalidity(invalidCellIds) {
     if (!cell) throw new Error(`explainInvalidity: no cell found for invalidInputId "${invalidInputId}"`)
     const label = cell.ceqn.length ? String(cell.ceqn[0]).trim() : '?'
     // Syntax error in a cell other than the one being edited
-    state.invalidExplainBanner = `ERROR1753: ${label} is invalid input?`
+    state.invalidExplainBanner = `Syntax error involving ${label}`
     return
   }
 

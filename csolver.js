@@ -1377,8 +1377,6 @@ function solvem(eqns, init, infimum = {}, supremum = {}) {
   const required = new Set(eqnVars)
   for (const v of allBoundedVars) required.add(v)
 
-  const initIsEmpty = Object.keys(init).length === 0
-
   for (const v of required) {
     const inInit = Object.prototype.hasOwnProperty.call(seededInit, v)
     const val = seededInit[v]
@@ -1386,7 +1384,6 @@ function solvem(eqns, init, infimum = {}, supremum = {}) {
     const lo = infimum[v], hi = supremum[v]
     const hasLo = isFiniteNum(lo)
     const hasHi = isFiniteNum(hi)
-    const isFromEqns = eqnVars.has(v)
 
     if (hasVal) {
       // Clamp provided value to bounds
@@ -1394,21 +1391,16 @@ function solvem(eqns, init, infimum = {}, supremum = {}) {
       const maxBound = hasHi ? hi : val
       seededInit[v] = Math.min(maxBound, Math.max(minBound, val))
     } else if (!inInit) {
-      // Variable is truly missing from init
-      if (!initIsEmpty && isFromEqns) {
+      // Variable is missing from init - seed with default
+      if (Object.keys(init).length !== 0 && eqnVars.has(v)) {
         // Anti-robustness: vars from equations must be provided
         throw new Error(`solvem: variable "${v}" required by equations but missing from init`)
       }
       // Seed from bounds or default to 1
-      if (hasLo && hasHi) {
-        seededInit[v] = (lo + hi) / 2
-      } else if (hasLo) {
-        seededInit[v] = lo + 1
-      } else if (hasHi) {
-        seededInit[v] = hi - 1
-      } else {
-        seededInit[v] = 1
-      }
+      if      (hasLo && hasHi) { seededInit[v] = (lo + hi) / 2 } 
+      else if (hasLo)          { seededInit[v] = lo + 1 } 
+      else if (hasHi)          { seededInit[v] = hi - 1 }
+      else                     { seededInit[v] = DEFAULT_SEED_VALUE }
     }
     // If inInit but !hasVal (e.g., null), leave it for solvers to handle
   }

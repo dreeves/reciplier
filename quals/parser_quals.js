@@ -230,17 +230,17 @@ function runParserQuals() {
 
   // Invalid inequality cases
   check('parseInequalities: wrong direction (>)',
-    parseInequalities('10 > x > 0').error, 'ineq')
+    parseInequalities('10 > x > 0').error, 'wrong-direction')
   check('parseInequalities: missing upper bound',
-    parseInequalities('0 < x').error, 'ineq')
+    parseInequalities('0 < x').error, 'missing-bounds')
   check('parseInequalities: missing lower bound',
-    parseInequalities('x < 10').error, 'ineq')
+    parseInequalities('x < 10').error, 'missing-bounds')
   check('parseInequalities: inverted bounds',
-    parseInequalities('10 < x < 0').error, 'ineq')
+    parseInequalities('10 < x < 0').error, 'impossible')
   check('parseInequalities: equal bounds with strict',
-    parseInequalities('5 < x < 5').error, 'ineq')
+    parseInequalities('5 < x < 5').error, 'equal-strict')
   check('parseInequalities: triple angle',
-    parseInequalities('0 < x < y < 10').error, 'ineq')
+    parseInequalities('0 < x < y < 10').error, 'extra-angles')
 
   // ==========================================================================
   // parseCell quals
@@ -321,7 +321,7 @@ function runParserQuals() {
   check('parseCell: multiple numbers error',
     parseCell(makeCell('5 = 6')).multipleNumbers, true)
   check('parseCell: inequality error flag',
-    parseCell(makeCell('10 > x > 0')).ineqError, true)
+    parseCell(makeCell('10 > x > 0')).ineqError, 'wrong-direction')
 
   // Edge cases
   check('parseCell: whitespace handling',
@@ -333,11 +333,17 @@ function runParserQuals() {
 
   // Protective quals for "is empty" fix
   check('parseCell: impossible inequality (10 < x < 10) sets ineqError',
-    parseCell(makeCell('10 < x < 10')).ineqError, true)
+    parseCell(makeCell('10 < x < 10')).ineqError, 'equal-strict')
   check('parseCell: impossible inequality has empty ceqn',
     parseCell(makeCell('10 < x < 10')).ceqn, [])
   check('parseCell: impossible inequality has null cval',
     parseCell(makeCell('10 < x < 10')).cval, null)
+
+  // Protective quals for specific inequality error messages (README bug report)
+  check('parseInequalities: reversed bounds (2 < x < 1)',
+    parseInequalities('2 < x < 1').error, 'impossible')
+  check('parseCell: reversed bounds gets impossible error',
+    parseCell(makeCell('2 < x < 1')).ineqError, 'impossible')
 
   // ==========================================================================
   // Summary
