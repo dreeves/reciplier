@@ -2246,11 +2246,11 @@ async function main() {
     await xFieldDep.evaluate(e => e.blur())
     await waitForNextFrame(page)
 
-    // 2x should now be blank (not showing old value 10)
+    // 2x should now be 0 (blank means zero, like Excel)
     const twoXAfterClear = await getInputValue(page, 'input.recipe-field[data-label="2x"]')
-    assert.equal(twoXAfterClear, '', 'Dependent field 2x should go blank when x is cleared')
+    assert.equal(twoXAfterClear, '0', 'Dependent field 2x should show 0 when x is cleared (blank = 0)')
 
-    // Qual: clearing a value from a longer chain should blank all dependents
+    // Qual: clearing a value from a longer chain makes dependents evaluate to 0
     // Template: {a} {2a} {4a} - type 3 in a, then clear a
     const chainTemplate = '{a} {2a} {4a}'
     await page.$eval('#recipeTextarea', (el, v) => {
@@ -2273,11 +2273,11 @@ async function main() {
     await aFieldChain.evaluate(e => e.blur())
     await waitForNextFrame(page)
 
-    // All dependent fields should be blank
+    // All dependent fields should show 0 (blank means zero, like Excel)
     const twoAAfterClear = await getInputValue(page, 'input.recipe-field[data-label="2a"]')
     const fourAAfterClear = await getInputValue(page, 'input.recipe-field[data-label="4a"]')
-    assert.equal(twoAAfterClear, '', '2a should go blank when a is cleared')
-    assert.equal(fourAAfterClear, '', '4a should go blank when a is cleared')
+    assert.equal(twoAAfterClear, '0', '2a should show 0 when a is cleared (blank = 0)')
+    assert.equal(fourAAfterClear, '0', '4a should show 0 when a is cleared (blank = 0)')
     pass('blank field behavior quals [NOQ]')
 
     // Qual: re-typing after clearing should restore computation

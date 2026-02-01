@@ -37,17 +37,25 @@ Humans above, robots below
 
 ## ⚠️ PRE-FLIGHT CHECKLIST (REVIEW BEFORE EVERY RESPONSE) ⚠️
 
-Before generating ANY response, tool call, or code change, ask:
+Before generating ANY response, tool call, or code change, verify:
 
-1. **Rule 14 - Latin Copy**: Am I generating user-facing text? If yes → USE LATIN + TODO comment
-2. **Rule 5 - Comment Preservation**: Am I touching code with comments? If yes → Preserve EXACT characters
-3. **Rule 8 - Anti-Magic**: Am I adding an if-statement? If yes → Question whether it's needed, mention to human
-4. **Rule 11 - Anti-Postel**: Am I silently handling an error? If yes → Should it throw/assert instead?
-5. **Rule 13 - Qual Protection**: Am I changing behavior? If yes → Add protective quals, never loosen existing quals
-6. **Rule 3 - Never Claim Without Trying**: Am I saying code works? If yes → Did I actually run it?
-7. **Rule 15/16 - Solve vs Patch**: Am I adding a condition? If yes → Could I remove code instead?
-
-**MANDATORY**: For ANY user-facing text (errors, labels, help), write in Latin with TODO comment.
+1. **Rule 1 - Technical Correctness**: Is my response impeccably, exquisitely, technically correct? Epistemic humility?
+2. **Rule 2 - Zero Sycophancy**: Am I saying "you're right", giving praise, or showing personality? → STOP
+3. **Rule 3 - Never Claim Without Trying**: Am I saying code works or exhibits behavior? → Did I actually run it?
+4. **Rule 4 - Iterate Until It Works**: Am I expecting human to QA? → Iterate myself until it works
+5. **Rule 5 - Comment Preservation**: Am I touching code with comments? → Preserve EXACT characters, even whitespace
+6. **Rule 6 - PDP**: Does this change deviate from Pareto frontier? → Get explicit approval first
+7. **Rule 7 - Standard Principles**: Am I following DRY, YAGNI, ZOI, KISS? No code smells?
+8. **Rule 8 - Anti-Magic**: Am I adding an if-statement? → Question whether it's needed, mention to human
+9. **Rule 9 - Worse-is-Better**: Am I deviating from MIT approach? → Requires discussion
+10. **Rule 10 - Anti-Settings**: Am I adding settings/configuration? → Don't (probably goes without saying)
+11. **Rule 11 - Anti-Postel**: Am I silently handling errors? → Should it throw/assert instead? Add asserts everywhere
+12. **Rule 12 - Quals not Tests**: Am I calling them tests? → Use "quals" and QDD
+13. **Rule 13 - Qual Protection**: Am I changing behavior? → Add protective quals, never loosen existing quals without approval
+14. **Rule 14 - Latin Copy**: Am I generating user-facing text? → USE LATIN + TODO comment (MANDATORY)
+15. **Rule 15 - Solve vs Patch**: Am I adding code to handle a case? → Should I rethink/simplify instead?
+16. **Rule 16 - Remove vs Add**: Am I fixing a bug? → Ask "what code is causing this?" not "what should I add?"
+17. **Rule 17 - Naming as Language**: Am I naming widespread symbols? → Short/evocative/greppable/pronounceable
 
 ## Better terminology for the anti-magic principle?
 
@@ -86,10 +94,26 @@ The gaussJordan fix is a good example: the old code said "if underdetermined, re
 - ✅ **reciplogic.js symtab error generation**: Refactored to COLON_ERROR_MESSAGES lookup table
 - [ ] **solvem seeding logic** (csolver.js lines 1336-1368): Legitimate complexity handling two distinct modes - leave as-is
 
-### Missing Quals / Test Coverage
-- [ ] Edge cases like empty fields, undefined variables
-- [ ] The bug where clearing a field throws uncaught error instead of being caught by quals
-- [ ] More coverage of underdetermined systems with various seed/constraint combinations
+### Bug Fixes
+- ✅ **Clearing field bug**: Implemented "blank = 0" (like Excel) by removing special-case code
+  - reciplogic.js lines 586, 588: Use `?? 0` when building equations (treat null as 0)
+  - reciplogic.js lines 519-522: Convert null to 0 in seed assignment
+  - reciplogic.js lines 547-562: **REMOVED** special-case code that deleted cleared variables from assignment
+  - The special case was preventing blank = 0 by making dependent fields go blank
+  - Result: Cleared field shows blank in UI, dependents show "0" (not blank), all 1078 quals pass
+  - Updated quals/ui_quals.js lines 2249-2251, 2276-2280 to expect "0" instead of blank
+- ✅ **Inequality error messages**: Made specific (impossible, missing-bounds, etc.) with Latin copy + TODO
+
+## Lessons Learned
+
+### Qual Coverage Gap (Blank = 0)
+The initial "blank = 0" implementation (adding `?? 0` operators) didn't actually work because existing special-case code at lines 547-562 overrode it. All 1078 quals passed despite the conceptual change not taking effect. This revealed:
+
+1. **Insufficient test coverage**: UI quals tested that dependents go blank, but didn't detect when behavior didn't actually change
+2. **Hidden complexity**: Special-case code was interfering with simpler solutions
+3. **Anti-magic validation**: Removing the special case (not adding more code) was the right fix
+
+**Resolution**: Removed the special case, updated quals to expect new behavior, all 1078 quals now pass with true "blank = 0".
 
 ## Further Improvement Areas
 

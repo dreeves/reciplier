@@ -516,6 +516,10 @@ function solveAndApply({
   seedOverrides = {},
 } = {}) {
   const seedAss = { ...state.solve.ass, ...seedOverrides }
+  // Blank means zero: convert null values to 0
+  for (const key in seedAss) {
+    if (seedAss[key] === null) seedAss[key] = 0
+  }
 
   const { eqns, cellIndices } = interactiveEqns(editedCellId, editedValue)
   const { inf, sup } = state.bounds
@@ -540,22 +544,9 @@ function solveAndApply({
     editedCell.cval = editedValue
   }
 
-  // When user clears a field, create a modified assignment for refreshCvals that
-  // omits the cleared variable(s). This makes dependent cells go blank.
-  // state.solve.ass keeps the full assignment for the next solve.
-  let assForRefresh = state.solve.ass
-  if (editedCellId !== null && editedValue === null) {
-    const editedCell = state.cells.find(c => c.id === editedCellId)
-    // editedCell already validated above when preserveEdited is true
-    if (!editedCell) throw new Error(`solveAndApply: no cell found for editedCellId "${editedCellId}"`)
-    if (!Array.isArray(editedCell.ceqn)) throw new Error(`solveAndApply: editedCell.ceqn must be an array`)
-    assForRefresh = { ...state.solve.ass }
-    for (const expr of editedCell.ceqn) {
-      for (const v of varparse(expr)) {
-        delete assForRefresh[v]
-      }
-    }
-  }
+  // Blank = 0: Use full assignment for refreshCvals so dependent cells compute
+  // using 0 for cleared fields (like Excel), rather than going blank.
+  const assForRefresh = state.solve.ass
 
   const skipRecomputeCellId = preserveEdited ? editedCellId : null
   if (sat) {
@@ -578,10 +569,10 @@ function interactiveEqns(editedCellId = null, editedValue = null) {
     const c = state.cells[i]
     const eqn = [...c.ceqn]
 
-    if (editedCellId !== null && c.id === editedCellId && editedValue !== null) {
-      eqn.push(editedValue)
+    if (editedCellId !== null && c.id === editedCellId) {
+      eqn.push(editedValue ?? 0)  // Blank means zero
     } else if (state.peggedCellIds.has(c.id)) {
-      eqn.push(c.cval)
+      eqn.push(c.cval ?? 0)  // Blank means zero
     }
 
     if (eqn.length >= 2) {  // Filter singletons
