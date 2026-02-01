@@ -37,19 +37,51 @@ var {
   isconstant,
   isbarevar,
   unixtime,
-  tolerance
+  tolerance,
+  isValidResult
 } = (typeof module !== 'undefined' && module.exports)
   ? require('./matheval.js')
-  : { preval, vareval, varparse, isconstant, isbarevar, unixtime, tolerance }
+  : { preval, vareval, varparse, isconstant, isbarevar, unixtime, tolerance, isValidResult }
 
 // Tolerance constants for floating-point comparison
-const TOL_TIGHT = 1e-9   // For solveFor binary search convergence
-const TOL_MEDIUM = 1e-9  // For equation satisfaction checks
-const TOL_ABS = 1e-12    // Absolute tolerance floor
+const TOL_TIGHT = 1e-9           // For solveFor binary search convergence
+const TOL_MEDIUM = 1e-9          // For equation satisfaction checks
+const TOL_ABS = 1e-12            // Absolute tolerance floor
+const TOL_JACOBIAN = 1e-7        // Jacobian finite difference step (newtRaphson)
+const TOL_REGULARIZATION = 1e-10 // Levenberg-Marquardt regularization
+const TOL_NEAR_ZERO = 1e-12      // For zero-value checks (scaleHomogeneousExpr)
+
+// Solver iteration limits
+const MAX_BINARY_SEARCH_ITER = 60     // Binary search iterations in solveFor
+const MAX_PROPAGATION_PASSES = 20     // Maximum propagation passes in kludgeOrama
+const MAX_PROPAGATION_CYCLES = 10     // Propagation cycles per pass
+const MAX_ROOT_SEARCH_ITER = 50       // Root search iterations
+const MAX_NEWTON_ITER = 50            // Newton-Raphson iterations
+const MAX_LINE_SEARCH_ITER = 10       // Line search backtracking iterations
+
+// Search range limits
+const MAX_SCALE_DECADE = 1e10         // Maximum scale factor for bracket search
+const MAX_DISCONTINUITY_DECADE = 1e12 // Maximum decade for discontinuity search
+const MIN_BRACKET_VALUE = 1e-9        // Minimum bracket boundary value
+
+// Solver constants
+const TRUST_WEIGHT = 1000              // Weight for trustworthy variables in scoring
+const SYMMETRY_BREAK_FACTOR = 0.01     // Perturbation factor for breaking symmetry
+const LINE_SEARCH_BACKOFF = 0.5        // Backtracking step size reduction
+const DEFAULT_SEED_VALUE = 1           // Default seed when no bounds/seeds provided
 
 // Helper: check if value is a finite number (DRY - used throughout solver)
 function isFiniteNum(x) {
   return typeof x === 'number' && isFinite(x)
+}
+
+// Helper: evaluate equation terms (DRY - consolidates 4 variations)
+// Returns array of vareval result objects {value, error}
+function evalEqnTerms(eqn, values) {
+  return eqn.map(e => {
+    if (typeof e === 'number') return { value: e, error: null }
+    return vareval(e, values)
+  })
 }
 
 // =============================================================================
@@ -65,7 +97,7 @@ function solveFor(expr, varName, target, values, inf = null, sup = null) {
   function evalAt(x) {
     test[varName] = x
     const r = vareval(expr, test)
-    if (r.error || !isFinite(r.value)) return null
+    if (!isValidResult(r)) return null
     return r.value
   }
 
@@ -84,7 +116,7 @@ function solveFor(expr, varName, target, values, inf = null, sup = null) {
     if (!withinBounds(guess)) return null
     test[varName] = guess
     const r = vareval(expr, test)
-    if (!r.error && isFinite(r.value) && Math.abs(r.value - target) < tol) {
+    if (isValidResult(r) && Math.abs(r.value - target) < tol) {
       return guess
     }
     return null
@@ -139,9 +171,9 @@ function solveFor(expr, varName, target, values, inf = null, sup = null) {
     return false
   }
 
-  for (let scale = 1; scale < 1e10; scale *= 10) {
-    if (tryBracket(1e-9, scale)) break
-    if (tryBracket(-scale, -1e-9)) break
+  for (let scale = 1; scale < MAX_SCALE_DECADE; scale *= 10) {
+    if (tryBracket(MIN_BRACKET_VALUE, scale)) break
+    if (tryBracket(-scale, -MIN_BRACKET_VALUE)) break
     if (tryBracket(-scale, scale)) break
   }
 
@@ -152,7 +184,7 @@ function solveFor(expr, varName, target, values, inf = null, sup = null) {
     if (y0 !== null) {
       const f0 = y0 - target
       const scales = []
-      for (let decade = 1; decade < 1e12; decade *= 10) {
+      for (let decade = 1; decade < MAX_DISCONTINUITY_DECADE; decade *= 10) {
         for (const mult of [1, 1.5, 2, 3, 5, 7]) {
           scales.push(decade * mult)
         }
@@ -244,7 +276,7 @@ function solveFor(expr, varName, target, values, inf = null, sup = null) {
   if (lo === null || hi === null) return null
 
   // Binary search
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < MAX_BINARY_SEARCH_ITER; i++) {
     const mid = (lo + hi) / 2
     const midVal = evalAt(mid)
     if (midVal === null) return null
@@ -277,11 +309,8 @@ function solveFor(expr, varName, target, values, inf = null, sup = null) {
 function eqnsSatisfied(eqns, values, tol = TOL_MEDIUM, absTol = TOL_ABS) {
   for (const eqn of eqns) {
     if (eqn.length < 2) continue
-    const results = eqn.map(e => {
-      if (typeof e === 'number') return { value: e, error: null }
-      return vareval(e, values)
-    })
-    if (results.some(r => r.error || !isFinite(r.value))) return false
+    const results = evalEqnTerms(eqn, values)
+    if (results.some(r => !isValidResult(r))) return false
     const first = results[0].value
     if (!results.every(r => Math.abs(r.value - first) < tolerance(first, tol, absTol))) return false
   }
@@ -307,11 +336,8 @@ function boundsSatisfied(values, inf = {}, sup = {}) {
 function zidge(eqns, ass) {
   return eqns.map(eqn => {
     if (eqn.length < 2) return 0
-    const vals = eqn.map(e => {
-      if (typeof e === 'number') return e
-      const r = vareval(e, ass)
-      return (r.error || !isFinite(r.value)) ? NaN : r.value
-    })
+    const results = evalEqnTerms(eqn, ass)
+    const vals = results.map(r => !isValidResult(r) ? NaN : r.value)
     if (vals.some(v => !isFinite(v))) return NaN
     const m = vals.reduce((a, b) => a + b, 0) / vals.length
     return vals.reduce((s, v) => s + (v - m) ** 2, 0)
@@ -677,7 +703,7 @@ function propagateResidual(rootVal, root, values, definedBy, copies, eqns, const
   // Propagate definedBy expressions
   for (const [v, { expr }] of definedBy) {
     const r = vareval(expr, test)
-    if (!r.error && isFinite(r.value)) test[v] = r.value
+    if (isValidResult(r)) test[v] = r.value
   }
 
   // Copy linked variables
@@ -699,7 +725,7 @@ function propagateResidual(rootVal, root, values, definedBy, copies, eqns, const
       const e = eqn[i]
       if (typeof e === 'number') { bestVal = e; bestScore = 2; break }
       const r = vareval(e, test)
-      if (r.error || !isFinite(r.value)) continue
+      if (!isValidResult(r)) continue
       const vars = varparse(e)
       const constrainedOnly = [...vars].every(v => constrained.has(v))
       const score = constrainedOnly ? 1 : 0
@@ -712,11 +738,8 @@ function propagateResidual(rootVal, root, values, definedBy, copies, eqns, const
   let residual = 0
   for (const eqn of eqns) {
     if (eqn.length < 2) continue
-    const results = eqn.map(e => {
-      if (typeof e === 'number') return e
-      const r = vareval(e, test)
-      return r.error ? NaN : r.value
-    })
+    const evalResults = evalEqnTerms(eqn, test)
+    const results = evalResults.map(r => r.error ? NaN : r.value)
     if (results.some(r => !isFinite(r))) continue
     const target = results.find(r => isFinite(r))
     for (const r of results) residual += (r - target) ** 2
@@ -819,8 +842,8 @@ function kludgeOrama(eqns, vars, inf, sup) {
 
   function checkEquation(eqn) {
     if (eqn.length < 2) return true
-    const results = eqn.map(evalExpr)
-    if (results.some(r => r.error || !isFinite(r.value))) return false
+    const results = evalEqnTerms(eqn, values)
+    if (results.some(r => !isValidResult(r))) return false
     const first = results[0].value
     return results.every(r => Math.abs(r.value - first) < tolerance(first, tol, absTol))
   }
@@ -846,7 +869,7 @@ function kludgeOrama(eqns, vars, inf, sup) {
       if (![...rhsVars].every(v => (trustworthy.has(v) || stableDerived.has(v)))) continue
 
       const r = evalExpr(rhs)
-      if (r.error || !isFinite(r.value)) continue
+      if (!isValidResult(r)) continue
 
       const tolerance = Math.abs(r.value) * tol + tol
       if (Math.abs(values[lhs] - r.value) >= tolerance) continue
@@ -886,7 +909,7 @@ function kludgeOrama(eqns, vars, inf, sup) {
       const hasNonSingletonStable = [...vars].some(v => trustworthy.has(v) || stableDerived.has(v) || solvedFromStableThisPass.has(v))
       if (eqn.length > 2 && !hasNonSingletonStable) continue
       const r = evalExpr(expr)
-      if (r.error || !isFinite(r.value) || r.value === null) continue
+      if (!isValidResult(r) || r.value === null) continue
       const allTrustworthy = [...vars].every(v => trustworthy.has(v))
       const trustworthyCount = [...vars].filter(v => trustworthy.has(v)).length
       const score = (allTrustworthy ? 1000 : 0) + trustworthyCount
@@ -910,7 +933,7 @@ function kludgeOrama(eqns, vars, inf, sup) {
     for (const expr of eqn) {
       if (typeof expr === 'string' && !isbarevar(expr)) {
         const r = evalExpr(expr)
-        if (!r.error && isFinite(r.value) && r.value !== null) {
+        if (isValidResult(r) && r.value !== null) {
           return { value: r.value, isTrustworthy: false, stableNonSingleton: false }
         }
       }
@@ -925,7 +948,7 @@ function kludgeOrama(eqns, vars, inf, sup) {
     const base = evalExpr(expr)
     if (base.error || !isFinite(base.value)) return null
     const current = base.value
-    if (current === 0) return null
+    if (Math.abs(current) < TOL_NEAR_ZERO) return null
     const ratio = target / current
     if (!isFinite(ratio) || ratio < 0) return null
 
@@ -937,12 +960,12 @@ function kludgeOrama(eqns, vars, inf, sup) {
     }
     const probe = vareval(expr, probed)
     if (probe.error || !isFinite(probe.value)) return null
-    if (probe.value === 0) return null
+    if (Math.abs(probe.value) < TOL_NEAR_ZERO) return null
 
     const degree = Math.log(Math.abs(probe.value / current)) / Math.log(probeFactor)
     if (!isFinite(degree) || Math.abs(degree) < TOL_ABS) return null
 
-    const scale = ratio === 0 ? 0 : Math.pow(ratio, 1 / degree)
+    const scale = Math.abs(ratio) < TOL_NEAR_ZERO ? 0 : Math.pow(ratio, 1 / degree)
     if (!isFinite(scale)) return null
 
     const scaled = { ...values }
@@ -956,19 +979,19 @@ function kludgeOrama(eqns, vars, inf, sup) {
     }
 
     const check = vareval(expr, scaled)
-    if (check.error || !isFinite(check.value)) return null
+    if (!isValidResult(check)) return null
     if (Math.abs(check.value - target) > tolerance(target, tol, absTol)) return null
 
     return scaled
   }
 
   // Main solving loop
-  for (let pass = 0; pass < 20; pass++) {
+  for (let pass = 0; pass < MAX_PROPAGATION_PASSES; pass++) {
     let changed = false
     solvedThisPass = new Set()
     solvedFromStableThisPass = new Set()
 
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < MAX_PROPAGATION_CYCLES; i++) {
       if (!propagateDefs()) break
     }
 
@@ -981,7 +1004,7 @@ function kludgeOrama(eqns, vars, inf, sup) {
       if (isDefinitionPair(eqn) && !literalPinned.has(eqn[0]) && (usesAsInput.get(eqn[0]) || 0) === 0) {
         const rhs = eqn[1]
         const r = evalExpr(rhs)
-        if (!r.error && isFinite(r.value)) {
+        if (isValidResult(r)) {
           targetResult = { value: r.value, isTrustworthy: false, isStable: false, stableNonSingleton: false }
         }
       }
@@ -1173,7 +1196,7 @@ function newtRaphson(eqns, vars, inf, sup) {
 
   // Compute Jacobian numerically
   function computeJacobian(testValues) {
-    const h = 1e-7
+    const h = TOL_JACOBIAN
     const baseResiduals = evalResiduals(testValues)
     if (!baseResiduals) return null
 
@@ -1211,7 +1234,7 @@ function newtRaphson(eqns, vars, inf, sup) {
     }
 
     // Add small regularization for numerical stability
-    for (let i = 0; i < n; i++) JtJ[i][i] += 1e-10
+    for (let i = 0; i < n; i++) JtJ[i][i] += TOL_REGULARIZATION
 
     // Gaussian elimination
     const aug = JtJ.map((row, i) => [...row, Jtr[i]])
@@ -1242,7 +1265,6 @@ function newtRaphson(eqns, vars, inf, sup) {
   }
 
   // Newton iteration
-  const MAX_ITER = 50
   const test = { ...values }
 
   // Add small perturbation to break symmetry and avoid zeros
@@ -1250,10 +1272,10 @@ function newtRaphson(eqns, vars, inf, sup) {
     const v = solveVars[i]
     const val = test[v]
     // If zero, use small value; otherwise perturb to break symmetry
-    test[v] = val === 0 ? 0.01 * (i + 1) : val * (1 + 0.01 * (i + 1))
+    test[v] = val === 0 ? SYMMETRY_BREAK_FACTOR * (i + 1) : val * (1 + SYMMETRY_BREAK_FACTOR * (i + 1))
   }
 
-  for (let iter = 0; iter < MAX_ITER; iter++) {
+  for (let iter = 0; iter < MAX_NEWTON_ITER; iter++) {
     // Check convergence - equations satisfied AND bounds respected
     if (eqnsSatisfied(eqns, test) && respectsBounds(test)) {
       return { ass: test, zij: zidge(eqns, test), sat: true }
@@ -1277,7 +1299,7 @@ function newtRaphson(eqns, vars, inf, sup) {
     let alpha = 1
     const currentError = residuals.reduce((s, r) => s + r * r, 0)
 
-    for (let ls = 0; ls < 10; ls++) {
+    for (let ls = 0; ls < MAX_LINE_SEARCH_ITER; ls++) {
       const candidate = { ...test }
       for (let i = 0; i < solveVars.length; i++) {
         candidate[solveVars[i]] = test[solveVars[i]] + alpha * delta[i]
@@ -1293,7 +1315,7 @@ function newtRaphson(eqns, vars, inf, sup) {
           break
         }
       }
-      alpha *= 0.5
+      alpha *= LINE_SEARCH_BACKOFF
     }
 
     // Check for convergence in variable space

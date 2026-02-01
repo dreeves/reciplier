@@ -115,6 +115,15 @@ function tolerance(value, relTol = 1e-9, absTol = relTol) {
   return Math.abs(value) * relTol + absTol
 }
 
+// =============================================================================
+// isValidResult: Check if a vareval result is valid (no error, finite value)
+// =============================================================================
+// DRY helper to replace repeated pattern: r.error || !isFinite(r.value)
+
+function isValidResult(r) {
+  return !r.error && isFinite(r.value)
+}
+
 typeof module !== 'undefined' && module.exports && (module.exports = {
   preval,
   unixtime,
@@ -122,5 +131,6 @@ typeof module !== 'undefined' && module.exports && (module.exports = {
   varparse,
   isbarevar,
   isconstant,
-  tolerance
+  tolerance,
+  isValidResult
 })

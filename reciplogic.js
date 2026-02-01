@@ -89,7 +89,7 @@ function symtab(cells) {
     if (cell.ceqn.length === 0 && cell.cval !== null) errors.push(
       `Cell {${cell.urtext}} is a bare number ` +
       `which doesn't make sense to put in a cell`)
-    if (cell.ceqn.length === 0 && cell.cval === null) errors.push(
+    if (cell.ceqn.length === 0 && cell.cval === null && !cell.ineqError) errors.push(
       `Cell {${cell.urtext}} is empty`)
 
     const cellVars = new Set()
