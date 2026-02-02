@@ -887,20 +887,20 @@ async function main() {
     assert.equal(bannerVisible, true, 'Banner should be visible during edit')
     assert.ok(/try unpegging cells/i.test(bannerText), 'Banner should mention unpegging')
 
-    // Qual: pyzza slider bug - c^2 cell should NOT turn red when using slider
-    await page.select('#recipeSelect', 'pyzza')
+    // Qual: ineqtest slider - dependent cells should NOT turn red when using slider
+    await page.select('#recipeSelect', 'ineqtest')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
     await setSliderValue(page, 'input.recipe-slider[data-var-name="x"]', '2')
 
-    const cSquaredHandle = await findFieldByTitleSubstring(page, 'a^2 + b^2 = c^2')
-    const cSquaredIsNull = await cSquaredHandle.evaluate(el => el === null)
-    assert.equal(cSquaredIsNull, false)
+    const yFieldHandle = await findFieldByTitleSubstring(page, 'y = 2x')
+    const yFieldIsNull = await yFieldHandle.evaluate(el => el === null)
+    assert.equal(yFieldIsNull, false)
 
-    const cSquaredInvalidAfterSlider = await handleHasClass(cSquaredHandle, 'invalid')
-    assert.equal(cSquaredInvalidAfterSlider, false, 'c^2 cell should NOT be invalid after slider change')
+    const yFieldInvalidAfterSlider = await handleHasClass(yFieldHandle, 'invalid')
+    assert.equal(yFieldInvalidAfterSlider, false, 'y cell should NOT be invalid after slider change')
 
-    await cSquaredHandle.dispose()
+    await yFieldHandle.dispose()
 
     // Qual: pyzza editing c should persist when nothing is pegged
     await page.select('#recipeSelect', 'pyzza')

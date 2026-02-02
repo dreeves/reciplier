@@ -19,7 +19,7 @@ function fileUrl(p) {
 
 // Track and display qual progress
 // 89 individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 97
+const TOTAL_QUALS = 99
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -2372,6 +2372,61 @@ async function main() {
     assert.ok(styleContent.match(/out-of-bounds-high[^}]*box-shadow[^}]*-10px\s+0/),
       'out-of-bounds-high should have leftward box-shadow (-10px offset)')
     pass('slider red glow CSS rules')
+
+    // Qual: verify slider fill track visual appearance
+    await page.select('#recipeSelect', 'crepes')
+    await page.waitForSelector('input.recipe-slider', { visible: true })
+
+    // Set slider to middle value (x=5) to see fill clearly
+    await setSliderValue(page, 'input.recipe-slider', 5)
+    await waitForNextFrame(page)
+
+    // Verify slider has gradient fill (manual implementation)
+    const hasGradientFill = await page.$eval('input.recipe-slider', el => {
+      const bg = el.style.background
+      return bg.includes('linear-gradient')
+    })
+
+    assert.equal(hasGradientFill, true,
+      'Slider should have linear-gradient background for manual fill')
+
+    pass('slider fill track visual rendering')
+
+    // Qual: verify green knob at x=1
+    await setSliderValue(page, 'input.recipe-slider', 1)
+    await waitForNextFrame(page)
+
+    const hasGreenClass = await page.$eval('input.recipe-slider', el =>
+      el.classList.contains('at-one-x')
+    )
+    assert.equal(hasGreenClass, true, 'Slider should have at-one-x class when x=1')
+
+    // Verify green thumb CSS rule exists in style.css
+    const styleText = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8')
+    assert.ok(styleText.includes('.at-one-x') && styleText.includes('slider-thumb') && styleText.includes('#10b981'),
+      'style.css should have green thumb rule for at-one-x class')
+
+    pass('green knob at x=1')
+
+    // Qual: verify slider fill gradient is only to the left of knob, not entire track
+    // At x=1 with range [0.5, 10], knob is at (1-0.5)/(10-0.5) = 0.5/9.5 ≈ 5.26% position
+    await setSliderValue(page, 'input.recipe-slider', 1)
+    await waitForNextFrame(page)
+
+    const fillInfo = await page.$eval('input.recipe-slider', el => {
+      const bg = el.style.background
+      // Extract percentage from gradient - browser converts hex to rgb, e.g.:
+      // "linear-gradient(to right, rgb(16, 185, 129) 0%, rgb(16, 185, 129) 5.26%, rgb(229, 231, 235) 5.26%, rgb(229, 231, 235) 100%)"
+      const match = bg.match(/linear-gradient\(to right, rgb\([^)]+\) 0%, rgb\([^)]+\) ([\d.]+)%, rgb\([^)]+\) \1%, rgb\([^)]+\) 100%\)/)
+      return { bg, percentage: match ? parseFloat(match[1]) : null }
+    })
+
+    assert.ok(fillInfo.percentage !== null, `Slider should have gradient background (actual: "${fillInfo.bg}")`)
+    // crepes recipe has bounds [0.1, 10], so x=1 is at (1-0.1)/(10-0.1) = 0.9/9.9 ≈ 9.09%
+    assert.ok(fillInfo.percentage > 8 && fillInfo.percentage < 10,
+      `Fill gradient should be around 9.09% (actual: ${fillInfo.percentage}%), not 100%`)
+
+    pass('slider fill gradient only to left of knob')
 
     console.log(`\n=== UI Quals Summary ===\nPassed: ${TOTAL_QUALS}/${TOTAL_QUALS} (${milestonesCompleted} milestones)\nFailed: 0`)
   } catch (e) {

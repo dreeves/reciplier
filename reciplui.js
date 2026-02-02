@@ -338,6 +338,29 @@ function repositionBanners() {
   rendered.insertBefore(banners, refNode)
 }
 
+// Update slider fill gradient based on current value and bounds
+function updateSliderFill(slider) {
+  try {
+    if (!slider) return
+
+    const min = parseFloat(slider.min)
+    const max = parseFloat(slider.max)
+    const value = parseFloat(slider.value)
+
+    if (!isFinite(min) || !isFinite(max) || !isFinite(value)) return
+
+    const percentage = ((value - min) / (max - min)) * 100
+    const isAtOneX = slider.classList.contains('at-one-x')
+
+    // Use green fill when at x=1, blue otherwise
+    const fillColor = isAtOneX ? '#10b981' : '#3b82f6'
+    const trackColor = '#e5e7eb'
+    slider.style.background = `linear-gradient(to right, ${fillColor} 0%, ${fillColor} ${percentage}%, ${trackColor} ${percentage}%, ${trackColor} 100%)`
+  } catch (err) {
+    console.error('updateSliderFill error:', err)
+  }
+}
+
 function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
   updateSolveBannerInDom()
   updateInvalidExplainBannerInDom()
@@ -362,11 +385,13 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
 
     const isBeingEdited = editedFieldEl && slider === editedFieldEl
 
-    // Update value and at-one-x class only if not being actively edited
+    // Update value only if not being actively edited
     if (!isBeingEdited) {
       slider.value = c.cval
-      slider.classList.toggle('at-one-x', Math.abs(c.cval - 1) < 0.005)
     }
+
+    // Always update at-one-x class (even during drag)
+    slider.classList.toggle('at-one-x', Math.abs(c.cval - 1) < 0.005)
 
     // Always update out-of-bounds classes (even during drag)
     // TODO: it's only when you start dragging that it may need updating...
@@ -376,6 +401,9 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
     const isAboveMax = bounds && c.cval > bounds.max
     slider.classList.toggle('out-of-bounds-low', isBelowMin)
     slider.classList.toggle('out-of-bounds-high', isAboveMax)
+
+    // Update fill gradient
+    updateSliderFill(slider)
   })
 
   repositionBanners()
@@ -472,6 +500,9 @@ function handleInlineSliderInput(e) {
 
   // Update at-one-x styling
   input.classList.toggle('at-one-x', Math.abs(newValue - 1) < 0.005)
+
+  // Update fill gradient immediately for visual feedback
+  updateSliderFill(input)
 
   syncAfterSolve(solveResult.invalidCellIds, input)
   updateUrl()
