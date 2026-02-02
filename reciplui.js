@@ -357,11 +357,25 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
 
   // Sync inline sliders
   output.querySelectorAll('input.recipe-slider').forEach(slider => {
-    if (editedFieldEl && slider === editedFieldEl) return
     const c = state.cells.find(x => x.id === slider.dataset.cellId)
     if (!c) throw new Error(`syncAfterSolve: no cell found for slider id "${slider.dataset.cellId}"`)
-    slider.value = c.cval
-    slider.classList.toggle('at-one-x', Math.abs(c.cval - 1) < 0.005)
+
+    const isBeingEdited = editedFieldEl && slider === editedFieldEl
+
+    // Update value and at-one-x class only if not being actively edited
+    if (!isBeingEdited) {
+      slider.value = c.cval
+      slider.classList.toggle('at-one-x', Math.abs(c.cval - 1) < 0.005)
+    }
+
+    // Always update out-of-bounds classes (even during drag)
+    // TODO: it's only when you start dragging that it may need updating...
+    // ...not sure if that's worth optimizing.
+    const bounds = sliderBounds(c)
+    const isBelowMin = bounds && c.cval < bounds.min
+    const isAboveMax = bounds && c.cval > bounds.max
+    slider.classList.toggle('out-of-bounds-low', isBelowMin)
+    slider.classList.toggle('out-of-bounds-high', isAboveMax)
   })
 
   repositionBanners()

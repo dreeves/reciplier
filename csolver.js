@@ -88,11 +88,9 @@ function evalEqnTerms(eqn, values) {
 // solveFor: Solve for a single variable to make expr equal target
 // =============================================================================
 
-function solveFor(expr, varName, target, values, inf = null, sup = null) {
+function solveFor(expr, varName, target, values) {
   const test = { ...values }
   const tol = tolerance(target, TOL_TIGHT)
-  const hasInf = isFiniteNum(inf)
-  const hasSup = isFiniteNum(sup)
 
   function evalAt(x) {
     test[varName] = x
@@ -101,19 +99,8 @@ function solveFor(expr, varName, target, values, inf = null, sup = null) {
     return r.value
   }
 
-  function withinBounds(x) {
-    return (!hasInf || x >= inf) && (!hasSup || x <= sup)
-  }
-
-  function adjustBracket(loCandidate, hiCandidate) {
-    const lo = hasInf ? Math.max(loCandidate, inf) : loCandidate
-    const hi = hasSup ? Math.min(hiCandidate, sup) : hiCandidate
-    return (hasInf && hasSup && lo > hi) ? null : [lo, hi]
-  }
-
   function tryGuess(guess) {
     if (!isFinite(guess)) return null
-    if (!withinBounds(guess)) return null
     test[varName] = guess
     const r = vareval(expr, test)
     if (isValidResult(r) && Math.abs(r.value - target) < tol) {
@@ -151,11 +138,7 @@ function solveFor(expr, varName, target, values, inf = null, sup = null) {
   let hi = null
 
   function tryBracket(loCandidate, hiCandidate) {
-    const adjusted = adjustBracket(loCandidate, hiCandidate)
-    if (!adjusted) return false
-    loCandidate = adjusted[0]
-    hiCandidate = adjusted[1]
-    if (loCandidate < 0 && hiCandidate > 0 && withinBounds(0)) {
+    if (loCandidate < 0 && hiCandidate > 0) {
       const z = evalAt(0)
       if (z === null) return false
     }
@@ -165,16 +148,16 @@ function solveFor(expr, varName, target, values, inf = null, sup = null) {
     const a = loVal - target
     const b = hiVal - target
     if (!isFinite(a) || !isFinite(b)) return false
-    if (a === 0) { lo = loCandidate; hi = loCandidate; return true }
-    if (b === 0) { lo = hiCandidate; hi = hiCandidate; return true }
+    if (a === 0)    { lo = loCandidate; hi = loCandidate; return true }
+    if (b === 0)    { lo = hiCandidate; hi = hiCandidate; return true }
     if (a * b <= 0) { lo = loCandidate; hi = hiCandidate; return true }
     return false
   }
 
   for (let scale = 1; scale < MAX_SCALE_DECADE; scale *= 10) {
-    if (tryBracket(MIN_BRACKET_VALUE, scale)) break
-    if (tryBracket(-scale, -MIN_BRACKET_VALUE)) break
-    if (tryBracket(-scale, scale)) break
+    if (tryBracket(MIN_BRACKET_VALUE, scale))              break
+    if (tryBracket(-scale,            -MIN_BRACKET_VALUE)) break
+    if (tryBracket(-scale,            scale))              break
   }
 
   // Expand bracket around current value for discontinuities
@@ -198,7 +181,6 @@ function solveFor(expr, varName, target, values, inf = null, sup = null) {
         let bestHi = null
         for (const dir of [-1, 1]) {
           const x1 = x0 + dir * scale
-          if (!withinBounds(x1)) continue
           const y1 = evalAt(x1)
           if (y1 === null) continue
           const f1 = y1 - target
@@ -287,7 +269,6 @@ function solveFor(expr, varName, target, values, inf = null, sup = null) {
   }
 
   const finalVal = (lo + hi) / 2
-  if (!withinBounds(finalVal)) return null
   const finalValRes = evalAt(finalVal)
   if (finalValRes === null || Math.abs(finalValRes - target) > Math.abs(target) * 0.01 + 0.01) {
     return null
@@ -315,15 +296,6 @@ function eqnsSatisfied(eqns, values, tol = TOL_MEDIUM, absTol = TOL_ABS) {
     if (!results.every(r => Math.abs(r.value - first) < tolerance(first, tol, absTol))) return false
   }
   return true
-}
-
-function boundsSatisfied(values, inf = {}, sup = {}) {
-  const check = (bounds, cmp) => Object.entries(bounds).every(([name, bound]) => {
-    if (!isFiniteNum(bound)) return true
-    const val = values[name]
-    return isFiniteNum(val) && cmp(val, bound)
-  })
-  return check(inf, (v, b) => v >= b) && check(sup, (v, b) => v <= b)
 }
 
 // =============================================================================
@@ -384,7 +356,7 @@ function linearCoeffs(expr, varNames, baseValues) {
   return { coeffs, constant: f0.value }
 }
 
-function gaussJordan(eqns, vars, inf, sup) {
+function gaussJordan(eqns, vars) {
   const varNames = Object.keys(vars).sort()
   if (varNames.length === 0) {
     return { ass: { ...vars }, zij: zidge(eqns, vars), sat: eqnsSatisfied(eqns, vars) }
@@ -501,7 +473,7 @@ function gaussJordan(eqns, vars, inf, sup) {
   }
 
   const zij = zidge(eqns, ass)
-  const sat = eqnsSatisfied(eqns, ass) && boundsSatisfied(ass, inf, sup)
+  const sat = eqnsSatisfied(eqns, ass)
 
   return { ass, zij, sat }
 }
@@ -624,7 +596,7 @@ function sortByLiterals(eqns) {
 // Example: [['1/phi', 'phi - 1']] solves to phi = golden ratio
 // This is just solving (e1 - e2) = 0 for the shared variable
 // (was solveSelfReferential)
-function solveSelfRef(eqns, values, constrained, trustworthy, inf, sup) {
+function solveSelfRef(eqns, values, constrained, trustworthy) {
   for (const eqn of eqns) {
     if (eqn.length !== 2) continue
     const [e1, e2] = eqn
@@ -648,14 +620,8 @@ function solveSelfRef(eqns, values, constrained, trustworthy, inf, sup) {
     if (!r1.error && !r2.error && Math.abs(r1.value - r2.value) < tolerance(r1.value, TOL_MEDIUM, TOL_ABS)) continue
 
     // Solve (e1 - e2) = 0 for v
-    // Try with lower bound of 0 first to prefer positive roots (common case)
     const diffExpr = `(${e1}) - (${e2})`
-    const lowerBound = inf[v] !== undefined ? inf[v] : 0
-    let solvedVal = solveFor(diffExpr, v, 0, values, lowerBound, sup[v])
-    // Fallback without lower bound if that didn't work
-    if (solvedVal === null) {
-      solvedVal = solveFor(diffExpr, v, 0, values, inf[v], sup[v])
-    }
+    const solvedVal = solveFor(diffExpr, v, 0, values)
     if (solvedVal !== null) {
       values[v] = solvedVal
     }
@@ -750,7 +716,7 @@ function propagateResidual(rootVal, root, values, definedBy, copies, eqns, const
 
 // Fallback: 1D binary search on root variables when main solver fails
 // (was fallbackRootSearch)
-function rootSearch(eqns, values, constrained, tol, inf, sup) {
+function rootSearch(eqns, values, constrained, tol) {
   const { definedBy, copies } = depGraph(eqns, constrained)
 
   const rootCounts = new Map()
@@ -780,7 +746,7 @@ function rootSearch(eqns, values, constrained, tol, inf, sup) {
   }
 }
 
-function kludgeOrama(eqns, vars, inf, sup) {
+function kludgeOrama(eqns, vars) {
   // solvem now ensures all required variables are seeded before calling solvers
   const values = { ...vars }
   const tol = TOL_MEDIUM
@@ -970,12 +936,7 @@ function kludgeOrama(eqns, vars, inf, sup) {
 
     const scaled = { ...values }
     for (const v of exprVars) {
-      const next = values[v] * scale
-      const lower = inf[v]
-      const upper = sup[v]
-      if (isFiniteNum(lower) && next < lower) return null
-      if (isFiniteNum(upper) && next > upper) return null
-      scaled[v] = next
+      scaled[v] = values[v] * scale
     }
 
     const check = vareval(expr, scaled)
@@ -1039,7 +1000,7 @@ function kludgeOrama(eqns, vars, inf, sup) {
         const unknowns = [...exprVars].filter(v => !isKnown(v) && !constrained.has(v) && !solvedThisPass.has(v))
 
         if (unknowns.length === 1) {
-          const solvedVal = solveFor(expr, unknowns[0], target, values, inf[unknowns[0]], sup[unknowns[0]])
+          const solvedVal = solveFor(expr, unknowns[0], target, values)
           if (solvedVal !== null) {
             markSolved(unknowns[0], solvedVal, { isTrustworthy, isStable: targetIsStable, isStableNonSingleton: targetStableNonSingleton, eqnLen: eqn.length })
             changed = true
@@ -1076,7 +1037,7 @@ function kludgeOrama(eqns, vars, inf, sup) {
           let bestChange = Infinity
           for (const v of exprVars) {
             if (constrained.has(v) || solvedThisPass.has(v) || (trustworthy.has(v) && !allowTrustworthy)) continue
-            const solvedVal = solveFor(expr, v, target, values, inf[v], sup[v])
+            const solvedVal = solveFor(expr, v, target, values)
             if (solvedVal !== null) {
               const change = Math.abs(solvedVal - values[v])
               if (change < bestChange) {
@@ -1110,7 +1071,7 @@ function kludgeOrama(eqns, vars, inf, sup) {
   }
 
   // Handle self-referential equations (e.g., 1/phi = phi - 1)
-  solveSelfRef(eqns, values, constrained, trustworthy, inf, sup)
+  solveSelfRef(eqns, values, constrained, trustworthy)
 
   // Fallback: 1D search on root variables
   if (!eqnsSatisfied(eqns, values)) {
@@ -1118,7 +1079,7 @@ function kludgeOrama(eqns, vars, inf, sup) {
   }
 
   const zij = zidge(eqns, values)
-  const sat = eqnsSatisfied(eqns, values) && boundsSatisfied(values, inf, sup)
+  const sat = eqnsSatisfied(eqns, values)
   return { ass: values, zij, sat }
 }
 
@@ -1129,20 +1090,8 @@ function kludgeOrama(eqns, vars, inf, sup) {
 // Newton's method to find a solution. This handles cases like w*h=A, w²+h²=z²
 // that gaussJordan can't handle and kludgeOrama solves greedily.
 
-function newtRaphson(eqns, vars, inf, sup) {
+function newtRaphson(eqns, vars) {
   const values = { ...vars }
-
-  // Check if solution respects bounds
-  // TODO: make this a helper that any subsolver can use?
-  function respectsBounds(ass) {
-    for (const v in ass) {
-      const val = ass[v]
-      if (!isFinite(val)) continue
-      if (inf[v] !== undefined && val < inf[v] - TOL_ABS) return false
-      if (sup[v] !== undefined && val > sup[v] + TOL_ABS) return false
-    }
-    return true
-  }
 
   // Build list of constraint equations: pairs of expressions that should be equal
   // Each equation [a, b, c, ...] means a=b, b=c, etc.
@@ -1276,8 +1225,8 @@ function newtRaphson(eqns, vars, inf, sup) {
   }
 
   for (let iter = 0; iter < MAX_NEWTON_ITER; iter++) {
-    // Check convergence - equations satisfied AND bounds respected
-    if (eqnsSatisfied(eqns, test) && respectsBounds(test)) {
+    // Check convergence - equations satisfied
+    if (eqnsSatisfied(eqns, test)) {
       return { ass: test, zij: zidge(eqns, test), sat: true }
     }
 
@@ -1289,7 +1238,7 @@ function newtRaphson(eqns, vars, inf, sup) {
     // Check if residuals are small enough
     const maxResidual = Math.max(...residuals.map(Math.abs))
     if (maxResidual < TOL_ABS) {
-      const satisfied = eqnsSatisfied(eqns, test) && respectsBounds(test)
+      const satisfied = eqnsSatisfied(eqns, test)
       return { ass: test, zij: zidge(eqns, test), sat: satisfied }
     }
 
@@ -1323,7 +1272,7 @@ function newtRaphson(eqns, vars, inf, sup) {
     if (maxDelta < TOL_TIGHT) break
   }
 
-  const sat = eqnsSatisfied(eqns, test) && boundsSatisfied(test, inf, sup)
+  const sat = eqnsSatisfied(eqns, test)
   return { ass: test, zij: zidge(eqns, test), sat }
 }
 
@@ -1355,7 +1304,7 @@ function countEqnAppearances(eqns) {
 // removing them (ordered by fewest equations first, alphabetical for ties).
 // =============================================================================
 
-function solvem(eqns, init, infimum = {}, supremum = {}) {
+function solvem(eqns, init) {
   // Callers are responsible for filtering singletons before calling solvem.
   // solvem expects only constraint equations (length >= 2), like Mathematica's Solve.
   // Per anti-robustness principle: fail loudly if contract is violated.
@@ -1366,47 +1315,29 @@ function solvem(eqns, init, infimum = {}, supremum = {}) {
   }
 
   // Handle missing variables in init.
-  // If init is empty: seed all required vars from bounds (initial load case).
+  // If init is empty: seed all required vars with default.
   // If init is non-empty: vars FROM EQUATIONS must be present (anti-robustness).
-  // Bounds-only vars (not in equations) can always be seeded.
   const seededInit = { ...init }
   const eqnVars = requiredVars(eqns)
 
-  // Include vars with bounds that might not be in equations
-  const allBoundedVars = new Set([...Object.keys(infimum), ...Object.keys(supremum)])
-  const required = new Set(eqnVars)
-  for (const v of allBoundedVars) required.add(v)
-
-  for (const v of required) {
+  for (const v of eqnVars) {
     const inInit = Object.prototype.hasOwnProperty.call(seededInit, v)
     const val = seededInit[v]
     const hasVal = isFiniteNum(val)
-    const lo = infimum[v], hi = supremum[v]
-    const hasLo = isFiniteNum(lo)
-    const hasHi = isFiniteNum(hi)
 
-    if (hasVal) {
-      // Clamp provided value to bounds
-      const minBound = hasLo ? lo : val
-      const maxBound = hasHi ? hi : val
-      seededInit[v] = Math.min(maxBound, Math.max(minBound, val))
-    } else if (!inInit) {
+    if (!hasVal && !inInit) {
       // Variable is missing from init - seed with default
-      if (Object.keys(init).length !== 0 && eqnVars.has(v)) {
+      if (Object.keys(init).length !== 0) {
         // Anti-robustness: vars from equations must be provided
         throw new Error(`solvem: variable "${v}" required by equations but missing from init`)
       }
-      // Seed from bounds or default to 1
-      if      (hasLo && hasHi) { seededInit[v] = (lo + hi) / 2 } 
-      else if (hasLo)          { seededInit[v] = lo + 1 } 
-      else if (hasHi)          { seededInit[v] = hi - 1 }
-      else                     { seededInit[v] = DEFAULT_SEED_VALUE }
+      seededInit[v] = DEFAULT_SEED_VALUE
     }
     // If inInit but !hasVal (e.g., null), leave it for solvers to handle
   }
 
   // Invariant: If seeds already satisfy equations, return them immediately
-  if (eqnsSatisfied(eqns, seededInit) && boundsSatisfied(seededInit, infimum, supremum)) {
+  if (eqnsSatisfied(eqns, seededInit)) {
     return { ass: seededInit, zij: zidge(eqns, seededInit), sat: true }
   }
 
@@ -1423,7 +1354,7 @@ function solvem(eqns, init, infimum = {}, supremum = {}) {
 
     // Try each solver with augmented equations
     for (const solver of SOLVERS) {
-      const result = solver(augmentedEqns, seededInit, infimum, supremum)
+      const result = solver(augmentedEqns, seededInit)
       if (result.sat) {
         return result
       }
@@ -1455,7 +1386,7 @@ function solvem(eqns, init, infimum = {}, supremum = {}) {
   // No satisfying assignment found, fall back to solving without seed constraints
   let bestResult = null
   for (const solver of SOLVERS) {
-    const result = solver(eqns, seededInit, infimum, supremum)
+    const result = solver(eqns, seededInit)
     // Prefer results with actual values over results with nulls
     const hasNulls = Object.values(result.ass).some(v => v === null ||
                                                          v === undefined)

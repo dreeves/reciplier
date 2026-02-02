@@ -318,20 +318,51 @@ function refreshCvals(cells, ass, peggedCellIds, skipCellId = null) {
 }
 
 // Compute initial values for all variables using solvem()
-// solvem handles seeding internally using bounds.
+// solvem handles seeding internally with defaults.
 // (was computeInitialValues)
-function initValues(cells, bounds) {
+function initValues(cells) {
   const errors = []
-  const { inf, sup } = bounds
   const { eqns, cellIndices } = initEqns(cells)
 
-  // Pass empty init so solvem seeds all required vars from bounds/defaults
+  // Build bounds map for UI initialization
+  const boundsMap = new Map()
+  for (const cell of cells) {
+    if (cell.ineq && !cell.ineqError) {
+      const { varName, inf, sup } = cell.ineq
+      if (varName && isFiniteNumber(inf) && isFiniteNumber(sup)) {
+        boundsMap.set(varName, { inf, sup })
+      }
+    }
+  }
+
+  // Collect all variables from equations
+  const allVars = new Set()
+  for (const eqn of eqns) {
+    for (const term of eqn) {
+      if (typeof term === 'string') {
+        const vars = varparse(term)
+        vars.forEach(v => allVars.add(v))
+      }
+    }
+  }
+
+  // Also include all variables that have bounds (even if not in equations)
+  // This handles cases like {x} with bounds but no multi-term equations
+  for (const varName of boundsMap.keys()) {
+    allVars.add(varName)
+  }
+
+  // Seed all variables: use bounds midpoint if available, else DEFAULT_SEED_VALUE
   const init = {}
+  for (const v of allVars) {
+    const bounds = boundsMap.get(v)
+    init[v] = bounds ? (bounds.inf + bounds.sup) / 2 : 1
+  }
 
   let result
   let ass
   try {
-    result = solvem(eqns, init, inf, sup)
+    result = solvem(eqns, init)
     ass = result.ass
   } catch (e) {
     errors.push(e instanceof Error ? e.message : String(e))
@@ -365,18 +396,7 @@ function isCellViolated(cell, ass) {
   const tol = 1e-6  // Matches solver tolerance for practical floating-point comparisons
   const tolerance = Math.abs(cval) * tol + tol
 
-  if (cell.ineq) {
-    const boundTol = Math.abs(cval) * 1e-9 + 1e-9
-    const { inf, sup, infStrict, supStrict } = cell.ineq
-    if (isFiniteNumber(inf)) {
-      const lowerOk = infStrict ? (cval > inf + boundTol) : (cval + boundTol >= inf)
-      if (!lowerOk) return true
-    }
-    if (isFiniteNumber(sup)) {
-      const upperOk = supStrict ? (cval < sup - boundTol) : (cval - boundTol <= sup)
-      if (!upperOk) return true
-    }
-  }
+  // Bounds are UI hints only - don't mark cells as violated for being out of bounds
 
   for (const expr of cell.ceqn) {
     if (!expr || expr.trim() === '') continue
@@ -450,7 +470,7 @@ function parseRecipe() {
   
   // Compute initial values (includes template satisfiability check)
   const bounds = effectiveBounds(cells)
-  const { solve, errors: valueErrors } = initValues(cells, bounds)
+  const { solve, errors: valueErrors } = initValues(cells)
 
   const allErrors = [...syntaxErrors, ...symbolErrors, ...valueErrors]
   
@@ -522,8 +542,7 @@ function solveAndApply({
   }
 
   const { eqns, cellIndices } = interactiveEqns(editedCellId, editedValue)
-  const { inf, sup } = state.bounds
-  const solveResult = solvem(eqns, seedAss, inf, sup)
+  const solveResult = solvem(eqns, seedAss)
   const solvedAss = solveResult.ass
   const sat = solveResult.sat
   // Expand compact zij (parallel to filtered eqns) to full cell-parallel array

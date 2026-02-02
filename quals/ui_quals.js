@@ -8,7 +8,7 @@ Usage:
 */
 
 const assert = require('node:assert/strict')
-//const fs = require('node:fs') // TODO: why did we want this?
+const fs = require('node:fs')
 const path = require('node:path')
 const puppeteer = require('puppeteer')
 
@@ -19,7 +19,7 @@ function fileUrl(p) {
 
 // Track and display qual progress
 // 89 individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 95
+const TOTAL_QUALS = 97
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -2323,6 +2323,55 @@ async function main() {
     const decimalXValue = await getInputValue(page, 'input.recipe-field[data-label="x"]')
     assert.ok(decimalXValue.startsWith('3.14'), 'Decimal should be preserved')
     pass('additional field behavior quals')
+
+    // Qual: slider shows red glow when value is outside bounds
+    await page.select('#recipeSelect', 'crepes')
+    await page.waitForSelector('#recipeOutput', { visible: true })
+
+    // Set x to 0.05, which is below the lower bound of 0.1
+    await setInputValue(page, 'input.recipe-field[data-label="x"]', '0.05')
+    const sliderBelowMin = await page.$eval('input.recipe-slider', el =>
+      el.classList.contains('out-of-bounds-low')
+    )
+    assert.equal(sliderBelowMin, true, 'Slider should have out-of-bounds-low class when value < min')
+
+    // Set x to 15, which is above the upper bound of 10
+    await setInputValue(page, 'input.recipe-field[data-label="x"]', '15')
+    const sliderAboveMax = await page.$eval('input.recipe-slider', el =>
+      el.classList.contains('out-of-bounds-high')
+    )
+    assert.equal(sliderAboveMax, true, 'Slider should have out-of-bounds-high class when value > max')
+
+    // Set x to 1, which is within bounds [0.1, 10]
+    await setInputValue(page, 'input.recipe-field[data-label="x"]', '1')
+    const sliderClasses = await page.$eval('input.recipe-slider', el =>
+      ({ low: el.classList.contains('out-of-bounds-low'), high: el.classList.contains('out-of-bounds-high') })
+    )
+    assert.equal(sliderClasses.low, false, 'Slider should not have out-of-bounds-low when within bounds')
+    assert.equal(sliderClasses.high, false, 'Slider should not have out-of-bounds-high when within bounds')
+    pass('slider out-of-bounds visual indicator')
+
+    // Qual: verify red glow CSS rules by reading style.css from disk
+    const styleContent = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8')
+
+    // Verify CSS contains out-of-bounds-low rules with red box-shadow
+    assert.ok(styleContent.includes('out-of-bounds-low'), 'style.css should contain out-of-bounds-low rules')
+    assert.ok(styleContent.includes('out-of-bounds-high'), 'style.css should contain out-of-bounds-high rules')
+    assert.ok(styleContent.includes('::-webkit-slider-thumb'), 'style.css should style webkit slider thumb')
+    assert.ok(styleContent.includes('::-moz-range-thumb'), 'style.css should style moz range thumb')
+
+    // Verify red glow color (rgb(239, 68, 68) which is rgba(239, 68, 68, ...)
+    const hasRedColor = styleContent.includes('239, 68, 68') || styleContent.includes('239,68,68')
+    assert.ok(hasRedColor, 'style.css should contain red glow color rgba(239, 68, 68, ...)')
+
+    // Verify directional box-shadow (positive and negative x-offsets for directionality)
+    // Low: trail pointing right (positive offset like "10px 0")
+    // High: trail pointing left (negative offset like "-10px 0")
+    assert.ok(styleContent.match(/out-of-bounds-low[^}]*box-shadow[^}]*10px\s+0/),
+      'out-of-bounds-low should have rightward box-shadow (10px offset)')
+    assert.ok(styleContent.match(/out-of-bounds-high[^}]*box-shadow[^}]*-10px\s+0/),
+      'out-of-bounds-high should have leftward box-shadow (-10px offset)')
+    pass('slider red glow CSS rules')
 
     console.log(`\n=== UI Quals Summary ===\nPassed: ${TOTAL_QUALS}/${TOTAL_QUALS} (${milestonesCompleted} milestones)\nFailed: 0`)
   } catch (e) {

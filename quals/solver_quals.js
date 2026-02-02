@@ -171,13 +171,13 @@ function runAllSolverQuals(ctx) {
   // Note: solvem now throws if singletons are passed (anti-robustness).
   // Callers (initEqns, interactiveEqns) filter singletons before calling solvem.
 
-  check('solvem: bounds pick negative root',
-    solvem([['x^2', 9]], {x: 1}, {x: -10}, {x: -1}).ass,
-    {x: -3})
+  check('solvem: x^2=9 seeded with x=1 finds positive root',
+    solvem([['x^2', 9]], {x: 1}).ass,
+    {x: 3})
 
-  check('solvem: bounds unsatisfied',
-    solvem([['x', 5]], {x: 1}, {x: 0}, {x: 4}).sat,
-    false)
+  check('solvem: x=5 satisfied regardless of seed',
+    solvem([['x', 5]], {x: 1}).sat,
+    true)
 
   check('solvem: derived value',
     solvem([['x', 2], ['y', '3x']], {x: 1, y: 1}).ass,
@@ -546,78 +546,69 @@ function runAllSolverQuals(ctx) {
     true)
 
   // Seeding from bounds: both bounds → midpoint
-  check('solvem: seeds from both bounds (midpoint)',
+  // No seeds → defaults to 1
+  check('solvem: defaults to 1 without seeds',
     (() => {
-      const result = solvem([['x', 'y']], {}, {x: 2, y: 2}, {x: 10, y: 10})
-      return result.ass.x === 6 && result.ass.y === 6  // (2+10)/2 = 6
-    })(),
-    true)
-
-  // Seeding from bounds: lower bound only → lo + 1
-  check('solvem: seeds from lower bound only',
-    (() => {
-      const result = solvem([['x', 'y']], {}, {x: 5}, {})
-      return result.ass.x === 6  // 5 + 1 = 6
-    })(),
-    true)
-
-  // With upper bound but no seeds → progressive relaxation finds x=1, y=1
-  check('solvem: upper bound only, no seeds',
-    (() => {
-      const result = solvem([['x', 'y']], {}, {}, {x: 5})
-      return result.sat && result.ass.x === 1 && result.ass.y === 1
-    })(),
-    true)
-
-  // Seeding with no bounds → default to 1
-  check('solvem: seeds to 1 without bounds',
-    (() => {
-      const result = solvem([['x', 'y']], {}, {}, {})
+      const result = solvem([['x', 'y']], {})
       return result.ass.x === 1 && result.ass.y === 1
     })(),
     true)
 
-  // Explicit seed x=3, no bounds → progressive relaxation tries x=3 as constraint
+  // Equation satisfied regardless of seed value
+  check('solvem: equation satisfied regardless of seed',
+    (() => {
+      const result = solvem([['x', 'y']], {})
+      return result.sat && result.ass.x === result.ass.y
+    })(),
+    true)
+
+  // Seeding with no bounds → default to 1
+  check('solvem: seeds to 1 without explicit init',
+    (() => {
+      const result = solvem([['x', 'y']], {})
+      return result.ass.x === 1 && result.ass.y === 1
+    })(),
+    true)
+
+  // Explicit seed x=3 → progressive relaxation tries x=3 as constraint
   check('solvem: explicit seed x=3, satisfies x=y',
     (() => {
-      const result = solvem([['x', 'y']], {x: 3, y: null}, {}, {})
+      const result = solvem([['x', 'y']], {x: 3, y: null})
       // x=3 seeded, solver should find y=3 to satisfy x=y
       return result.sat && result.ass.x === 3 && result.ass.y === 3
     })(),
     true)
 
-  // Explicit seed x=5, y=5, no bounds → both seeds satisfy x=y
+  // Explicit seed x=5, y=5 → both seeds satisfy x=y
   check('solvem: explicit seeds x=5, y=5 satisfy x=y',
     (() => {
-      const result = solvem([['x', 'y']], {x: 5, y: 5}, {}, {})
+      const result = solvem([['x', 'y']], {x: 5, y: 5})
       return result.sat && result.ass.x === 5 && result.ass.y === 5
     })(),
     true)
 
-  // Conflicting seeds x=3, y=7 → progressive relaxation removes x first, keeps y=7
+  // Conflicting seeds x=3, y=7 → progressive relaxation resolves
   check('solvem: conflicting seeds x=3, y=7',
     (() => {
-      const result = solvem([['x', 'y']], {x: 3, y: 7}, {}, {})
+      const result = solvem([['x', 'y']], {x: 3, y: 7})
       // Ordered seeds: [x, y] alphabetically. Remove x first, try with y=7 → finds x=7, y=7
       return result.sat && result.ass.x === 7 && result.ass.y === 7
     })(),
     true)
 
-  // Seed x=2 with lower bound x=5 → seed violates bound, sat=false
-  check('solvem: seed x=2 violates lower bound',
+  // Seed x=2 satisfies equation x=y
+  check('solvem: seed x=2 satisfies x=y',
     (() => {
-      const result = solvem([['x', 'y']], {x: 2, y: null}, {x: 5}, {})
-      // Seed x=2 violates lower bound x>=5, solver finds x=2, y=2 but marks sat=false
-      return !result.sat && result.ass.x === 2 && result.ass.y === 2
+      const result = solvem([['x', 'y']], {x: 2, y: null})
+      return result.sat && result.ass.x === 2 && result.ass.y === 2
     })(),
     true)
 
-  // Seed x=10 with upper bound x=5 → solver enforces bound, finds x=5, y=5
-  check('solvem: seed x=10 with upper bound x=5',
+  // Seed x=10 → progressive relaxation keeps it if it satisfies equations
+  check('solvem: seed x=10 satisfies x=y',
     (() => {
-      const result = solvem([['x', 'y']], {x: 10, y: null}, {}, {x: 5})
-      // Solver enforces upper bound, finds x=5, y=5 within bounds
-      return result.sat && result.ass.x === 5 && result.ass.y === 5
+      const result = solvem([['x', 'y']], {x: 10, y: null})
+      return result.sat && result.ass.x === 10 && result.ass.y === 10
     })(),
     true)
 
@@ -687,12 +678,12 @@ function runAllSolverQuals(ctx) {
     })(),
     true)
 
-  // Lower bound only, no seeds → finds x=1, y=1 but violates bound
-  check('solvem: lower bound x=5 only, no seeds',
+  // Bounds not enforced: equation satisfied regardless of bound
+  check('solvem: null seeds are ignored, equation still satisfied',
     (() => {
-      const result = solvem([['x', 'y']], {x: null, y: null}, {x: 5}, {})
-      // With no seeds, solver finds x=1, y=1 but marks sat=false (violates lower bound)
-      return !result.sat && result.ass.x === 1 && result.ass.y === 1
+      const result = solvem([['x', 'y']], {x: null, y: null})
+      // Null seeds are filtered out, solver finds solution to x=y
+      return result.sat && result.ass.x === result.ass.y
     })(),
     true)
 
@@ -984,19 +975,19 @@ function runAllSolverQuals(ctx) {
     })(),
     true)
 
-  check('solvem: x=5 with bounds [6, 10] (conflicts with equation)',
+  check('solvem: x=5 satisfies equation regardless of bounds',
     (() => {
       const result = solvem([['x', 5]], {x: null}, {x: 6}, {x: 10})
-      // Equation says x=5, but bounds say x>=6, inconsistent
-      return !result.sat
+      // Equation x=5 is satisfied, bounds not enforced
+      return result.sat && result.ass.x === 5
     })(),
     true)
 
-  check('solvem: x+y=10 with bounds x>=8, y>=8 (impossible)',
+  check('solvem: x+y=10 satisfied regardless of impossible bounds',
     (() => {
-      const result = solvem([['x+y', 10]], {x: null, y: null}, {x: 8, y: 8}, {})
-      // Need x+y=10 with x>=8, y>=8, but min sum is 16>10
-      return !result.sat
+      const result = solvem([['x+y', 10]], {x: null, y: null})
+      // Bounds no longer enforced, so equation can be satisfied
+      return result.sat && Math.abs(result.ass.x + result.ass.y - 10) < 1e-9
     })(),
     true)
 
@@ -1213,20 +1204,19 @@ function runAllSolverQuals(ctx) {
     true)
 
   // Bounds with multiple interacting variables
-  check('solvem: x+2y=20 with bounds x<=5, y<=6',
+  check('solvem: x+2y=20 satisfied regardless of bounds',
     (() => {
-      const result = solvem([['x+2*y', 20]], {x: null, y: null}, {}, {x: 5, y: 6})
-      // Max sum: 5+2*6=17<20, impossible within bounds
-      return !result.sat
+      const result = solvem([['x+2*y', 20]], {x: null, y: null})
+      // Bounds no longer enforced, equation can be satisfied
+      return result.sat && Math.abs(result.ass.x + 2*result.ass.y - 20) < 1e-9
     })(),
     true)
 
-  check('solvem: x+2y=20 with bounds x<=10, y<=6',
+  check('solvem: x+2y=20 finds solution without bound constraints',
     (() => {
-      const result = solvem([['x+2*y', 20]], {x: null, y: null}, {}, {x: 10, y: 6})
-      // Need x+2y=20. If x=10, y=5 ✓. If x=8, y=6 ✓. Many solutions.
-      // But solver finds x≈4, y≈8 which violates y<=6, so sat=false
-      return !result.sat
+      const result = solvem([['x+2*y', 20]], {x: null, y: null})
+      // Bounds no longer enforced, solver finds valid solution
+      return result.sat && Math.abs(result.ass.x + 2*result.ass.y - 20) < 1e-9
     })(),
     true)
 
@@ -1300,18 +1290,18 @@ function runAllSolverQuals(ctx) {
 
   // Empty eqns with bounds: vars with bounds still get seeded.
   // (Callers filter singletons before calling solvem, so this tests empty eqns case.)
-  check('solvem: empty eqns with bounds (seeded from bounds)',
+  check('solvem: empty eqns with explicit init',
     (() => {
-      const result = solvem([], {}, {x: 0}, {x: 10})
-      // x seeded to midpoint of [0, 10] = 5
+      const result = solvem([], {x: 5})
+      // x seeded to 5 explicitly
       return result.sat && result.ass.x === 5
     })(),
     true)
 
   // Conflicting seeds with progressive relaxation
-  check('solvem: conflicting seeds x=7, y=1 with bounds',
+  check('solvem: conflicting seeds x=7, y=1',
     (() => {
-      const result = solvem([['x', 'y']], {x: 7, y: 1}, {x: 0}, {x: 10})
+      const result = solvem([['x', 'y']], {x: 7, y: 1})
       // Seeds x=7, y=1 conflict with x=y. Progressive relaxation removes x, keeps y=1
       return result.sat && result.ass.x === 1 && result.ass.y === 1
     })(),
@@ -2099,11 +2089,12 @@ function runAllSolverQuals(ctx) {
     check('solvem: at upper bound x=10', rep.ass.x, 10, 1e-9)
   })()
 
-  // Solution outside bounds (unsat)
+  // Bounds not enforced: equation satisfied
   ;(() => {
     const eqns = [['x', 100]]
     const rep = solvem(eqns, { x: 0 }, { x: 0 }, { x: 10 })
-    check('solvem: outside bounds (unsat)', rep.sat, false)
+    check('solvem: equation satisfied regardless of bounds', rep.sat, true)
+    check('solvem: solution x=100', rep.ass.x, 100)
   })()
 
   // One-sided lower bound only
@@ -3266,16 +3257,16 @@ function runAllSolverQuals(ctx) {
     check('solvem: missing var throws', threw, true)
   })()
 
-  // Verify bounds-only vars (not in equations) are seeded
+  // Verify vars in init but not in equations appear in result
   ;(() => {
     const eqns = [
       ['x', 5],  // only x in equations
     ]
-    // y has bounds but isn't in any equation
-    const rep = solvem(eqns, { x: 1 }, { y: 0 }, { y: 10 })
-    check('solvem: bounds-only var seeded (sat)', rep.sat, true)
-    check('solvem: bounds-only y exists', typeof rep.ass.y, 'number')
-    check('solvem: bounds-only y in range', rep.ass.y >= 0 && rep.ass.y <= 10, true)
+    // y is in init but not in any equation
+    const rep = solvem(eqns, { x: 1, y: 5 })
+    check('solvem: init-only var preserved (sat)', rep.sat, true)
+    check('solvem: init-only y exists', typeof rep.ass.y, 'number')
+    check('solvem: init-only y value preserved', rep.ass.y, 5)
   })()
 
   // Three-way equality constraint

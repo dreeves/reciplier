@@ -131,6 +131,27 @@ input[type="range"].at-one-x::-moz-range-thumb {
   background-color: #10b981;
 }
 
+/* Red glowy comet when slider value is outside bounds (like Mathematica Manipulate) */
+/* Below min: comet trail pointing right (toward the boundary) */
+input[type="range"].out-of-bounds-low::-webkit-slider-thumb {
+  box-shadow: 0 0 10px 3px rgba(239, 68, 68, 0.7),
+              10px 0 16px 4px rgba(239, 68, 68, 0.6);
+}
+input[type="range"].out-of-bounds-low::-moz-range-thumb {
+  box-shadow: 0 0 10px 3px rgba(239, 68, 68, 0.7),
+              10px 0 16px 4px rgba(239, 68, 68, 0.6);
+}
+
+/* Above max: comet trail pointing left (toward the boundary) */
+input[type="range"].out-of-bounds-high::-webkit-slider-thumb {
+  box-shadow: 0 0 10px 3px rgba(239, 68, 68, 0.7),
+              -10px 0 16px 4px rgba(239, 68, 68, 0.6);
+}
+input[type="range"].out-of-bounds-high::-moz-range-thumb {
+  box-shadow: 0 0 10px 3px rgba(239, 68, 68, 0.7),
+              -10px 0 16px 4px rgba(239, 68, 68, 0.6);
+}
+
 /* Disabled slider when no x variable */
 input[type="range"].disabled {
   opacity: 0.4;

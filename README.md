@@ -602,11 +602,37 @@ the slider excerpts and the close buttons. Remember to think in terms of
 death-to-if-statements. We want to elegantly generalize what's currently done
 with text fields to include other UI elements, in this case sliders.
 
+* [BOU] If the cval for a slider is outside its bounds, it should visually
+indidate that in the conventional way. Slider bounds are not considered by the
+solver. 
+
 
 ## Future Work
 
-* [BOU] If the cval for a slider is outside its bounds, it should visually
-indidate that in the conventional way.
+* [SLI] Visual bug report: the slider should be shaded solid to the left of
+where the knob is. I think this is the default behavior for sliders, so, as
+always, look at what code we can remove in order to fix this, not new code to
+add.
+
+* [ZSR] Let's see if we can address this solver failure:
+```
+solvem([["a","3x"],["b","4x"],["c",5],["a^2 + b^2","c^2"]], {"x":null,"a":null,"b":null,"c":null})
+```
+Bug report and qual:
+Replicata:
+1. Paste in the following as the reciplate
+2. Blank or set to zero the a field
+3. Blank or set to zero the b field
+4. Enter a 5 in the c field
+Expectata: That the solver finds the solution a=3, b=4, c=5, x=1.
+Resultata: "No solution found"
+(Mathematica finds this solution fine.)
+The reciplate:
+```
+{x : 1}
+{a = 3x}{b = 4x}{c}
+{a^2 + b^2 = c^2}
+```
 
 * [INC] Weird inconsistency that we should fix iff we can do so by simplifying
 and DRYing the code: A cell like {(} or {7+} in the reciplate yields an error,
