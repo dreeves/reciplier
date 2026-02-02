@@ -2397,14 +2397,14 @@ async function main() {
     await waitForNextFrame(page)
 
     const hasGreenClass = await page.$eval('input.recipe-slider', el =>
-      el.classList.contains('at-one-x')
+      el.classList.contains('at-bass')
     )
-    assert.equal(hasGreenClass, true, 'Slider should have at-one-x class when x=1')
+    assert.equal(hasGreenClass, true, 'Slider should have at-bass class when x=1 (base value for crepes)')
 
     // Verify green thumb CSS rule exists in style.css
     const styleText = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8')
-    assert.ok(styleText.includes('.at-one-x') && styleText.includes('slider-thumb') && styleText.includes('#10b981'),
-      'style.css should have green thumb rule for at-one-x class')
+    assert.ok(styleText.includes('.at-bass') && styleText.includes('slider-thumb') && styleText.includes('#10b981'),
+      'style.css should have green thumb rule for at-bass class')
 
     pass('green knob at x=1')
 

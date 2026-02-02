@@ -477,6 +477,7 @@ function parseRecipe() {
   // Update state
   state.cells = cells
   state.solve = solve
+  state.bass = solve  // Store base assignment from template (never mutated)
   state.bounds = bounds
   state.errors = allErrors
   // Cells with constants and no colon start pegged (YN case in parse table)

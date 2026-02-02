@@ -123,12 +123,12 @@ input[type="range"]::-moz-range-thumb {
   transition: background-color 0.2s ease;
 }
 
-/* Green thumb when at 1x */
-input[type="range"].at-one-x::-webkit-slider-thumb {
+/* Green thumb when at base value */
+input[type="range"].at-bass::-webkit-slider-thumb {
   background-color: #10b981;
 }
 
-input[type="range"].at-one-x::-moz-range-thumb {
+input[type="range"].at-bass::-moz-range-thumb {
   background-color: #10b981;
 }
 

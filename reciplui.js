@@ -178,12 +178,13 @@ function renderRecipe() {
       if (cell.ineq) {
         // Cell has inequality bounds - render as slider with bounds labels
         const bounds = sliderBounds(cell)
-        const nearOne = Math.abs(value - 1) < 0.005
         // cell.ineq.varName guaranteed by parser when cell.ineq exists (reciparse.js:150-151)
         const varName = cell.ineq.varName
+        const bassVal = state.bass?.ass?.[varName] ?? 1  // Fall back to 1 if bass not yet initialized
+        const atBass = Math.abs(value - bassVal) < 0.005
         const minLabel = formatNum(bounds.minLabel)
         const maxLabel = formatNum(bounds.maxLabel)
-        inputHtml = `<span class="slider-group"><span class="slider-bound">${minLabel}</span><input type="range" class="recipe-slider${nearOne ? ' at-one-x' : ''}" min="${bounds.min}" max="${bounds.max}" step="0.01" value="${displayValue}" data-cell-id="${cell.id}" data-var-name="${varName}" title="${title}"${disabledAttr}><span class="slider-bound">${maxLabel}</span></span>`
+        inputHtml = `<span class="slider-group"><span class="slider-bound">${minLabel}</span><input type="range" class="recipe-slider${atBass ? ' at-bass' : ''}" min="${bounds.min}" max="${bounds.max}" step="0.01" value="${displayValue}" data-cell-id="${cell.id}" data-var-name="${varName}" title="${title}"${disabledAttr}><span class="slider-bound">${maxLabel}</span></span>`
       } else {
         // No inequality bounds - render as text field
         const label = cell.ceqn.length > 0 ? cell.ceqn[0].trim() : ''
@@ -350,10 +351,10 @@ function updateSliderFill(slider) {
     if (!isFinite(min) || !isFinite(max) || !isFinite(value)) return
 
     const percentage = ((value - min) / (max - min)) * 100
-    const isAtOneX = slider.classList.contains('at-one-x')
+    const atBass = slider.classList.contains('at-bass')
 
-    // Use green fill when at x=1, blue otherwise
-    const fillColor = isAtOneX ? '#10b981' : '#3b82f6'
+    // Use green fill when at base value, blue otherwise
+    const fillColor = atBass ? '#10b981' : '#3b82f6'
     const trackColor = '#e5e7eb'
     slider.style.background = `linear-gradient(to right, ${fillColor} 0%, ${fillColor} ${percentage}%, ${trackColor} ${percentage}%, ${trackColor} 100%)`
   } catch (err) {
@@ -390,8 +391,10 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
       slider.value = c.cval
     }
 
-    // Always update at-one-x class (even during drag)
-    slider.classList.toggle('at-one-x', Math.abs(c.cval - 1) < 0.005)
+    // Always update at-bass class (even during drag)
+    const varName = slider.dataset.varName
+    const bassVal = state.bass?.ass?.[varName] ?? 1  // Fall back to 1 if bass not yet initialized
+    slider.classList.toggle('at-bass', Math.abs(c.cval - bassVal) < 0.005)
 
     // Always update out-of-bounds classes (even during drag)
     // TODO: it's only when you start dragging that it may need updating...
@@ -498,8 +501,10 @@ function handleInlineSliderInput(e) {
     editedValue: newValue,
   })
 
-  // Update at-one-x styling
-  input.classList.toggle('at-one-x', Math.abs(newValue - 1) < 0.005)
+  // Update at-bass styling
+  const varName = input.dataset.varName
+  const bassVal = state.bass?.ass?.[varName] ?? 1  // Fall back to 1 if bass not yet initialized
+  input.classList.toggle('at-bass', Math.abs(newValue - bassVal) < 0.005)
 
   // Update fill gradient immediately for visual feedback
   updateSliderFill(input)
