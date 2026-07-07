@@ -352,8 +352,16 @@ function linearCoeffs(expr, varNames, baseValues) {
   const f0 = vareval(expr, zeros)
   if (!isValidResult(f0)) return null
 
+  // Vars absent from the expression have coefficient 0 by definition, so only
+  // probe the vars the expression actually mentions
+  const exprVars = varparse(expr)
+
   const coeffs = []
   for (const v of varNames) {
+    if (!exprVars.has(v)) {
+      coeffs.push(0)
+      continue
+    }
     const test1 = { ...zeros, [v]: 1 }
     const test2 = { ...zeros, [v]: 2 }
 
@@ -362,13 +370,13 @@ function linearCoeffs(expr, varNames, baseValues) {
 
     if (!isValidResult(f1)) return null
     if (!isValidResult(f2)) return null
-    
+
     const coeff = f1.value - f0.value
     const coeff2 = f2.value - f1.value
-    
+
     // Check linearity: second difference should equal first difference
     if (Math.abs(coeff2 - coeff) > 1e-9) return null
-    
+
     coeffs.push(coeff)
   }
   
@@ -1159,7 +1167,17 @@ function newtRaphson(eqns, vars) {
     return residuals
   }
 
-  // Compute Jacobian numerically
+  // Which variables each constraint mentions, for Jacobian sparsity
+  const constraintVars = constraints.map(c => {
+    const s = new Set()
+    if (typeof c.left === 'string') for (const v of varparse(c.left)) s.add(v)
+    if (typeof c.right === 'string') for (const v of varparse(c.right)) s.add(v)
+    return s
+  })
+
+  // Compute Jacobian numerically. A constraint's derivative with respect to a
+  // variable it doesn't mention is exactly 0, so only re-evaluate the
+  // constraints that mention the perturbed variable.
   function computeJacobian(testValues) {
     const h = TOL_JACOBIAN
     const baseResiduals = evalResiduals(testValues)
@@ -1169,10 +1187,18 @@ function newtRaphson(eqns, vars) {
     for (let j = 0; j < solveVars.length; j++) {
       const v = solveVars[j]
       const perturbed = { ...testValues, [v]: testValues[v] + h }
-      const perturbedResiduals = evalResiduals(perturbed)
-      if (!perturbedResiduals) return null
-
-      const col = perturbedResiduals.map((r, i) => (r - baseResiduals[i]) / h)
+      const col = []
+      for (let i = 0; i < constraints.length; i++) {
+        if (!constraintVars[i].has(v)) {
+          col.push(0)
+          continue
+        }
+        const c = constraints[i]
+        const leftVal = typeof c.left === 'number' ? c.left : vareval(c.left, perturbed).value
+        const rightVal = typeof c.right === 'number' ? c.right : vareval(c.right, perturbed).value
+        if (!isFinite(leftVal) || !isFinite(rightVal)) return null
+        col.push((leftVal - rightVal - baseResiduals[i]) / h)
+      }
       jacobian.push(col)
     }
     return { jacobian, residuals: baseResiduals }

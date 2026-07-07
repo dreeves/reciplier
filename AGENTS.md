@@ -45,6 +45,8 @@ Humans above, robots below
 - ✅ Added replicata/expectata/resultata format to qual reporting (AGENTS.md rule 18)
 - ✅ DRY: Replaced 5 instances of `r.error || !isFinite(r.value)` with `!isValidResult(r)` in csolver.js
 - ✅ quals.js failure extraction: one regex for labeled detail lines instead of five hardcoded substring offsets; a qual script that crashes without printing a ✗ line now gets its last output echoed instead of failing silently
+- ✅ Perf: vareval was calling `new Function` (a full JS compile) on every evaluation -- now compiled once per expression and cached (matheval.js evalCache). Plus Jacobian/linearCoeffs skip variables an expression doesn't mention (derivative is exactly 0), varparse memoized, and field edits no longer call updateUrl (the URL only encodes the template). Worst-case dial keystroke: 1711ms → 290ms; crepes keystroke: 15ms → 4ms
+- ✅ Mobile + visual pass: 16px fonts on all form controls (sub-16px triggers iOS focus-zoom), bigger slider thumbs and corner-pin tap areas on coarse pointers, spellcheck/autocorrect off on numeric fields and the template editor, design tokens in style.css, removed `<br>&nbsp;<br>` spacer hacks
 
 **Solver ordering**: kludgeOrama must stay LAST in SOLVERS. When it runs first, its failed attempt is what solvem returns in no-solution cases, and the UI then marks the wrong fields invalid (the dial rate=0 UI qual catches this).
 

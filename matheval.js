@@ -48,25 +48,41 @@ function unixtime(y, m, d) {
   return ms / 1000
 }
 
+// Cache of compiled evaluators, keyed by expression string. Compiling with
+// new Function costs ~1000x calling the compiled function, and the solver
+// evaluates the same few expressions thousands of times per solve (numeric
+// Jacobians, iteration loops), so caching here is load-bearing for UI
+// responsiveness. Cleared wholesale if it ever grows huge (free-typing in the
+// template editor mints a new expression string per keystroke).
+const EVAL_CACHE_MAX = 10000
+const evalCache = new Map()
+
+function compileExpr(expr) {
+  let compiled = evalCache.get(expr)
+  if (compiled === undefined) {
+    const jsExpr = deoctalize(preval(expr))
+    const params = [...varparse(expr)]
+    const fn = new Function('unixtime', ...params,
+                            `"use strict"; return (${jsExpr});`)
+    compiled = { fn, params }
+    if (evalCache.size >= EVAL_CACHE_MAX) evalCache.clear()
+    evalCache.set(expr, compiled)
+  }
+  return compiled
+}
+
 function vareval(expr, vars) {
   try {
-    const jsExpr = deoctalize(preval(expr))
-
-    // Build variable assignments
-    const assignments = Object.entries(vars)
-      .map(([name, val]) => {
-        // null/undefined should behave like unknowns, not like 0.
-        const jsVal = (val === null || val === undefined) ? 'NaN' : String(val)
-        return `const ${name} = ${jsVal};`
-      }).join('\n')
-
-    // Create function with unixtime available in scope
-    const fn = new Function('unixtime', `
-      "use strict";
-      ${assignments}
-      return (${jsExpr});
-    `)
-    const result = fn(unixtime)
+    const { fn, params } = compileExpr(expr)
+    const args = params.map(p => {
+      if (!Object.hasOwn(vars, p)) {
+        throw new ReferenceError(`${p} is not defined`)
+      }
+      const val = vars[p]
+      // null/undefined should behave like unknowns, not like 0.
+      return (val === null || val === undefined) ? NaN : val
+    })
+    const result = fn(unixtime, ...args)
     return { value: result, error: null }
   } catch (e) {
     // TODO: this smells. could we fix this by using normal eval?
@@ -85,11 +101,20 @@ const RESERVED_WORDS = new Set(['sqrt', 'floor', 'ceil', 'round', 'min', 'max',
   'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'exp', 'abs',
   'unixtime'])
 
+// Memoized: the solver calls this in hot loops with the same handful of
+// expressions. Callers get the shared cached Set -- treat it as read-only.
+const varparseCache = new Map()
+
 function varparse(expr) {
   if (typeof expr !== 'string' || expr.trim() === '') return new Set()
-  const matches = expr.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) ?? []
-  const vars = matches.filter(v => !RESERVED_WORDS.has(v))
-  return new Set(vars.sort())
+  let vars = varparseCache.get(expr)
+  if (vars === undefined) {
+    const matches = expr.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) ?? []
+    vars = new Set(matches.filter(v => !RESERVED_WORDS.has(v)).sort())
+    if (varparseCache.size >= EVAL_CACHE_MAX) varparseCache.clear()
+    varparseCache.set(expr, vars)
+  }
+  return vars
 }
 
 function isbarevar(expr) {

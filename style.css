@@ -1,17 +1,46 @@
 /* Reciplier styles - converted from CSS modules */
+
+/* Design tokens. The blue/green/track values are mirrored in
+   updateSliderFill() in reciplui.js, which paints slider gradients inline. */
+:root {
+  --blue:       #3b82f6;
+  --blue-soft:  #dbeafe;
+  --green:      #10b981;
+  --red:        #ef4444;
+  --red-soft:   #fef2f2;
+  --red-line:   #fecaca;
+  --ink:        #1f2937;
+  --ink-soft:   #4b5563;
+  --ink-faint:  #9ca3af;
+  --line:       #d1d5db;
+  --line-soft:  #e5e7eb;
+  --paper:      #ffffff;
+  --paper-tint: #f9fafb;
+  --radius:     6px;
+  --radius-lg:  10px;
+  --ring:       0 0 0 3px rgba(59, 130, 246, 0.18);
+  --ring-red:   0 0 0 3px rgba(239, 68, 68, 0.18);
+  --font-mono:  ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+                "Liberation Mono", "Courier New", monospace;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 
+  font-family: -apple-system, BlinkMacSystemFont,
     'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  color: var(--ink);
+  background-color: var(--paper);
+  font-size: 16px;
+  line-height: 1.5;
 }
 
 /* General Layout */
 .reciplier-container {
-  padding: 1rem;
+  padding: 1.25rem 1rem 2rem;
   max-width: 42rem;
   margin-left: auto;
   margin-right: auto;
@@ -42,14 +71,15 @@ body {
 .text-xs { font-size: 0.75rem; line-height: 1rem; }
 .font-bold { font-weight: 700; }
 .font-medium { font-weight: 600; }
-.font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-                          "Liberation Mono", "Courier New", monospace; }
+.font-mono { font-family: var(--font-mono); }
 .text-center { text-align: center; }
 .text-gray-400 { color: #9ca3af; }
 .text-gray-600 { color: #4b5563; }
 .text-gray-700 { color: #374151; }
 .text-gray-800 { color: #1f2937; }
 .text-gray-300 { color: #d1d5db; }
+
+h1 { letter-spacing: -0.02em; }
 
 /* Flexbox */
 .flex { display: flex; }
@@ -63,24 +93,46 @@ body {
 .bg-gray-100 { background-color: #f3f4f6; }
 .bg-gray-200 { background-color: #e5e7eb; }
 .border { border-width: 1px; border-color: #e5e7eb; }
-.rounded { border-radius: 0.25rem; }
-.rounded-lg { border-radius: 0.5rem; }
+.rounded { border-radius: var(--radius); }
+.rounded-lg { border-radius: var(--radius-lg); }
 
-/* Inputs */
+/* Inputs
+   Form controls inherit the page font at >=16px on purpose: mobile Safari
+   auto-zooms into any focused control whose font is smaller than 16px. */
+textarea, select, input[type="text"], button {
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--ink);
+  touch-action: manipulation;
+}
+
 textarea, select, input[type="text"], input[type="range"] {
-  border: 1px solid #e5e7eb;
-  border-radius: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   box-sizing: border-box;
+  background-color: var(--paper);
+}
+
+textarea:focus, select:focus, input[type="text"]:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: var(--ring);
 }
 
 textarea {
   height: 10rem;
   width: 100%;
   padding: 0.75rem;
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  resize: vertical;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 select {
-  padding: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  max-width: 100%;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 input[type="text"] {
@@ -91,45 +143,62 @@ input[type="text"] {
 }
 
 input[type="text"].invalid {
-  border-color: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+  border-color: var(--red);
+  box-shadow: var(--ring-red);
 }
 
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  height: 0.5rem;
+  height: 0.375rem;
+  border: none;
   border-radius: 0.5rem;
   cursor: pointer;
   flex-grow: 1;
+  touch-action: manipulation;
   /* Background set dynamically via updateSliderFill() in JavaScript */
 }
 
 input[type="range"]::-webkit-slider-thumb {
   appearance: none;
-  width: 1rem;
-  height: 1rem;
-  background-color: #3b82f6;
+  width: 1.125rem;
+  height: 1.125rem;
+  background-color: var(--blue);
+  border: 2px solid var(--paper);
   border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   transition: background-color 0.2s ease;
 }
 
 input[type="range"]::-moz-range-thumb {
-  width: 1rem;
-  height: 1rem;
-  background-color: #3b82f6;
+  width: 1.125rem;
+  height: 1.125rem;
+  background-color: var(--blue);
+  border: 2px solid var(--paper);
   border-radius: 50%;
-  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   transition: background-color 0.2s ease;
+}
+
+/* Bigger slider thumbs where the pointer is a finger */
+@media (pointer: coarse) {
+  input[type="range"]::-webkit-slider-thumb {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
 }
 
 /* Green thumb when at base value */
 input[type="range"].at-bass::-webkit-slider-thumb {
-  background-color: #10b981;
+  background-color: var(--green);
 }
 
 input[type="range"].at-bass::-moz-range-thumb {
-  background-color: #10b981;
+  background-color: var(--green);
 }
 
 /* Red glowy comet when slider value is outside bounds (like Mathematica Manipulate) */
@@ -160,38 +229,53 @@ input[type="range"].disabled {
 }
 
 input[type="range"].disabled::-webkit-slider-thumb {
-  background-color: #9ca3af;
+  background-color: var(--ink-faint);
 }
 
 input[type="range"].disabled::-moz-range-thumb {
-  background-color: #9ca3af;
+  background-color: var(--ink-faint);
 }
 
 .text-sm.disabled {
-  color: #9ca3af;
+  color: var(--ink-faint);
 }
 
 /* Buttons */
 button {
   font-size: 0.875rem;
   padding: 0.5rem 0.75rem;
-  border-radius: 0.25rem;
+  border-radius: var(--radius);
   background-color: #f3f4f6;
-  color: #1f2937;
+  color: var(--ink);
   cursor: pointer;
   border: none;
 }
 
 button:hover {
-  background-color: #e5e7eb;
+  background-color: var(--line-soft);
 }
 
 button:disabled {
   background-color: #f3f4f6;
-  color: #9ca3af;
+  color: var(--ink-faint);
   cursor: not-allowed;
 }
 
+#copyButton {
+  background-color: var(--paper);
+  border: 1px solid var(--line);
+  font-weight: 500;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+#copyButton:hover {
+  background-color: var(--paper-tint);
+  border-color: var(--ink-faint);
+}
+
+#copyButton:active {
+  background-color: #f3f4f6;
+}
 
 .help-float {
   position: fixed;
@@ -202,37 +286,42 @@ button:disabled {
 
 .help-button {
   position: relative;
-  width: 2rem;
-  height: 2rem;
+  width: 2.25rem;
+  height: 2.25rem;
   border-radius: 9999px;
-  border: 1px solid #d1d5db;
-  background-color: #ffffff;
+  border: 1px solid var(--line);
+  background-color: var(--paper);
   color: #374151;
   font-weight: 600;
-  line-height: 2rem;
+  line-height: 2.25rem;
   text-align: center;
   padding: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .help-button:hover {
-  background-color: #f9fafb;
+  background-color: var(--paper-tint);
 }
 
 .help-button:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  box-shadow: var(--ring);
 }
 
 .help-popover {
   position: absolute;
   right: 0;
-  top: 2.5rem;
+  top: 3rem;
   width: min(32rem, calc(100vw - 2rem));
-  border: 1px solid #d1d5db;
-  background-color: #ffffff;
-  border-radius: 0.5rem;
-  padding: 0.75rem;
+  border: 1px solid var(--line);
+  background-color: var(--paper);
+  border-radius: var(--radius-lg);
+  padding: 0.25rem 1rem;
   z-index: 10;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  max-height: calc(100vh - 5rem);
+  max-height: calc(100dvh - 5rem);
+  overflow-y: auto;
 }
 
 .help-popover-inner a {
@@ -249,51 +338,56 @@ button:disabled {
 
 /* Recipe Output */
 .recipe-output {
-  background-color: #f9fafb;
-  padding: 1rem;
-  border-radius: 0.25rem;
+  background-color: var(--paper-tint);
+  padding: 1.25rem 1rem;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
 }
 
 .recipe-rendered {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-               "Liberation Mono", "Courier New", monospace;
-  line-height: 1.8;
+  font-family: var(--font-mono);
+  line-height: 1.9;
+  font-size: 0.9375rem;
 }
 
 /* Recipe input fields */
 .recipe-field {
   width: 4.5rem;
-  padding: 0.125rem 0.25rem;
+  padding: 0.25rem;
   margin: 0 0.125rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   text-align: center;
   font-family: inherit;
-  font-size: inherit;
-  background-color: #fff;
+  font-size: 1rem; /* >=16px so mobile Safari doesn't zoom on focus */
+  background-color: var(--paper);
   transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+
+.recipe-field:hover {
+  border-color: var(--ink-faint);
 }
 
 .recipe-field:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  border-color: var(--blue);
+  box-shadow: var(--ring);
 }
 
 .recipe-field.invalid {
-  border-color: #ef4444;
-  background-color: #fef2f2;
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+  border-color: var(--red);
+  background-color: var(--red-soft);
+  box-shadow: var(--ring-red);
 }
 
 .recipe-field.pegged {
-  background-color: #dbeafe;
-  border-color: #3b82f6;
+  background-color: var(--blue-soft);
+  border-color: var(--blue);
   font-weight: 600;
 }
 
 .recipe-field.pressing {
-  background-color: #e5e7eb;
+  background-color: var(--line-soft);
   transition: background-color 0.1s ease;
 }
 
@@ -319,7 +413,7 @@ button:disabled {
 .recipe-slider {
   flex-grow: 1;
   min-width: 2rem;
-  height: 0.5rem;
+  height: 0.375rem;
 }
 
 .slider-bound {
@@ -330,16 +424,18 @@ button:disabled {
 
 /* Error display */
 .error-display {
-  padding: 1rem;
+  padding: 0.25rem 0;
 }
 
 .error-message {
   color: #dc2626;
-  padding: 0.5rem;
+  padding: 0.5rem 0.75rem;
   margin-bottom: 0.5rem;
-  background-color: #fef2f2;
-  border-radius: 0.25rem;
-  border: 1px solid #fecaca;
+  background-color: var(--red-soft);
+  border-radius: var(--radius);
+  border: 1px solid var(--red-line);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-size: 0.875rem;
 }
 
 .debug-values {
@@ -349,7 +445,7 @@ button:disabled {
   margin-top: 0.5rem;
   background-color: #f3f4f6;
   border-radius: 0.25rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .w-20 { width: 5rem; }
@@ -360,9 +456,9 @@ button:disabled {
 /* Notification styles */
 .notification {
   background-color: #f3f4f6;
-  color: #1f2937;
+  color: var(--ink);
   padding: 0.5rem 1rem;
-  border-radius: 0.25rem;
+  border-radius: var(--radius);
   text-align: center;
   animation: fadeIn 0.2s ease-in;
 }
@@ -380,7 +476,7 @@ button:disabled {
 
 /* Hover styles for links */
 a:hover {
-  color: #4b5563;
+  color: var(--ink-soft);
   text-decoration: underline;
 }
 
@@ -388,10 +484,10 @@ a:hover {
 
 /* Temporary Debug Panel */
 .debug-panel {
-  margin-top: 2rem;
+  margin-top: 4rem;
   padding: 1rem;
-  border: 2px dashed #f59e0b;
-  border-radius: 0.5rem;
+  border: 1px dashed #f59e0b;
+  border-radius: var(--radius-lg);
   background-color: #fffbeb;
 }
 
@@ -503,7 +599,7 @@ a:hover {
   line-height: 18px;
   text-align: center;
   background-color: #f3f4f6;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--line);
   border-radius: 50%;
   cursor: pointer;
   user-select: none;
@@ -512,14 +608,23 @@ a:hover {
 }
 
 .corner-pin:hover {
-  background-color: #e5e7eb;
+  background-color: var(--line-soft);
   transform: scale(1.15);
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
+/* Extend the pin's tap target (not its visuals) for fingers */
+@media (pointer: coarse) {
+  .corner-pin::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+}
+
 .corner-pin.pegged {
-  background-color: #dbeafe;
-  border-color: #3b82f6;
+  background-color: var(--blue-soft);
+  border-color: var(--blue);
   color: #dc2626;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
 }
@@ -542,7 +647,7 @@ a:hover {
 }
 
 .edge-dot.pegged {
-  background-color: #3b82f6;
+  background-color: var(--blue);
 }
 
 .edge-dot.top {
@@ -599,7 +704,7 @@ a:hover {
 }
 
 .corner-bracket.pegged {
-  color: #3b82f6;
+  color: var(--blue);
 }
 
 .corner-bracket.top-left {
@@ -668,13 +773,13 @@ a:hover {
 
 /* Blue background focus-only mode */
 .recipe-field.pegged.focus-only-bg {
-  background-color: #fff;
-  border-color: #d1d5db;
+  background-color: var(--paper);
+  border-color: var(--line);
   font-weight: normal;
 }
 
 .recipe-field.pegged.focus-only-bg:focus {
-  background-color: #dbeafe;
-  border-color: #3b82f6;
+  background-color: var(--blue-soft);
+  border-color: var(--blue);
   font-weight: 600;
 }

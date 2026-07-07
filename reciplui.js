@@ -189,7 +189,7 @@ function renderRecipe() {
         // No inequality bounds - render as text field
         const label = cell.ceqn.length > 0 ? cell.ceqn[0].trim() : ''
         const focusOnlyBgClass = !INDICATOR_SHOW_ALWAYS.background ? 'focus-only-bg' : ''
-        inputHtml = `<input type="text" class="recipe-field ${isPegged ? 'pegged' : ''} ${isInvalid ? 'invalid' : ''} ${focusOnlyBgClass}" data-label="${label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}"${disabledAttr}>`
+        inputHtml = `<input type="text" class="recipe-field ${isPegged ? 'pegged' : ''} ${isInvalid ? 'invalid' : ''} ${focusOnlyBgClass}" data-label="${label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"${disabledAttr}>`
       }
       const placeholder = `@@RECIPLIER_CELL_${cell.id}@@`
       placeholders.set(placeholder, inputHtml)
@@ -440,7 +440,6 @@ function handleFieldInput(e) {
       editedFieldEl: input,
     })
     syncAfterSolve(solveResult.invalidCellIds, input)
-    updateUrl()
     return
   }
 
@@ -467,7 +466,6 @@ function handleFieldInput(e) {
   })
 
   syncAfterSolve(solveResult.invalidCellIds, input)
-  updateUrl()
 }
 
 function handleFieldBlur(e) {
@@ -510,7 +508,6 @@ function handleInlineSliderInput(e) {
   updateSliderFill(input)
 
   syncAfterSolve(solveResult.invalidCellIds, input)
-  updateUrl()
 }
 
 // =============================================================================

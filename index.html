@@ -4,6 +4,7 @@
 
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#ffffff" />
 
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
@@ -102,10 +103,11 @@ for an example of some prior art.
       </select>
     </div>
 
-    <textarea 
+    <textarea
       id="recipeTextarea"
       class="w-full p-3 border rounded h-40"
       placeholder="Recipe syntax is like {2x} cups flour, scaled by {x:1}"
+      spellcheck="false" autocapitalize="off" autocomplete="off"
     ></textarea>
   </div>
 
@@ -125,7 +127,7 @@ for an example of some prior art.
   
   <div class="text-center text-gray-400 text-sm mt-4">
     <div class="text-gray-300 text-xs mt-1">
-      v2026.07.07-a
+      v2026.07.07-b
     </div>
   </div>
 
@@ -133,9 +135,7 @@ for an example of some prior art.
      Add "open", without quotes, as a boolean attribute on <details> to
      default to expanded rather than collapsed.
 -->
-<br>&nbsp;<br>
-<br>&nbsp;<br>
-<details id="debugPanel" class="debug-panel"> 
+<details id="debugPanel" class="debug-panel">
   <summary class="debug-header">Debug Panel & UI Experiments ⚠️ (normal users ignore this)</summary>
   <div class="debug-content">
     <div class="debug-section">
