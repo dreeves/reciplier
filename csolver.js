@@ -1406,9 +1406,50 @@ function solvem(eqns, init) {
   // Get variables that have finite seed values
   const seededVars = Object.keys(seededInit).filter(v => isFiniteNum(seededInit[v]))
 
-  // Order seeds by: fewest equation appearances first, alphabetical for ties
+  // Vars in equations that are violated at the seed point are the prime
+  // suspects for stale seeds (e.g. the just-edited cell's previous value).
+  // Their seeds must drop first: a relaxation round that keeps a seed
+  // contradicting an equation is doomed, and every innocent seed dropped
+  // before it is lost for nothing (that was the "relaxation drift" bug:
+  // editing one field perturbed unrelated seeded values).
+  const suspects = new Set()
+  for (const eqn of eqns) {
+    if (eqnsSatisfied([eqn], seededInit)) continue
+    for (const term of eqn) {
+      if (typeof term !== 'string') continue
+      for (const v of varparse(term)) suspects.add(v)
+    }
+  }
+
+  // Propagate suspicion directionally: when a suspect var appears inside a
+  // COMPOUND term of an equation, the equation's bare-var terms name derived
+  // quantities that must re-derive, so they become suspects too (e.g. in
+  // {b = b1+b2+b3}, a changed b3 implicates b but not b1 or b2).
+  let suspectsGrew = true
+  while (suspectsGrew) {
+    suspectsGrew = false
+    for (const eqn of eqns) {
+      const strTerms = eqn.filter(t => typeof t === 'string')
+      const compoundHasSuspect = strTerms.some(t =>
+        !isbarevar(t) && [...varparse(t)].some(v => suspects.has(v)))
+      if (!compoundHasSuspect) continue
+      for (const t of strTerms) {
+        if (!isbarevar(t)) continue
+        const v = t.trim()
+        if (!suspects.has(v)) {
+          suspects.add(v)
+          suspectsGrew = true
+        }
+      }
+    }
+  }
+
+  // Order seeds by: suspects first, then fewest equation appearances,
+  // alphabetical for ties
   const eqnCounts = countEqnAppearances(eqns)
   const orderedSeeds = seededVars.sort((a, b) => {
+    const suspectDiff = (suspects.has(a) ? 0 : 1) - (suspects.has(b) ? 0 : 1)
+    if (suspectDiff !== 0) return suspectDiff
     const countA = eqnCounts[a] || 0
     const countB = eqnCounts[b] || 0
     if (countA !== countB) return countA - countB

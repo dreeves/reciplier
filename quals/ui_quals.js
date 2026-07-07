@@ -19,7 +19,7 @@ function fileUrl(p) {
 
 // Track and display qual progress
 // 89 individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 145
+const TOTAL_QUALS = 147
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -2504,29 +2504,25 @@ async function main() {
     await selectReciplate('biketour')
     assert.equal(await getInputValue(page, 'input.recipe-field[data-label="w"]'), '6.25', 'biketour: wall clock time should be 6.25 hours')
     assert.ok(near(await fieldNum('d/t'), 12.6923, 1e-3), 'biketour: avg speed should be ~12.6923 mph')
-    // Note: the solver may relax other seeded values (b1, b2, start time) to
-    // absorb the edit, so assert the edit is respected and the relations stay
-    // consistent rather than pinning one particular relaxation.
+    // Minimal change: the edit should move only b3 and its derived cells
+    // (b, t, speeds), leaving the other seeded values (b1, b2, start time)
+    // untouched
     await setInputValue(page, 'input.recipe-field[data-label="b3*60"]', '30')
     assert.equal(await getInputValue(page, 'input.recipe-field[data-label="b3"]'), '0.5', 'biketour: 30min third break should set b3=0.5h')
-    const btW = await fieldNum('w')
-    const btB = await fieldNum('b')
-    const btT = await fieldNum('t')
-    assert.ok(near(btT, btW - btB, 1e-3), `biketour: riding time should stay w-b (w=${btW}, b=${btB}, t=${btT})`)
-    assert.ok(near(await fieldNum('d/t'), 66 / btT, 1e-2), 'biketour: avg speed should stay d/t after the edit')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="b1*60"]'), '26', 'biketour: editing break 3 should not move break 1')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="t"]'), '4.7', 'biketour: riding time should become w-b = 4.7h')
+    assert.ok(near(await fieldNum('d/t'), 14.0426, 1e-3), 'biketour: avg speed should become ~14.0426 mph')
     pass('biketour reciplate coverage')
 
     // Qual: dumbdial rate = delta / days
     await selectReciplate('dumbdial')
     assert.equal(await getInputValue(page, 'input.recipe-field[data-label="r"]'), '10', 'dumbdial: rate should start at 300/30 = 10')
     assert.ok(await page.$('input.recipe-slider'), 'dumbdial: rate should render a slider for its bounds')
-    // Note: the solver splits the correction between r and vfin (it does not
-    // hold the vfin seed; same at HEAD), so assert the rate equation stays
-    // consistent rather than pinning r=5 exactly.
+    // Minimal change: doubling the days should halve the rate and leave the
+    // seeded vfin=300 alone
     await setInputValue(page, 'input.recipe-field[data-label="tfin"]', '60')
-    const ddVfin = await fieldNum('vfin')
-    const ddR = await fieldNum('r')
-    assert.ok(near(ddR, ddVfin / 60, 1e-3), `dumbdial: rate should stay (vfin-vini)/(tfin-tini) (vfin=${ddVfin}, r=${ddR})`)
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="vfin"]'), '300', 'dumbdial: editing tfin should not move vfin')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="r"]'), '5', 'dumbdial: doubling the days should halve the rate')
     pass('dumbdial reciplate')
 
     // Qual: sugarcalc healthiness equation balances the mixture
