@@ -517,18 +517,18 @@ async function main() {
     const initialEggs = await eggsField.evaluate(el => el.value)
     assert.equal(initialEggs, '12')  // Initially 12 (since x=1)
 
-    // Qual: crepes x=1.5 then 630->631 should not show "No solution"
+    // Qual: crepes x=1.5 then 600->601 should not show "No solution"
     await setInputValue(page, 'input.recipe-field[data-label="x"]', '1.5')
-    const flourNoteHandle = await findFieldByTitleSubstring(page, '420x')
-    const flourNoteIsNull = await flourNoteHandle.evaluate(el => el === null)
-    assert.equal(flourNoteIsNull, false)
+    const flourHandle = await findFieldByTitleSubstring(page, '400x')
+    const flourIsNull = await flourHandle.evaluate(el => el === null)
+    assert.equal(flourIsNull, false)
 
-    const flourNoteBefore = await getHandleValue(flourNoteHandle)
-    assert.equal(flourNoteBefore, '630')
+    const flourBefore = await getHandleValue(flourHandle)
+    assert.equal(flourBefore, '600')
 
-    await flourNoteHandle.click({ clickCount: 3 })
-    await page.keyboard.type('631')
-    await flourNoteHandle.evaluate(e => e.blur())
+    await flourHandle.click({ clickCount: 3 })
+    await page.keyboard.type('601')
+    await flourHandle.evaluate(e => e.blur())
     await waitForNextFrame(page)
 
     const bannerVisibleAfter = await page.$eval('#solveBanner', el => !el.hidden)
@@ -538,7 +538,7 @@ async function main() {
       assert.ok(!/No solution/i.test(bannerTextAfter))
     }
 
-    await flourNoteHandle.dispose()
+    await flourHandle.dispose()
     pass('crepes slider and editing quals')
 
     // Qual: dial peg vini/vfin/start date then changing rate updates end date

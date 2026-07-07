@@ -14,7 +14,9 @@ Idea: keep track of which sub-solvers give valid solutions.
 const SOLVERS = [
   gaussJordan, // Aka Gaussian elimination; fast and exact for linear systems
   newtRaphson, // Newton-Raphson for non-linear systems
-  kludgeOrama, // Algebraic propagation + special cases
+  kludgeOrama, // Algebraic propagation + special cases; must come last: its
+               // failed attempts are what solvem returns when nothing
+               // satisfies, and they blame the right fields in the UI
 ]
 
 /*
@@ -119,15 +121,19 @@ function solveFor(expr, varName, target, values) {
     target / 2, target * 2,
   ]
 
-  // Prefer positive solutions
+  // Prefer solutions on the same side of zero as the current value, so that
+  // solving changes things minimally (e.g. x^2=25 with x=-1 gives x=-5).
+  // Default to positive when there's no current value to respect.
+  const negativeSide = isFiniteNum(values[varName]) && values[varName] < 0
+  const preferred = g => negativeSide ? g < 0 : g >= 0
   for (const g of guesses) {
-    if (g >= 0) {
+    if (preferred(g)) {
       const result = tryGuess(g)
       if (result !== null) return result
     }
   }
   for (const g of guesses) {
-    if (g < 0) {
+    if (!preferred(g)) {
       const result = tryGuess(g)
       if (result !== null) return result
     }
@@ -154,10 +160,23 @@ function solveFor(expr, varName, target, values) {
     return false
   }
 
-  for (let scale = 1; scale < MAX_SCALE_DECADE; scale *= 10) {
-    if (tryBracket(MIN_BRACKET_VALUE, scale))              break
-    if (tryBracket(-scale,            -MIN_BRACKET_VALUE)) break
-    if (tryBracket(-scale,            scale))              break
+  // Exhaust the preferred side at every scale before trying the other side,
+  // so a root on the preferred side wins even when finding it needs a wider
+  // bracket (e.g. phi^2 - phi - 1 = 0 from phi=1 needs [MIN, 10] to bracket
+  // 1.618 before [-1, -MIN] would find -0.618).
+  const posBrackets = scale => [MIN_BRACKET_VALUE, scale]
+  const negBrackets = scale => [-scale, -MIN_BRACKET_VALUE]
+  const sides = negativeSide ? [negBrackets, posBrackets] : [posBrackets, negBrackets]
+  outer:
+  for (const side of sides) {
+    for (let scale = 1; scale < MAX_SCALE_DECADE; scale *= 10) {
+      if (tryBracket(...side(scale))) break outer
+    }
+  }
+  if (lo === null) {
+    for (let scale = 1; scale < MAX_SCALE_DECADE; scale *= 10) {
+      if (tryBracket(-scale, scale)) break
+    }
   }
 
   // Expand bracket around current value for discontinuities
@@ -331,18 +350,18 @@ function linearCoeffs(expr, varNames, baseValues) {
   for (const v of varNames) zeros[v] = 0
   
   const f0 = vareval(expr, zeros)
-  if (f0.error || !isFinite(f0.value)) return null
-  
+  if (!isValidResult(f0)) return null
+
   const coeffs = []
   for (const v of varNames) {
     const test1 = { ...zeros, [v]: 1 }
     const test2 = { ...zeros, [v]: 2 }
-    
+
     const f1 = vareval(expr, test1)
     const f2 = vareval(expr, test2)
-    
-    if (f1.error || !isFinite(f1.value)) return null
-    if (f2.error || !isFinite(f2.value)) return null
+
+    if (!isValidResult(f1)) return null
+    if (!isValidResult(f2)) return null
     
     const coeff = f1.value - f0.value
     const coeff2 = f2.value - f1.value
@@ -912,7 +931,7 @@ function kludgeOrama(eqns, vars) {
 
   function scaleHomogeneousExpr(expr, exprVars, target) {
     const base = evalExpr(expr)
-    if (base.error || !isFinite(base.value)) return null
+    if (!isValidResult(base)) return null
     const current = base.value
     if (Math.abs(current) < TOL_NEAR_ZERO) return null
     const ratio = target / current
@@ -925,7 +944,7 @@ function kludgeOrama(eqns, vars) {
       probed[v] = values[v] * probeFactor
     }
     const probe = vareval(expr, probed)
-    if (probe.error || !isFinite(probe.value)) return null
+    if (!isValidResult(probe)) return null
     if (Math.abs(probe.value) < TOL_NEAR_ZERO) return null
 
     const degree = Math.log(Math.abs(probe.value / current)) / Math.log(probeFactor)
@@ -1011,25 +1030,22 @@ function kludgeOrama(eqns, vars) {
           if (uargs) {
             const inv = invertUnixtimeSeconds(target)
             if (inv) {
+              // Only invert onto date vars that nothing else has claimed:
+              // overwriting constrained/trustworthy/already-solved vars would
+              // violate the invariants the generic path below respects.
               const dateVars = [uargs.y, uargs.mo, uargs.d]
               const untouched = v => !constrained.has(v) && !trustworthy.has(v) && !solvedThisPass.has(v)
-              if (dateVars.every(untouched)) {
-                try {
-                  const check = unixtime(inv.y, inv.mo, inv.d)
-                  if (check === target) {
-                    const opts = { isTrustworthy, isStable: targetIsStable, isStableNonSingleton: targetStableNonSingleton, eqnLen: eqn.length }
-                    const invVals = [inv.y, inv.mo, inv.d]
-                    dateVars.forEach((v, i) => markSolved(v, invVals[i], opts))
-                    changed = true
-                    continue
-                  }
-                } catch (e) {
-                  console.warn('unixtime inversion failed:', e)
-                }
+              const check = unixtime(inv.y, inv.mo, inv.d)
+              if (dateVars.every(untouched) &&
+                  Math.abs(check - target) < tolerance(target, tol, absTol)) {
+                const invVals = [inv.y, inv.mo, inv.d]
+                const opts = { isTrustworthy, isStable: targetIsStable, isStableNonSingleton: targetStableNonSingleton, eqnLen: eqn.length }
+                dateVars.forEach((v, i) => markSolved(v, invVals[i], opts))
+                changed = true
+                continue
               }
             }
           }
-
           // Generic: try each variable
           const allowTrustworthy = eqnHasLiteral
           let bestVar = null
@@ -1217,11 +1233,12 @@ function newtRaphson(eqns, vars) {
   const test = { ...values }
 
   // Add small perturbation to break symmetry and avoid zeros
+  // Note: null coerces to 0 in arithmetic, which is handled by the zero case below
   for (let i = 0; i < solveVars.length; i++) {
     const v = solveVars[i]
     const val = test[v]
-    // If zero, use small value; otherwise perturb to break symmetry
-    test[v] = val === 0 ? SYMMETRY_BREAK_FACTOR * (i + 1) : val * (1 + SYMMETRY_BREAK_FACTOR * (i + 1))
+    // If zero or null (which coerces to 0), use small value; otherwise perturb
+    test[v] = (val === 0 || val === null) ? SYMMETRY_BREAK_FACTOR * (i + 1) : val * (1 + SYMMETRY_BREAK_FACTOR * (i + 1))
   }
 
   for (let iter = 0; iter < MAX_NEWTON_ITER; iter++) {
@@ -1352,12 +1369,10 @@ function solvem(eqns, init) {
       }
     }
 
-    // Try each solver with augmented equations
+    // Try solvers in order, return first satisfying result
     for (const solver of SOLVERS) {
       const result = solver(augmentedEqns, seededInit)
-      if (result.sat) {
-        return result
-      }
+      if (result.sat) return result
     }
     return null
   }
@@ -1384,18 +1399,13 @@ function solvem(eqns, init) {
   }
 
   // No satisfying assignment found, fall back to solving without seed constraints
-  let bestResult = null
+  let lastResult = null
   for (const solver of SOLVERS) {
     const result = solver(eqns, seededInit)
-    // Prefer results with actual values over results with nulls
-    const hasNulls = Object.values(result.ass).some(v => v === null ||
-                                                         v === undefined)
-    if (!bestResult || !hasNulls) bestResult = result
+    lastResult = result
+    if (result.sat) return result
   }
-
-  // No solver found a satisfying assignment, return best attempt
-  return bestResult ? { ass: bestResult.ass, zij: bestResult.zij, sat: false }
-                    : { ass: seededInit, zij: zidge(eqns, seededInit), sat: false }
+  return lastResult || { ass: seededInit, zij: zidge(eqns, seededInit), sat: false }
 }
 
 // =============================================================================

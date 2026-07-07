@@ -606,13 +606,10 @@ with text fields to include other UI elements, in this case sliders.
 indidate that in the conventional way. Slider bounds are not considered by the
 solver. 
 
+* Progressive relaxation in the solver such that Reciplier changes things
+minimally to keep the constraints satisfied.
 
 ## Future Work
-
-* [SLI] Visual bug report: the slider should be shaded solid to the left of
-where the knob is. I think this is the default behavior for sliders, so, as
-always, look at what code we can remove in order to fix this, not new code to
-add.
 
 * [ZSR] Let's see if we can address this solver failure:
 ```
@@ -727,6 +724,13 @@ to choose which) becomes pegged instead. I don't love that. It feels
 insufficiently anti-magical. But having the UI complain at you for entering
 values incompatible with the constraints might be annoying. I suspect there's a
 best-of-all-worlds solution but I haven't found it yet.
+
+* [ORD] Related to above: Can we somehow specify the order to in which to try
+changing variables in order to satisfy the constraints? That could be one way to
+solve a problem with the Decision Auction recipe where we want to pin the shares
+(r) so that only the FMV/PAY/GET values update automatically. Except then we
+also want both a field and a slider for the shares, which means we can't pin
+that field.
 
 * [SAP] List of apps that this can or does subsume:
   - https://bid.yootl.es/

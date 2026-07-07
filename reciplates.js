@@ -30,7 +30,7 @@ const reciplates = {
 crepes: `\
 * Eggs: {12x} large
 * Milk: {5.333x} cups = {1.262x} liters = {1302x} grams
-* Flour: {3x} cups = {410x} grams
+* Flour: {3x} cups = {400x} grams
 * Butter: {8x} tbsp melted = {115x} grams
 * Salt: {2x} tsp = {14x} grams
 
@@ -39,7 +39,7 @@ Yield: roughly {29x} crepes
 Scaled by a factor of {x : 1} 
 {.1 <= x <= 10}
 
-(Flour notes: We did ~{440x}g for years via packed cups but {360x}g (up to {365x}g) is most likely what the recipe intended. Most recently we tried {420x}g and it worked well so we're trying lower.)
+(Flour notes: We did ~{440x}g for years via packed cups but {360x}g (up to {365x}g) is most likely what the recipe intended. Most recently we tried {400x}g and it worked well.)
 `,
 // -----------------------------------------------------------------------------
 pyzza: `\

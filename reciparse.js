@@ -88,16 +88,22 @@ function parseInequalities(content) {
   const equalBounds = boundsOk && Math.abs(infVal - supVal) < 1e-12
   const ordered = boundsOk && (infVal < supVal || (equalBounds && !infStrict && !supStrict))
 
-  // Determine specific error type
+  // Determine specific error type (data-driven, priority-ordered)
+  const errorChecks = [
+    [hasRight, 'wrong-direction'],
+    [!match, 'missing-bounds'],
+    [leftoverAngles, 'extra-angles'],
+    [!ordered && boundsOk && equalBounds && (infStrict || supStrict), 'equal-strict'],
+    [!ordered && boundsOk, 'impossible'],
+  ]
+
   let error = null
   if (attempted) {
-    // TODO: ternary operator instead of if-else chain.
-    // TODO: keep it all on the same level instead of this nesting?
-    if      (hasRight)       error = 'wrong-direction'
-    else if (!match)         error = 'missing-bounds'
-    else if (leftoverAngles) error = 'extra-angles'
-    else if (!ordered && boundsOk) {
-      error = (equalBounds && (infStrict || supStrict)) ? 'equal-strict' : 'impossible'
+    for (const [applies, errorType] of errorChecks) {
+      if (applies) {
+        error = errorType
+        break
+      }
     }
   }
 
