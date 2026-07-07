@@ -19,7 +19,7 @@ function fileUrl(p) {
 
 // Track and display qual progress
 // 89 individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 99
+const TOTAL_QUALS = 145
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -2427,6 +2427,162 @@ async function main() {
       `Fill gradient should be around 9.09% (actual: ${fillInfo.percentage}%), not 100%`)
 
     pass('slider fill gradient only to left of knob')
+
+    // =========================================================================
+    // Reciplate Coverage Quals: every template loads clean, plus per-template
+    // value checks and an edit-propagation check for each
+    // =========================================================================
+
+    const fieldNum = async (label) =>
+      parseFloat(await getInputValue(page, `input.recipe-field[data-label="${label}"]`))
+    const near = (a, b, tol) => Math.abs(a - b) < tol
+    const selectReciplate = async (key) => {
+      await page.select('#recipeSelect', key)
+      await page.waitForSelector('#recipeOutput', { visible: true })
+      await waitForNextFrame(page)
+    }
+
+    // Qual: every reciplate renders with no banner, no invalid fields, no NaN
+    await page.goto(baseUrl)
+    await page.waitForSelector('#recipeSelect')
+    const allReciplates = await page.evaluate(() =>
+      Object.keys(reciplates).filter(k => typeof reciplates[k] === 'string'))
+    const sweepBanners = []
+    const sweepInvalids = []
+    const sweepBadVals = []
+    for (const key of allReciplates) {
+      await selectReciplate(key)
+      const sweep = await page.evaluate(() => ({
+        banner: (() => {
+          const b = document.querySelector('#solveBanner')
+          return b && !b.hidden ? b.textContent.trim() : ''
+        })(),
+        invalid: [...document.querySelectorAll('input.recipe-field.invalid')]
+          .map(e => e.dataset.label),
+        badVals: [...document.querySelectorAll('input.recipe-field')]
+          .map(e => `${e.dataset.label}=${e.value}`)
+          .filter(s => /NaN|Infinity/.test(s)),
+      }))
+      if (sweep.banner) sweepBanners.push(`${key}: ${sweep.banner}`)
+      if (sweep.invalid.length) sweepInvalids.push(`${key}: ${sweep.invalid.join(',')}`)
+      if (sweep.badVals.length) sweepBadVals.push(`${key}: ${sweep.badVals.join(',')}`)
+    }
+    assert.deepEqual(sweepBanners, [], `Reciplates with solve banners: ${sweepBanners.join(' | ')}`)
+    assert.deepEqual(sweepInvalids, [], `Reciplates with invalid fields: ${sweepInvalids.join(' | ')}`)
+    assert.deepEqual(sweepBadVals, [], `Reciplates with NaN/Infinity fields: ${sweepBadVals.join(' | ')}`)
+    pass(`all ${allReciplates.length} reciplates load clean`)
+
+    // Qual: cookies scales all quantities off the eggs field
+    await selectReciplate('cookies')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="200x"]'), '200', 'cookies: 200x should start at 200')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="54x"]'), '54', 'cookies: yield should start at 54')
+    await setInputValue(page, 'input.recipe-field[data-label="2x"]', '4')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="200x"]'), '400', 'cookies: doubling eggs should double sugar grams')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="54x"]'), '108', 'cookies: doubling eggs should double yield')
+    pass('cookies reciplate')
+
+    // Qual: shortcake scales fractional quantities
+    await selectReciplate('shortcake')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="9x"]'), '9', 'shortcake: pan size should start at 9')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="3/4*x"]'), '0.75', 'shortcake: milk should start at 0.75')
+    await setInputValue(page, 'input.recipe-field[data-label="2x"]', '4')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="9x"]'), '18', 'shortcake: doubling flour should double pan size')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="3/4*x"]'), '1.5', 'shortcake: doubling flour should double milk')
+    pass('shortcake reciplate')
+
+    // Qual: breakaway chase math (peloton speed to catch the break)
+    await selectReciplate('breakaway')
+    assert.ok(near(await fieldNum('vp'), 42, 1e-3), 'breakaway: peloton speed should start at 42 km/h')
+    assert.ok(near(await fieldNum('gt'), 0.025, 1e-6), 'breakaway: gap time should be 0.025 hours')
+    assert.ok(near(await fieldNum('pd'), 21, 1e-3), 'breakaway: peloton distance should be 21 km')
+    assert.ok(near(await fieldNum('vbm'), 24.8548, 1e-3), 'breakaway: break mph should be ~24.8548')
+    await setInputValue(page, 'input.recipe-field[data-label="vb"]', '45')
+    assert.ok(near(await fieldNum('vp'), 47.53125, 1e-3), 'breakaway: at vb=45 the peloton needs ~47.53 km/h')
+    pass('breakaway reciplate')
+
+    // Qual: biketour clock and break arithmetic
+    await selectReciplate('biketour')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="w"]'), '6.25', 'biketour: wall clock time should be 6.25 hours')
+    assert.ok(near(await fieldNum('d/t'), 12.6923, 1e-3), 'biketour: avg speed should be ~12.6923 mph')
+    // Note: the solver may relax other seeded values (b1, b2, start time) to
+    // absorb the edit, so assert the edit is respected and the relations stay
+    // consistent rather than pinning one particular relaxation.
+    await setInputValue(page, 'input.recipe-field[data-label="b3*60"]', '30')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="b3"]'), '0.5', 'biketour: 30min third break should set b3=0.5h')
+    const btW = await fieldNum('w')
+    const btB = await fieldNum('b')
+    const btT = await fieldNum('t')
+    assert.ok(near(btT, btW - btB, 1e-3), `biketour: riding time should stay w-b (w=${btW}, b=${btB}, t=${btT})`)
+    assert.ok(near(await fieldNum('d/t'), 66 / btT, 1e-2), 'biketour: avg speed should stay d/t after the edit')
+    pass('biketour reciplate coverage')
+
+    // Qual: dumbdial rate = delta / days
+    await selectReciplate('dumbdial')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="r"]'), '10', 'dumbdial: rate should start at 300/30 = 10')
+    assert.ok(await page.$('input.recipe-slider'), 'dumbdial: rate should render a slider for its bounds')
+    // Note: the solver splits the correction between r and vfin (it does not
+    // hold the vfin seed; same at HEAD), so assert the rate equation stays
+    // consistent rather than pinning r=5 exactly.
+    await setInputValue(page, 'input.recipe-field[data-label="tfin"]', '60')
+    const ddVfin = await fieldNum('vfin')
+    const ddR = await fieldNum('r')
+    assert.ok(near(ddR, ddVfin / 60, 1e-3), `dumbdial: rate should stay (vfin-vini)/(tfin-tini) (vfin=${ddVfin}, r=${ddR})`)
+    pass('dumbdial reciplate')
+
+    // Qual: sugarcalc healthiness equation balances the mixture
+    await selectReciplate('sugarcalc')
+    const sugarMixLabel = '(k*sigma*y/omega + kappa*x)/(gamma*y/omega + kappa*x)'
+    assert.ok(near(await fieldNum('eta'), 0.5934, 1e-4), 'sugarcalc: Go-gurt healthiness eta should be 0.5934')
+    assert.ok(near(await fieldNum(sugarMixLabel), 0.5934, 1e-4), 'sugarcalc: mixture healthiness should equal eta initially')
+    await setInputValue(page, 'input.recipe-field[data-label="y"]', '100')
+    assert.ok(near(await fieldNum('x'), 19.7431, 0.01), 'sugarcalc: 100g yogurt needs ~19.74g brown sugar to match eta')
+    assert.ok(near(await fieldNum(sugarMixLabel), 0.5934, 1e-4), 'sugarcalc: mixture healthiness should still equal eta after edit')
+    pass('sugarcalc reciplate')
+
+    // Qual: converter does kg/lb and gsm/oz-per-yd2 conversions
+    await selectReciplate('converter')
+    assert.ok(near(await fieldNum('p'), 154.3236, 1e-3), 'converter: 70 kg should start as ~154.3236 pounds')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="k"]'), '70', 'converter: kilograms should start at 70')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="m"]'), '', 'converter: g/m^2 should start blank (enter a value to convert)')
+    await setInputValue(page, 'input.recipe-field[data-label="m"]', '100')
+    assert.ok(near(await fieldNum('m*YD^2/OZ'), 2.9494, 1e-3), 'converter: 100 g/m^2 should be ~2.9494 oz/yd^2')
+    await setInputValue(page, 'input.recipe-field[data-label="p"]', '100')
+    assert.ok(near(await fieldNum('k'), 45.3592, 1e-3), 'converter: 100 pounds should be ~45.3592 kg')
+    pass('converter reciplate')
+
+    // Qual: auction bid math (pay and get derive from FMV and share)
+    await selectReciplate('auction')
+    assert.ok(near(await fieldNum('pay'), await fieldNum('get'), 1e-9), 'auction: at r=0.5, pay should equal get')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="100*(1-r)"]'), '50', 'auction: their share should be 50%')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="100r"]'), '50', 'auction: your share should be 50%')
+    await setInputValue(page, 'input.recipe-field[data-label="fmv"]', '100')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="pay"]'), '50', 'auction: FMV=100 at r=0.5 means you pay up to 50')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="get"]'), '50', 'auction: FMV=100 at r=0.5 means you get paid 50')
+    pass('auction reciplate')
+
+    // Qual: quadratic solves 3x^2+4x-20=0 for the positive root
+    await selectReciplate('quadratic')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="a"]'), '3', 'quadratic: a should start at 3')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="x"]'), '2', 'quadratic: 3x^2+4x-20=0 should give x=2')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="a*x^2+b*x+c"]'), '0', 'quadratic: constraint cell should show 0')
+    await setInputValue(page, 'input.recipe-field[data-label="c"]', '-39')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="x"]'), '3', 'quadratic: 3x^2+4x-39=0 should give x=3')
+    pass('quadratic reciplate')
+
+    // Qual: gratio finds the golden ratio, and pinning phi to an off-solution
+    // value reports No solution (editing a field pins that exact value, and
+    // 1/phi = phi - 1 has no solution with phi = -0.5)
+    await selectReciplate('gratio')
+    assert.ok(near(await fieldNum('phi'), 1.618, 1e-3), 'gratio: phi should start at the golden ratio')
+    assert.ok(near(await fieldNum('1/phi'), 0.618, 1e-3), 'gratio: 1/phi should be phi - 1')
+    await setInputValue(page, 'input.recipe-field[data-label="phi"]', '-0.5')
+    const gratioBanner = await page.evaluate(() => {
+      const b = document.querySelector('#solveBanner')
+      return b && !b.hidden ? b.textContent.trim() : ''
+    })
+    assert.ok(/No solution/i.test(gratioBanner), `gratio: pinning phi=-0.5 should show the No solution banner, got "${gratioBanner}"`)
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="phi"]'), '-0.5', 'gratio: the edited field should keep the typed value')
+    pass('gratio reciplate')
 
     console.log(`\n=== UI Quals Summary ===\nPassed: ${TOTAL_QUALS}/${TOTAL_QUALS} (${milestonesCompleted} milestones)\nFailed: 0`)
   } catch (e) {

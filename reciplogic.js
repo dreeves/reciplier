@@ -543,6 +543,19 @@ function solveAndApply({
   }
 
   const { eqns, cellIndices } = interactiveEqns(editedCellId, editedValue)
+
+  // Vars whose cells were singletons until this edit (e.g. the converter's
+  // {m}) have never been assigned by a solve, so seed them now -- solvem
+  // rightly throws if an equation var is missing from init. Blank means zero.
+  for (const eqn of eqns) {
+    for (const term of eqn) {
+      if (typeof term !== 'string') continue
+      for (const v of varparse(term)) {
+        if (!Object.hasOwn(seedAss, v)) seedAss[v] = 0
+      }
+    }
+  }
+
   const solveResult = solvem(eqns, seedAss)
   const solvedAss = solveResult.ass
   const sat = solveResult.sat

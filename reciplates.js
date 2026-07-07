@@ -204,7 +204,7 @@ Nutrition info for junk food (e.g., Go-gurt):
 
 (Fun facts: There are {k = 3.87} calories per gram of normal sugar and {kappa = 3.80} calories per gram of brown sugar.)
 
-"Healthiness" in this context is the fraction of calories that are from sugar. For the Greek yogurt that's {k*omega/gamma} and for the Go-gurt it's {eta = k*s/c}.
+"Healthiness" in this context is the fraction of calories that are from sugar. For the Greek yogurt that's {k*sigma/gamma} and for the Go-gurt it's {eta = k*s/c}.
 
 If you weigh out {y} grams of Greek yogurt and add {x} grams of brown sugar to it, the healthiness of the mixture is...
 

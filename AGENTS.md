@@ -36,7 +36,7 @@ Humans above, robots below
 
 ## Current Status
 
-**Quals**: 1085/1085 passing (627/627 solver quals)
+**Quals**: 1131/1131 passing (627/627 solver quals, 145/145 UI quals)
 
 **Recent improvements**:
 - ✅ Simplified solver selection: try each in order, first sat=true wins (no residual comparisons)
@@ -47,6 +47,10 @@ Humans above, robots below
 - ✅ quals.js failure extraction: one regex for labeled detail lines instead of five hardcoded substring offsets; a qual script that crashes without printing a ✗ line now gets its last output echoed instead of failing silently
 - ✅ Perf: vareval was calling `new Function` (a full JS compile) on every evaluation -- now compiled once per expression and cached (matheval.js evalCache). Plus Jacobian/linearCoeffs skip variables an expression doesn't mention (derivative is exactly 0), varparse memoized, and field edits no longer call updateUrl (the URL only encodes the template). Worst-case dial keystroke: 1711ms → 290ms; crepes keystroke: 15ms → 4ms
 - ✅ Mobile + visual pass: 16px fonts on all form controls (sub-16px triggers iOS focus-zoom), bigger slider thumbs and corner-pin tap areas on coarse pointers, spellcheck/autocorrect off on numeric fields and the template editor, design tokens in style.css, removed `<br>&nbsp;<br>` spacer hacks
+- ✅ Reciplate coverage quals (ui_quals.js): a sweep asserting every template loads with no banner/invalid/NaN fields, plus per-template value and edit-propagation quals for the 9 previously-uncovered templates (cookies, shortcake, breakaway, biketour, dumbdial, sugarcalc, converter, auction, quadratic, gratio)
+- ✅ Fixed dormant converter bug the new quals caught: typing into {m} threw "solvem: variable m required by equations but missing from init" on every keystroke (broken at HEAD too) -- vars whose cells were singletons until an edit had never been seeded; solveAndApply now seeds them (blank = 0)
+
+**Solver relaxation drift (open question)**: when an edit forces relaxation, the solver can move OTHER seeded values more than necessary -- biketour: editing break 3 moves b1/b2/start-time off their seeds; dumbdial: editing tfin=60 gives r=5.1018, vfin=306.11 (a Gauss-Newton compromise) instead of holding vfin=300 and r=5. Same at HEAD; relates to the README's "changes things minimally" goal. The reciplate quals assert consistency relations rather than pinning these outcomes.
 
 **Solver ordering**: kludgeOrama must stay LAST in SOLVERS. When it runs first, its failed attempt is what solvem returns in no-solution cases, and the UI then marks the wrong fields invalid (the dial rate=0 UI qual catches this).
 
