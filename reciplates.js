@@ -67,7 +67,7 @@ cookies: `\
 * {1.5x} teaspoons vanilla or {10x}g vanilla paste
 * {1x} teaspoon ({6x}g) baking soda
 * {1x} teaspoon ({5x}g) salt
-* {3x} cups ({376x}g) all purpose flour (as low as {360x}g; we've done much higher via packed cups, most recently tried {376x}g)
+* {3x} cups ({380x}g) all-purpose flour
 * {12x} ounces ({338x}g) semi-sweet chocolate chips (danthany version: half semi-sweet and half milk chocolate)
 
 Place sugar, butter, eggs, and vanilla in mixer bowl. Attach bowl and flat beater to mixer. Turn to speed 2 and mix about 30 seconds. Stop and scrape bowl.
