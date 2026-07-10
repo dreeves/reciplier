@@ -31,9 +31,11 @@ Codex can't seem to execute "npm run quals" unless it "escalates permissions" wh
 
 ## Current Status
 
-**Quals**: 1131/1131 passing (627/627 solver quals, 145/145 UI quals)
+**Quals**: 1166/1166 passing (627/627 solver quals, 164/164 UI quals)
 
 **Recent improvements**:
+- ✅ Reciplify button: turns a plaintext recipe into a reciplate (bare numbers -> {2x} cells; fractions/mixed numbers -> {(1/2)*x}/{(1+1/2)*x}; appends the crepes-style scale footer). reciplify() lives in reciparse.js; idempotent (existing cells skipped, footer appended only if absent). Lives in the toolbar row next to the template dropdown. Note: a "gray out when clicking would be a no-op" state was tried and killed by human decision (too puzzling why it's sometimes disabled); its 2 UI asserts were removed accordingly
+- ✅ Tooltips: replaced all app-generated title attributes (fields, sliders, corner pins, reciplify button) with a single shared floating #tooltip element (initTooltip in reciplui.js, data-tip attributes). Shows on hover or focus -- focus is the mobile path since tapping a field focuses it -- and auto-dismisses after TIP_LINGER_MS (2.5s) because recipe lines are tight and a lingering tooltip occludes the field on the line above. Positioned in page coordinates so it scrolls with its element. Human-written link titles in the help popover left as native titles
 - ✅ Simplified solver selection: try each in order, first sat=true wins (no residual comparisons)
 - ✅ solveFor prefers roots on the same side of zero as the current value (minimal-change principle): x^2=25 with seed x=-1 gives -5. Bracket search exhausts the preferred side at every scale before the other side, which also fixed a failure-to-bracket bug (roots at 0.5 and 60 from seed 1000 found nothing) and removed a magic scale=100 constant
 - ✅ Fixed the 5 solver quals that used strict equality (`===`) on newtRaphson's approximate output (a=2b, null seeds, x*y=20 bounds, 2 Pythagorean cases): now tolerance-based per plan

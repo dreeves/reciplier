@@ -49,6 +49,7 @@ function runParserQuals() {
     extractCells,
     parseInequalities,
     parseCell,
+    reciplify,
   } = ctx
 
   const results = { passed: 0, failed: 0, errors: [] }
@@ -344,6 +345,54 @@ function runParserQuals() {
     parseInequalities('2 < x < 1').error, 'impossible')
   check('parseCell: reversed bounds gets impossible error',
     parseCell(makeCell('2 < x < 1')).ineqError, 'impossible')
+
+  // ==========================================================================
+  // reciplify quals
+  // ==========================================================================
+
+  console.log('\n=== reciplify quals ===')
+
+  // The exact footer reciplify appends (note the trailing space after {x : 1},
+  // matching the crepes reciplate), plus the blank line separating it from the
+  // recipe body and the trailing newline.
+  const FOOT = '\n\nScaled by a factor of {x : 1} \n{.1 <= x <= 10}\n'
+
+  check('reciplify: bare integer',
+    reciplify('add 2 eggs'), 'add {2x} eggs' + FOOT)
+  check('reciplify: multiple integers',
+    reciplify('mix 2 eggs and 3 cups sugar'),
+    'mix {2x} eggs and {3x} cups sugar' + FOOT)
+  check('reciplify: decimal',
+    reciplify('add 0.5 tsp salt'), 'add {0.5x} tsp salt' + FOOT)
+  check('reciplify: leading-dot decimal',
+    reciplify('add .5 tsp salt'), 'add {.5x} tsp salt' + FOOT)
+  check('reciplify: fraction',
+    reciplify('add 1/2 cup milk'), 'add {(1/2)*x} cup milk' + FOOT)
+  check('reciplify: mixed number',
+    reciplify('add 1 1/2 cups flour'), 'add {(1+1/2)*x} cups flour' + FOOT)
+  check('reciplify: sentence-ending number keeps its period',
+    reciplify('divide into 12.'), 'divide into {12x}.' + FOOT)
+  check('reciplify: existing cells untouched',
+    reciplify('use {2x} eggs and 3 cups milk'),
+    'use {2x} eggs and {3x} cups milk' + FOOT)
+  check('reciplify: numbers glued to letters untouched',
+    reciplify('use a 9x13 pan'), 'use a 9x13 pan' + FOOT)
+  check('reciplify: dotted version numbers untouched',
+    reciplify('see v1.2.3 for details'), 'see v1.2.3 for details' + FOOT)
+  check('reciplify: slashed dates untouched',
+    reciplify('created 10/12/2024 by hand'),
+    'created 10/12/2024 by hand' + FOOT)
+  check('reciplify: temperatures convert too (uniform rule, no magic)',
+    reciplify('bake at 350 degrees'), 'bake at {350x} degrees' + FOOT)
+  check('reciplify: idempotent',
+    reciplify(reciplify('add 2 eggs')), reciplify('add 2 eggs'))
+  check('reciplify: trailing whitespace collapses before footer',
+    reciplify('add 2 eggs\n\n'), 'add {2x} eggs' + FOOT)
+  check('reciplify: empty input yields just the footer',
+    reciplify(''), FOOT)
+  check('reciplify: multi-line recipe',
+    reciplify('1 cup flour\n2 tablespoons sugar\nMakes 8 pancakes, 120 calories each.'),
+    '{1x} cup flour\n{2x} tablespoons sugar\nMakes {8x} pancakes, {120x} calories each.' + FOOT)
 
   // ==========================================================================
   // Summary

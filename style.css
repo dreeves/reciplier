@@ -84,9 +84,11 @@ h1 { letter-spacing: -0.02em; }
 /* Flexbox */
 .flex { display: flex; }
 .flex-grow { flex-grow: 1; }
+.flex-wrap { flex-wrap: wrap; }
 .items-center { align-items: center; }
 .justify-between { justify-content: space-between; }
 .inline-flex { display: inline-flex; }
+.gap-2 { gap: 0.5rem; }
 
 /* Backgrounds and Borders */
 .bg-gray-50 { background-color: #f9fafb; }
@@ -275,6 +277,22 @@ button:disabled {
 
 #copyButton:active {
   background-color: #f3f4f6;
+}
+
+/* Tooltip: single shared floating element created by initTooltip() in
+   reciplui.js; shows for whatever data-tip element is hovered or focused
+   (native title tooltips never show on touch screens) */
+#tooltip {
+  position: absolute;
+  z-index: 100;
+  max-width: 18rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius);
+  background-color: var(--ink);
+  color: var(--paper);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  pointer-events: none;
 }
 
 .help-float {

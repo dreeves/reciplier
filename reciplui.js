@@ -144,7 +144,7 @@ function syncDropdown() {
 function renderRecipe() {
   const output = $('recipeOutput')
   const copySection = $('copySection')
-  
+
   const criticalErrors = state.errors
 
   const invalidCellIds = collectInvalidCellIds(state.solve.eqns, state.solve.zij)
@@ -171,7 +171,7 @@ function renderRecipe() {
       const displayValue = formatNum(value)
       const isPegged = state.peggedCellIds.has(cell.id)
       const isInvalid = invalidCellIds.has(cell.id)
-      const title = `${cell.urtext}`.replace(/"/g, '&quot;')
+      const tip = `${cell.urtext}`.replace(/"/g, '&quot;')
       const disabledAttr = disableInputs ? ' disabled' : ''
 
       let inputHtml
@@ -184,12 +184,12 @@ function renderRecipe() {
         const atBass = Math.abs(value - bassVal) < 0.005
         const minLabel = formatNum(bounds.minLabel)
         const maxLabel = formatNum(bounds.maxLabel)
-        inputHtml = `<span class="slider-group"><span class="slider-bound">${minLabel}</span><input type="range" class="recipe-slider${atBass ? ' at-bass' : ''}" min="${bounds.min}" max="${bounds.max}" step="0.01" value="${displayValue}" data-cell-id="${cell.id}" data-var-name="${varName}" title="${title}"${disabledAttr}><span class="slider-bound">${maxLabel}</span></span>`
+        inputHtml = `<span class="slider-group"><span class="slider-bound">${minLabel}</span><input type="range" class="recipe-slider${atBass ? ' at-bass' : ''}" min="${bounds.min}" max="${bounds.max}" step="0.01" value="${displayValue}" data-cell-id="${cell.id}" data-var-name="${varName}" data-tip="${tip}"${disabledAttr}><span class="slider-bound">${maxLabel}</span></span>`
       } else {
         // No inequality bounds - render as text field
         const label = cell.ceqn.length > 0 ? cell.ceqn[0].trim() : ''
         const focusOnlyBgClass = !INDICATOR_SHOW_ALWAYS.background ? 'focus-only-bg' : ''
-        inputHtml = `<input type="text" class="recipe-field ${isPegged ? 'pegged' : ''} ${isInvalid ? 'invalid' : ''} ${focusOnlyBgClass}" data-label="${label}" data-cell-id="${cell.id}" value="${displayValue}" title="${title}" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"${disabledAttr}>`
+        inputHtml = `<input type="text" class="recipe-field ${isPegged ? 'pegged' : ''} ${isInvalid ? 'invalid' : ''} ${focusOnlyBgClass}" data-label="${label}" data-cell-id="${cell.id}" value="${displayValue}" data-tip="${tip}" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"${disabledAttr}>`
       }
       const placeholder = `@@RECIPLIER_CELL_${cell.id}@@`
       placeholders.set(placeholder, inputHtml)
@@ -576,7 +576,7 @@ function createCornerPin(input) {
   const focusOnlyClass = !INDICATOR_SHOW_ALWAYS.cornerpin ? ' focus-only' : ''
   pin.className = 'corner-pin' + (isPegged ? ' pegged' : '') + focusOnlyClass
   pin.textContent = isPegged ? '●' : '📌'
-  pin.title = isPegged ?
+  pin.dataset.tip = isPegged ?
     'Pegged! This field only changes if you edit it.' :
     'Unpegged. Click to peg it.'
   // Apply dynamic size (responsive)
@@ -835,16 +835,26 @@ function attachPegTrigger(input) {
   }
 }
 
+// Programmatically replace the recipe template and rerun the full pipeline
+// (as opposed to handleTextareaInput, where the textarea already has the text)
+function setRecipeText(text) {
+  state.recipeText = text
+  $('recipeTextarea').value = text
+  parseRecipe()
+  syncDropdown()
+  renderRecipe()
+  updateUrl()
+}
+
 function handleRecipeChange() {
   const selectedKey = $('recipeSelect').value
   if (reciplates.hasOwnProperty(selectedKey)) {
-    state.recipeText = reciplates[selectedKey]
-    $('recipeTextarea').value = state.recipeText
-    parseRecipe()
-    syncDropdown()
-    renderRecipe()
-    updateUrl()
+    setRecipeText(reciplates[selectedKey])
   }
+}
+
+function handleReciplify() {
+  setRecipeText(reciplify(state.recipeText))
 }
 
 function handleTextareaInput(e) {
@@ -885,6 +895,53 @@ function showNotification(message) {
   notificationTimeout = setTimeout(() => {
     notif.style.display = 'none'
   }, 2000)
+}
+
+// =============================================================================
+// Tooltips
+// =============================================================================
+// One shared floating element instead of native title attributes, which never
+// show on touch screens. Anything with a data-tip attribute gets a tooltip on
+// hover or focus (focus is the touch path: tapping a field focuses it). It's
+// positioned in page coordinates so it stays glued to its element on scroll.
+
+// How long a tooltip lingers before auto-dismissing. Recipe lines are tight,
+// so a tooltip above a field lands on the previous line's field; it has to
+// get out of the way or it occludes that field for as long as you're editing
+// (native title tooltips auto-dismiss too)
+const TIP_LINGER_MS = 2500
+
+function initTooltip() {
+  const tip = document.createElement('div')
+  tip.id = 'tooltip'
+  tip.hidden = true
+  document.body.appendChild(tip)
+  let linger = null
+
+  function show(el) {
+    tip.textContent = el.dataset.tip
+    tip.hidden = false  // unhide before measuring offsetWidth/offsetHeight
+    const r = el.getBoundingClientRect()
+    const x = r.left + window.scrollX + (r.width - tip.offsetWidth) / 2
+    const xmin = window.scrollX + 4
+    const xmax = window.scrollX
+               + document.documentElement.clientWidth - tip.offsetWidth - 4
+    tip.style.left = Math.max(xmin, Math.min(x, xmax)) + 'px'
+    tip.style.top = (r.top + window.scrollY - tip.offsetHeight - 6) + 'px'
+    clearTimeout(linger)
+    linger = setTimeout(() => { tip.hidden = true }, TIP_LINGER_MS)
+  }
+
+  // Last event wins: pointing at or focusing a data-tip element shows its
+  // tooltip; pointing at or focusing anything else hides it
+  function retarget(e) {
+    const el = e.target.closest?.('[data-tip]')
+    el ? show(el) : (tip.hidden = true)
+  }
+
+  document.addEventListener('pointerover', retarget)
+  document.addEventListener('focusin', retarget)
+  document.addEventListener('focusout', () => { tip.hidden = true })
 }
 
 // =============================================================================
@@ -1053,12 +1110,14 @@ function init() {
   })
   
   // Event listeners
-  $('recipeTextarea').addEventListener('input',  handleTextareaInput)
-  $('recipeSelect')  .addEventListener('change', handleRecipeChange)
-  $('copyButton')    .addEventListener('click',  handleCopyToClipboard)
+  $('recipeTextarea')  .addEventListener('input',  handleTextareaInput)
+  $('recipeSelect')    .addEventListener('change', handleRecipeChange)
+  $('reciplifyButton') .addEventListener('click',  handleReciplify)
+  $('copyButton')      .addEventListener('click',  handleCopyToClipboard)
 
-  // Initialize debug panel
+  // Initialize debug panel and the shared tooltip element
   initDebugPanel()
+  initTooltip()
 
   const helpButton = $('helpButton')
   const helpPopover = $('helpPopover')

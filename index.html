@@ -63,6 +63,7 @@ Like "3 eggs" becomes
 <span class="font-mono">{3x} eggs</span> 
 and then at the end of the recipe include a line like
 <span class="font-mono">Scaled by {x:1}</span>.
+(The reciplify button will do that automagically to all bare numbers if you're starting from a plain recipe you've pasted in.)
 The things in curly braces are called cells and they get rendered as fields you can edit.
 Change any field and the rest adjust themselves.
 </p>
@@ -97,10 +98,16 @@ for an example of some prior art.
   <h1 class="text-2xl font-bold mb-4">Reciplier</h1>
   
   <div class="mb-6">
-    <div class="mb-2">
+    <div class="mb-2 flex items-center justify-between flex-wrap gap-2">
       <select id="recipeSelect" class="p-2 border rounded text-gray-700">
         <!-- Options will be populated dynamically from script.js -->
       </select>
+
+      <button
+        id="reciplifyButton"
+        type="button"
+        data-tip="Turn bare numbers like 2 into scalable cells like {2x}"
+      >Reciplify</button>
     </div>
 
     <textarea
@@ -127,7 +134,7 @@ for an example of some prior art.
   
   <div class="text-center text-gray-400 text-sm mt-4">
     <div class="text-gray-300 text-xs mt-1">
-      v2026.07.07-c
+      v2026.07.10-b
     </div>
   </div>
 

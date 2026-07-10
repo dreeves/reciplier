@@ -18,8 +18,8 @@ function fileUrl(p) {
 }
 
 // Track and display qual progress
-// 89 individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 147
+// Individual quals grouped into milestones for progress display
+const TOTAL_QUALS = 164
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -81,10 +81,10 @@ async function getInputValue(page, selector) {
   return page.$eval(selector, el => el.value)
 }
 
-async function findFieldByTitleSubstring(page, substring) {
+async function findFieldByTipSubstring(page, substring) {
   return page.evaluateHandle((needle) => {
     const inputs = Array.from(document.querySelectorAll('input.recipe-field'))
-    const found = inputs.find(i => (i.getAttribute('title') || '').includes(needle))
+    const found = inputs.find(i => (i.dataset.tip || '').includes(needle))
     return found || null
   }, substring)
 }
@@ -253,7 +253,7 @@ async function main() {
 
     const dBareHandle = await page.evaluateHandle(() => {
       const inputs = Array.from(document.querySelectorAll('input.recipe-field'))
-      return inputs.find(i => (i.getAttribute('title') || '').trim() === 'd') || null
+      return inputs.find(i => (i.dataset.tip || '').trim() === 'd') || null
     })
     const dBareIsNull = await dBareHandle.evaluate(el => el === null)
     assert.equal(dBareIsNull, false)
@@ -306,7 +306,7 @@ async function main() {
     
     const xUnpegged = await page.evaluateHandle(() => {
       const inputs = Array.from(document.querySelectorAll('input.recipe-field'))
-      return inputs.find(i => (i.getAttribute('title') || '').trim() === 'x') || null
+      return inputs.find(i => (i.dataset.tip || '').trim() === 'x') || null
     })
     const xUnpeggedIsNull = await xUnpegged.evaluate(el => el === null)
     assert.equal(xUnpeggedIsNull, false)
@@ -335,7 +335,7 @@ async function main() {
     await page.select('#recipeSelect', 'simeq')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    let xDefHandle = await findFieldByTitleSubstring(page, 'x : 6')
+    let xDefHandle = await findFieldByTipSubstring(page, 'x : 6')
     const xDefIsNull = await xDefHandle.evaluate(el => el === null)
     assert.equal(xDefIsNull, false)
 
@@ -346,7 +346,7 @@ async function main() {
 
     const yHandle = await page.evaluateHandle(() => {
       const inputs = Array.from(document.querySelectorAll('input.recipe-field'))
-      return inputs.find(i => (i.getAttribute('title') || '').trim() === 'y') || null
+      return inputs.find(i => (i.dataset.tip || '').trim() === 'y') || null
     })
     const yIsNull = await yHandle.evaluate(el => el === null)
     assert.equal(yIsNull, false)
@@ -389,7 +389,7 @@ async function main() {
     assert.equal(bVal, '12')
     assert.equal(cVal, '15')
 
-    const sanityHandle = await findFieldByTitleSubstring(page, 'a^2 + b^2 = c^2')
+    const sanityHandle = await findFieldByTipSubstring(page, 'a^2 + b^2 = c^2')
     const sanityIsNull = await sanityHandle.evaluate(el => el === null)
     assert.equal(sanityIsNull, false)
 
@@ -519,7 +519,7 @@ async function main() {
 
     // Qual: crepes x=1.5 then 600->601 should not show "No solution"
     await setInputValue(page, 'input.recipe-field[data-label="x"]', '1.5')
-    const flourHandle = await findFieldByTitleSubstring(page, '400x')
+    const flourHandle = await findFieldByTipSubstring(page, '400x')
     const flourIsNull = await flourHandle.evaluate(el => el === null)
     assert.equal(flourIsNull, false)
 
@@ -548,7 +548,7 @@ async function main() {
 
     const dialPeggedTitles = ['vini = 73', 'y0 = 2025', 'm0 = 12', 'd0 = 25']
     for (const t of dialPeggedTitles) {
-      const h = await findFieldByTitleSubstring(page, t)
+      const h = await findFieldByTipSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false)
       await h.dispose()
@@ -556,19 +556,19 @@ async function main() {
 
     const dialPegTitles = ['vfin : 70']
     for (const t of dialPegTitles) {
-      const h = await findFieldByTitleSubstring(page, t)
+      const h = await findFieldByTipSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false)
       await longpressHandle(page, h)
       await h.dispose()
     }
 
-    const dialDayHandle = await findFieldByTitleSubstring(page, 'd : 25')
+    const dialDayHandle = await findFieldByTipSubstring(page, 'd : 25')
     const dialDayIsNull = await dialDayHandle.evaluate(el => el === null)
     assert.equal(dialDayIsNull, false)
     const dialDayBefore = await getHandleValue(dialDayHandle)
 
-    const dialRateHandle = await findFieldByTitleSubstring(page, 'r*SID')
+    const dialRateHandle = await findFieldByTipSubstring(page, 'r*SID')
     const dialRateIsNull = await dialRateHandle.evaluate(el => el === null)
     assert.equal(dialRateIsNull, false)
     await dialRateHandle.click({ clickCount: 3 })
@@ -595,23 +595,23 @@ async function main() {
     // Peg vini, vfin, and tini (the start TIME field, not the start DATE fields)
     const dialBug1bPeggedTitles = ['vini = 73']
     for (const t of dialBug1bPeggedTitles) {
-      const h = await findFieldByTitleSubstring(page, t)
+      const h = await findFieldByTipSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
-      assert.equal(isNull, false, `dial bug1b: couldn't find field with title containing "${t}"`)
+      assert.equal(isNull, false, `dial bug1b: couldn't find field with tip containing "${t}"`)
       await h.dispose()
     }
 
     const dialBug1bPegTitles = ['vfin : 70', 'tini = unixtime']
     for (const t of dialBug1bPegTitles) {
-      const h = await findFieldByTitleSubstring(page, t)
+      const h = await findFieldByTipSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
-      assert.equal(isNull, false, `dial bug1b: couldn't find field with title containing "${t}"`)
+      assert.equal(isNull, false, `dial bug1b: couldn't find field with tip containing "${t}"`)
       await longpressHandle(page, h)  // Long-press to peg
       await h.dispose()
     }
 
     // Now edit the rate to -1
-    const dialBug1bRateHandle = await findFieldByTitleSubstring(page, 'r*SID')
+    const dialBug1bRateHandle = await findFieldByTipSubstring(page, 'r*SID')
     const dialBug1bRateIsNull = await dialBug1bRateHandle.evaluate(el => el === null)
     assert.equal(dialBug1bRateIsNull, false)
     await dialBug1bRateHandle.click({ clickCount: 3 })
@@ -624,9 +624,9 @@ async function main() {
     assert.equal(dialBug1bBanner, '', 'dial bug1b: expected no solveBanner but got: ' + dialBug1bBanner)
 
     // The end date should be 2025-12-28 (3 days after start at rate of -1 kg/day to lose 3kg)
-    const dialBug1bYHandle = await findFieldByTitleSubstring(page, 'y : ')
-    const dialBug1bMHandle = await findFieldByTitleSubstring(page, 'm : ')
-    const dialBug1bDHandle = await findFieldByTitleSubstring(page, 'd : ')
+    const dialBug1bYHandle = await findFieldByTipSubstring(page, 'y : ')
+    const dialBug1bMHandle = await findFieldByTipSubstring(page, 'm : ')
+    const dialBug1bDHandle = await findFieldByTipSubstring(page, 'd : ')
     const dialBug1bY = await getHandleValue(dialBug1bYHandle)
     const dialBug1bM = await getHandleValue(dialBug1bMHandle)
     const dialBug1bD = await getHandleValue(dialBug1bDHandle)
@@ -648,23 +648,23 @@ async function main() {
     // Peg vini, vfin, and tini (start TIME field)
     const dialSoftPeggedTitles = ['vini = 73']
     for (const t of dialSoftPeggedTitles) {
-      const h = await findFieldByTitleSubstring(page, t)
+      const h = await findFieldByTipSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
-      assert.equal(isNull, false, `dial unsatisfiable rate: couldn't find field with title containing "${t}"`)
+      assert.equal(isNull, false, `dial unsatisfiable rate: couldn't find field with tip containing "${t}"`)
       await h.dispose()
     }
 
     const dialSoftPegTitles = ['vfin : 70', 'tini = unixtime']
     for (const t of dialSoftPegTitles) {
-      const h = await findFieldByTitleSubstring(page, t)
+      const h = await findFieldByTipSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
-      assert.equal(isNull, false, `dial unsatisfiable rate: couldn't find field with title containing "${t}"`)
+      assert.equal(isNull, false, `dial unsatisfiable rate: couldn't find field with tip containing "${t}"`)
       await longpressHandle(page, h)
       await h.dispose()
     }
 
     // Enter an unsatisfiable rate-per-day value (requires fractional day count)
-    const dialSoftRateHandle = await findFieldByTitleSubstring(page, 'r*SID')
+    const dialSoftRateHandle = await findFieldByTipSubstring(page, 'r*SID')
     const dialSoftRateIsNull = await dialSoftRateHandle.evaluate(el => el === null)
     assert.equal(dialSoftRateIsNull, false)
     await dialSoftRateHandle.click({ clickCount: 3 })
@@ -692,22 +692,22 @@ async function main() {
     // Peg vini, vfin, and tini (start TIME field)
     const dialRateZeroPeggedTitles = ['vini = 73']
     for (const t of dialRateZeroPeggedTitles) {
-      const h = await findFieldByTitleSubstring(page, t)
+      const h = await findFieldByTipSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
-      assert.equal(isNull, false, `dial rate=0: couldn't find field with title containing "${t}"`)
+      assert.equal(isNull, false, `dial rate=0: couldn't find field with tip containing "${t}"`)
       await h.dispose()
     }
 
     const dialRateZeroPegTitles = ['vfin : 70', 'tini = unixtime']
     for (const t of dialRateZeroPegTitles) {
-      const h = await findFieldByTitleSubstring(page, t)
+      const h = await findFieldByTipSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
-      assert.equal(isNull, false, `dial rate=0: couldn't find field with title containing "${t}"`)
+      assert.equal(isNull, false, `dial rate=0: couldn't find field with tip containing "${t}"`)
       await longpressHandle(page, h)
       await h.dispose()
     }
 
-    const dialRateZeroHandle = await findFieldByTitleSubstring(page, 'r*SID')
+    const dialRateZeroHandle = await findFieldByTipSubstring(page, 'r*SID')
     const dialRateZeroIsNull = await dialRateZeroHandle.evaluate(el => el === null)
     assert.equal(dialRateZeroIsNull, false, 'dial rate=0: could not find r*SID field')
 
@@ -855,7 +855,7 @@ async function main() {
     await page.select('#recipeSelect', 'simeq')
     await page.waitForSelector('#recipeOutput', { visible: true })
 
-    const simeqConstraintHandle = await findFieldByTitleSubstring(page, '5x - 4y')
+    const simeqConstraintHandle = await findFieldByTipSubstring(page, '5x - 4y')
     const simeqConstraintIsNull = await simeqConstraintHandle.evaluate(el => el === null)
     assert.equal(simeqConstraintIsNull, false)
 
@@ -1167,7 +1167,7 @@ async function main() {
 
     const biketourBreakPegTitles = ['b1*60 : 26', 'b2*60 : 37']
     for (const t of biketourBreakPegTitles) {
-      const h = await findFieldByTitleSubstring(page, t)
+      const h = await findFieldByTipSubstring(page, t)
       const isNull = await h.evaluate(el => el === null)
       assert.equal(isNull, false)
       await longpressHandle(page, h)
@@ -1175,8 +1175,8 @@ async function main() {
       await waitForNextFrame(page)
     }
 
-    const biketourAvgSpeedHandle = await findFieldByTitleSubstring(page, 'd/t')
-    const biketourRidingTimeHandle = await findFieldByTitleSubstring(page, 't = w-b')
+    const biketourAvgSpeedHandle = await findFieldByTipSubstring(page, 'd/t')
+    const biketourRidingTimeHandle = await findFieldByTipSubstring(page, 't = w-b')
     assert.ok(biketourAvgSpeedHandle)
     assert.ok(biketourRidingTimeHandle)
 
@@ -1230,7 +1230,7 @@ async function main() {
     await setInputValue(page, 'input.recipe-field[data-label="a"]', '1')
     await setInputValue(page, 'input.recipe-field[data-label="b"]', '2')
 
-    const aEqBHandle = await findFieldByTitleSubstring(page, 'a=b')
+    const aEqBHandle = await findFieldByTipSubstring(page, 'a=b')
     const aEqBIsNull = await aEqBHandle.evaluate(el => el === null)
     assert.equal(aEqBIsNull, false)
 
@@ -1284,7 +1284,7 @@ async function main() {
     await typeIntoFieldNoBlur(page, 'input.recipe-field[data-label="x"]', '2')
     await page.keyboard.press('Tab')
 
-    const cSquaredHandle = await findFieldByTitleSubstring(page, 'a^2 + b^2 = c^2')
+    const cSquaredHandle = await findFieldByTipSubstring(page, 'a^2 + b^2 = c^2')
     const cSquaredIsNull = await cSquaredHandle.evaluate(el => el === null)
     assert.equal(cSquaredIsNull, false)
 
@@ -2579,6 +2579,76 @@ async function main() {
     assert.ok(/No solution/i.test(gratioBanner), `gratio: pinning phi=-0.5 should show the No solution banner, got "${gratioBanner}"`)
     assert.equal(await getInputValue(page, 'input.recipe-field[data-label="phi"]'), '-0.5', 'gratio: the edited field should keep the typed value')
     pass('gratio reciplate')
+
+    // Qual: the reciplify button turns a plaintext recipe into a reciplate
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, 'Fry 2 eggs in 1/2 tbsp butter.')
+    await page.click('#reciplifyButton')
+    await waitForNextFrame(page)
+    assert.equal(await getInputValue(page, '#recipeTextarea'),
+      'Fry {2x} eggs in {(1/2)*x} tbsp butter.\n\nScaled by a factor of {x : 1} \n{.1 <= x <= 10}\n',
+      'reciplify: textarea should hold the converted reciplate')
+    assert.equal(await page.$eval('#recipeSelect', el => el.value), 'custom',
+      'reciplify: dropdown should flip to custom')
+    assert.equal((await page.$$('input.recipe-field')).length, 3,
+      'reciplify: {2x}, {(1/2)*x}, and {x : 1} should render as fields')
+    assert.equal((await page.$$('input.recipe-slider')).length, 1,
+      'reciplify: {.1 <= x <= 10} should render as a slider')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="2x"]'), '2',
+      'reciplify: eggs field should show 2 at x=1')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="(1/2)*x"]'), '0.5',
+      'reciplify: butter field should show 0.5 at x=1')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="x"]'), '1',
+      'reciplify: scale factor should start at 1')
+    await setInputValue(page, 'input.recipe-field[data-label="x"]', '2')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="2x"]'), '4',
+      'reciplify: doubling x should double the eggs')
+    // A second click must not change anything (reciplify is idempotent)
+    await page.click('#reciplifyButton')
+    await waitForNextFrame(page)
+    assert.equal(await getInputValue(page, '#recipeTextarea'),
+      'Fry {2x} eggs in {(1/2)*x} tbsp butter.\n\nScaled by a factor of {x : 1} \n{.1 <= x <= 10}\n',
+      'reciplify: second click should leave the reciplate unchanged')
+    pass('reciplify button')
+
+    // Qual: shared tooltip appears on focus and hover (native title tooltips
+    // never show on touch screens; focus is the mobile path since tapping a
+    // field focuses it)
+    await selectReciplate('crepes')
+    await page.focus('input.recipe-field[data-label="12x"]')
+    assert.equal(await page.$eval('#tooltip', el => el.hidden), false,
+      'tooltip: focusing a field should show the tooltip')
+    assert.equal(await page.$eval('#tooltip', el => el.textContent), '12x',
+      'tooltip: field tooltip should show the cell urtext')
+    const tipAboveField = await page.evaluate(() => {
+      const tip = document.getElementById('tooltip').getBoundingClientRect()
+      const field = document.querySelector('input.recipe-field[data-label="12x"]').getBoundingClientRect()
+      return tip.bottom <= field.top
+    })
+    assert.equal(tipAboveField, true, 'tooltip: should sit above its element')
+    await page.$eval('input.recipe-field[data-label="12x"]', el => el.blur())
+    assert.equal(await page.$eval('#tooltip', el => el.hidden), true,
+      'tooltip: blurring should hide the tooltip')
+    // Park the mouse off the button first (it's still there from the clicks
+    // above, and pointerover only fires on entering)
+    await page.hover('h1')
+    await page.hover('#reciplifyButton')
+    assert.equal(await page.$eval('#tooltip', el => el.hidden), false,
+      'tooltip: hovering the reciplify button should show the tooltip')
+    assert.equal(await page.$eval('#tooltip', el => el.textContent),
+      'Turn bare numbers like 2 into scalable cells like {2x}',
+      'tooltip: hovering the reciplify button should show its explainer')
+    await page.hover('h1')
+    assert.equal(await page.$eval('#tooltip', el => el.hidden), true,
+      'tooltip: hovering elsewhere should hide the tooltip')
+    // Auto-dismiss: a lingering tooltip occludes the field on the line above
+    await page.hover('#reciplifyButton')
+    await sleep(3000)  // TIP_LINGER_MS is 2500
+    assert.equal(await page.$eval('#tooltip', el => el.hidden), true,
+      'tooltip: should auto-dismiss after lingering')
+    pass('tooltips')
 
     console.log(`\n=== UI Quals Summary ===\nPassed: ${TOTAL_QUALS}/${TOTAL_QUALS} (${milestonesCompleted} milestones)\nFailed: 0`)
   } catch (e) {

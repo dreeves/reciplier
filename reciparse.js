@@ -115,6 +115,42 @@ function parseInequalities(content) {
   }
 }
 
+// =============================================================================
+// Reciplify: turn a plaintext recipe into a reciplate
+// =============================================================================
+// "Reciplify" (jargon): wrap each bare number in a cell scaled by x -- "add 2
+// eggs" becomes "add {2x} eggs" -- and append SCALE_FOOTER defining x. Text
+// already inside cells is left alone and the footer is only appended if
+// absent, so reciplifying is idempotent.
+
+// Exact copy from the crepes reciplate, trailing space and all
+const SCALE_FOOTER = 'Scaled by a factor of {x : 1} \n{.1 <= x <= 10}'
+
+// Bare numbers: mixed numbers ("1 1/2"), fractions ("3/4"), decimals ("5.33",
+// ".5"), and integers ("2"). The lookarounds skip numbers glued to word
+// characters, dots, or slashes, so tokens like "9x13", "v1.2.3", and
+// "10/12/2024" stay untouched.
+const BARENUM_RE = /(?<![\w.\/])(?:\d+ \d+\/\d+|\d+\/\d+|\d+\.\d+|\.\d+|\d+)(?![\w\/]|\.\d)/g
+
+// Wrap one bare-number token in a cell that scales it by x. Plain numbers use
+// implicit multiplication ({2x}); fractions and mixed numbers get explicit
+// grouping ({(1/2)*x}, {(1+1/2)*x}) so a human reading the template can't
+// misread 1/2x as 1/(2x).
+function cellify(numToken) {
+  const compound = /[ \/]/.test(numToken)
+  return compound ? `{(${numToken.replace(' ', '+')})*x}` : `{${numToken}x}`
+}
+
+function reciplify(text) {
+  // Split on existing cells (odd indices, thanks to the capture group) and
+  // cellify bare numbers only in the plain-text segments between them
+  const scaled = text.split(/(\{[^{}]*\})/g).map((seg, i) =>
+    i % 2 === 1 ? seg : seg.replace(BARENUM_RE, cellify)
+  ).join('')
+  if (scaled.includes(SCALE_FOOTER)) return scaled
+  return scaled.trimEnd() + '\n\n' + SCALE_FOOTER + '\n'
+}
+
 // Parse a single cell's content into cval and ceqn
 // Per spec: ceqn is a list of non-constant expressions split on "=".
 // cval is the constant if there is one, null otherwise.
