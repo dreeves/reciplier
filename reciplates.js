@@ -43,14 +43,17 @@ Scaled by a factor of {x : 1}
 `,
 // -----------------------------------------------------------------------------
 pyzza: `\
+### Pizza forced to be proportional to a 3-4-5 right triangle:
+
 Scaled by a factor of x={x : 1}.
+{.1 <= x <= 10}
 
 Roll out dough into a right triangle with legs of length a={a = 3x} and b={b = 4x} and hypotenuse c={c}.
 Then eat it.
 
 Sanity check: {a}^2 + {b}^2 = {a^2} + {b^2} = {a^2 + b^2 = c^2}
 
-### Above enforces a 3-4-5 ratio; here's one that doesn't:
+### This one can be any right triangle:
 
 {A}^2 + {B}^2 = {C}^2
 <!-- {A^2 + B^2 = C^2} -->
