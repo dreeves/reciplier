@@ -372,6 +372,16 @@ function runParserQuals() {
     reciplify('add 1 1/2 cups flour'), 'add {(1+1/2)*x} cups flour' + FOOT)
   check('reciplify: sentence-ending number keeps its period',
     reciplify('divide into 12.'), 'divide into {12x}.' + FOOT)
+  check('reciplify: vulgar fraction glyph',
+    reciplify('add ½ cup milk'), 'add {(1/2)*x} cup milk' + FOOT)
+  check('reciplify: vulgar fraction three quarters',
+    reciplify('add ¾ tsp salt'), 'add {(3/4)*x} tsp salt' + FOOT)
+  check('reciplify: mixed number with glued glyph',
+    reciplify('add 1½ cups flour'), 'add {(1+1/2)*x} cups flour' + FOOT)
+  check('reciplify: mixed number with spaced glyph',
+    reciplify('add 1 ½ cups flour'), 'add {(1+1/2)*x} cups flour' + FOOT)
+  check('reciplify: glyph glued to letters untouched',
+    reciplify('add ½cup milk'), 'add ½cup milk' + FOOT)
   check('reciplify: existing cells untouched',
     reciplify('use {2x} eggs and 3 cups milk'),
     'use {2x} eggs and {3x} cups milk' + FOOT)

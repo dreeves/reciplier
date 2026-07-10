@@ -19,7 +19,7 @@ function fileUrl(p) {
 
 // Track and display qual progress
 // Individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 164
+const TOTAL_QUALS = 169
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -2612,6 +2612,44 @@ async function main() {
       'Fry {2x} eggs in {(1/2)*x} tbsp butter.\n\nScaled by a factor of {x : 1} \n{.1 <= x <= 10}\n',
       'reciplify: second click should leave the reciplate unchanged')
     pass('reciplify button')
+
+    // Qual: programmatic template replacement preserves the textarea's native
+    // undo stack (reciplify and dropdown changes route through execCommand
+    // insertText), so Cmd+Z after clicking Reciplify restores the plaintext.
+    // Field edits land on the same document undo stack, so start fresh: the
+    // textarea insert must be the most recent edit for undo to target it.
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, 'Fry 2 eggs in 1/2 tbsp butter.')
+    await page.click('#reciplifyButton')
+    await waitForNextFrame(page)
+    const undoTextarea = async (cmd) => {
+      await page.$eval('#recipeTextarea', (el, c) => {
+        el.focus()
+        document.execCommand(c)
+      }, cmd)
+      await waitForNextFrame(page)
+    }
+    await undoTextarea('undo')
+    assert.equal(await getInputValue(page, '#recipeTextarea'),
+      'Fry 2 eggs in 1/2 tbsp butter.',
+      'undo: should restore the pre-reciplify plaintext')
+    assert.equal(await page.$eval('#recipeOutput', el => el.style.display), 'none',
+      'undo: restored plaintext should hide the rendered output')
+    await undoTextarea('redo')
+    assert.equal(await getInputValue(page, '#recipeTextarea'),
+      'Fry {2x} eggs in {(1/2)*x} tbsp butter.\n\nScaled by a factor of {x : 1} \n{.1 <= x <= 10}\n',
+      'redo: should re-apply the reciplification')
+    // Switching reciplates via the dropdown is also undoable
+    await selectReciplate('crepes')
+    await undoTextarea('undo')
+    assert.equal(await getInputValue(page, '#recipeTextarea'),
+      'Fry {2x} eggs in {(1/2)*x} tbsp butter.\n\nScaled by a factor of {x : 1} \n{.1 <= x <= 10}\n',
+      'undo: should restore the custom template after a dropdown switch')
+    assert.equal(await page.$eval('#recipeSelect', el => el.value), 'custom',
+      'undo: dropdown should flip back to custom after undoing the switch')
+    pass('undo history')
 
     // Qual: shared tooltip appears on focus and hover (native title tooltips
     // never show on touch screens; focus is the mobile path since tapping a

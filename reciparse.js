@@ -126,19 +126,35 @@ function parseInequalities(content) {
 // Exact copy from the crepes reciplate, trailing space and all
 const SCALE_FOOTER = 'Scaled by a factor of {x : 1} \n{.1 <= x <= 10}'
 
-// Bare numbers: mixed numbers ("1 1/2"), fractions ("3/4"), decimals ("5.33",
-// ".5"), and integers ("2"). The lookarounds skip numbers glued to word
-// characters, dots, or slashes, so tokens like "9x13", "v1.2.3", and
-// "10/12/2024" stay untouched.
-const BARENUM_RE = /(?<![\w.\/])(?:\d+ \d+\/\d+|\d+\/\d+|\d+\.\d+|\.\d+|\d+)(?![\w\/]|\.\d)/g
+// Unicode vulgar-fraction glyphs and their ASCII spellings; recipes pasted
+// from the web use these constantly ("add 1½ cups flour")
+const VULGAR = { '½':'1/2', '⅓':'1/3', '⅔':'2/3', '¼':'1/4', '¾':'3/4',
+                 '⅕':'1/5', '⅖':'2/5', '⅗':'3/5', '⅘':'4/5', '⅙':'1/6',
+                 '⅚':'5/6', '⅐':'1/7', '⅛':'1/8', '⅜':'3/8', '⅝':'5/8',
+                 '⅞':'7/8', '⅑':'1/9', '⅒':'1/10' }
+const VULGAR_CLASS = `[${Object.keys(VULGAR).join('')}]`
+// A glyph with its optional leading space (and leading integer left in place),
+// for normalizing "1½" / "1 ½" / "½" to ASCII inside cellify
+const VULGAR_RE = new RegExp(` ?(${VULGAR_CLASS})`)
 
-// Wrap one bare-number token in a cell that scales it by x. Plain numbers use
-// implicit multiplication ({2x}); fractions and mixed numbers get explicit
-// grouping ({(1/2)*x}, {(1+1/2)*x}) so a human reading the template can't
-// misread 1/2x as 1/(2x).
+// Bare numbers: mixed numbers ("1 1/2", "1½", "1 ½"), fractions ("3/4", "½"),
+// decimals ("5.33", ".5"), and integers ("2"). The lookarounds skip numbers
+// glued to word characters, dots, or slashes, so tokens like "9x13",
+// "v1.2.3", and "10/12/2024" stay untouched.
+const BARENUM_RE = new RegExp(String.raw`(?<![\w.\/])` +
+  String.raw`(?:\d+ \d+\/\d+|\d+\/\d+|(?:\d+ ?)?${VULGAR_CLASS}` +
+  String.raw`|\d+\.\d+|\.\d+|\d+)` +
+  String.raw`(?![\w\/]|\.\d)`, 'g')
+
+// Wrap one bare-number token in a cell that scales it by x. Vulgar-fraction
+// glyphs first normalize to their ASCII spellings ("1½" -> "1 1/2"). Plain
+// numbers use implicit multiplication ({2x}); fractions and mixed numbers get
+// explicit grouping ({(1/2)*x}, {(1+1/2)*x}) so a human reading the template
+// can't misread 1/2x as 1/(2x).
 function cellify(numToken) {
-  const compound = /[ \/]/.test(numToken)
-  return compound ? `{(${numToken.replace(' ', '+')})*x}` : `{${numToken}x}`
+  const ascii = numToken.replace(VULGAR_RE, (_, g) => ' ' + VULGAR[g]).trim()
+  const compound = /[ \/]/.test(ascii)
+  return compound ? `{(${ascii.replace(' ', '+')})*x}` : `{${ascii}x}`
 }
 
 function reciplify(text) {

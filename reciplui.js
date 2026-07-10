@@ -835,15 +835,22 @@ function attachPegTrigger(input) {
   }
 }
 
-// Programmatically replace the recipe template and rerun the full pipeline
-// (as opposed to handleTextareaInput, where the textarea already has the text)
+// Programmatically replace the recipe template. Routed through execCommand
+// (deprecated but universally supported, and the only API that writes the
+// textarea's native undo stack) so Cmd+Z restores what was there before.
+// The insertText fires an input event, so handleTextareaInput runs the whole
+// parse/render pipeline. Focus is restored afterward so arrow-key browsing
+// of the reciplate dropdown keeps working. Note that replacing the text with
+// itself is meaningful: it reruns the pipeline, so re-selecting the current
+// reciplate in the dropdown resets edited fields to the template's values.
 function setRecipeText(text) {
-  state.recipeText = text
-  $('recipeTextarea').value = text
-  parseRecipe()
-  syncDropdown()
-  renderRecipe()
-  updateUrl()
+  const refocus = document.activeElement
+  const ta = $('recipeTextarea')
+  ta.focus()
+  ta.select()
+  const ok = document.execCommand('insertText', false, text)
+  if (!ok) throw new Error('setRecipeText: execCommand insertText failed')
+  refocus.focus()
 }
 
 function handleRecipeChange() {
@@ -854,7 +861,9 @@ function handleRecipeChange() {
 }
 
 function handleReciplify() {
-  setRecipeText(reciplify(state.recipeText))
+  const next = reciplify(state.recipeText)
+  if (next === state.recipeText) return  // nothing to convert: keep undo clean
+  setRecipeText(next)
 }
 
 function handleTextareaInput(e) {
