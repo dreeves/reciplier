@@ -19,7 +19,7 @@ function fileUrl(p) {
 
 // Track and display qual progress
 // Individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 169
+const TOTAL_QUALS = 172
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -2687,6 +2687,30 @@ async function main() {
     assert.equal(await page.$eval('#tooltip', el => el.hidden), true,
       'tooltip: should auto-dismiss after lingering')
     pass('tooltips')
+
+    // Qual: help popover fits within a phone-width viewport (it used to
+    // overhang the left screen edge: content-box sizing added padding and
+    // border on top of its calc(100vw - 2rem) width)
+    const priorViewport = page.viewport()
+    await page.setViewport({ width: 390, height: 844 })
+    await waitForNextFrame(page)
+    await page.click('#helpButton')
+    const helpGeo = await page.evaluate(() => {
+      const r = document.getElementById('helpPopover').getBoundingClientRect()
+      return { left: r.left, right: r.right, vw: window.innerWidth }
+    })
+    assert.ok(helpGeo.left >= 0 && helpGeo.right <= helpGeo.vw,
+      `help popover should fit the viewport, got left=${helpGeo.left} right=${helpGeo.right} vw=${helpGeo.vw}`)
+    // Tapping the background (the h1 strip above the popover) dismisses it
+    await page.mouse.click(100, 30)
+    assert.equal(await page.$eval('#helpPopover', el => el.hidden), true,
+      'help popover should close on a tap outside it')
+    await page.click('#helpButton')
+    await page.click('#helpButton')
+    assert.equal(await page.$eval('#helpPopover', el => el.hidden), true,
+      'help popover should close on a second tap of the ? button')
+    await page.setViewport(priorViewport)
+    pass('help popover on mobile')
 
     console.log(`\n=== UI Quals Summary ===\nPassed: ${TOTAL_QUALS}/${TOTAL_QUALS} (${milestonesCompleted} milestones)\nFailed: 0`)
   } catch (e) {

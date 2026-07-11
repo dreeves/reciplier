@@ -1142,7 +1142,10 @@ function init() {
     setHelpOpen(helpPopover.hidden)
   })
 
-  document.addEventListener('click', (e) => {
+  // pointerdown, not click: iOS Safari doesn't dispatch click to document
+  // listeners for taps on non-interactive elements, so tapping the page
+  // background to dismiss the popover wouldn't work on iPhones
+  document.addEventListener('pointerdown', (e) => {
     if (helpPopover.hidden) return
     const target = e.target
     if (helpPopover.contains(target) || helpButton.contains(target)) return

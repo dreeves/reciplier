@@ -31,9 +31,10 @@ Codex can't seem to execute "npm run quals" unless it "escalates permissions" wh
 
 ## Current Status
 
-**Quals**: 1176/1176 passing (627/627 solver quals, 169/169 UI quals)
+**Quals**: 1179/1179 passing (627/627 solver quals, 172/172 UI quals)
 
 **Recent improvements**:
+- ✅ Help popover mobile fixes: (1) box-sizing: border-box on .help-popover -- its width is calc(100vw - 2rem) but content-box sizing added padding+border on top, so it overhung the left screen edge by 18px on phones and the text got clipped; (2) the tap-outside-to-dismiss listener is now pointerdown instead of click, because iOS Safari doesn't dispatch click to document listeners for taps on non-interactive elements (unverifiable in Chromium emulation, but it's the standard fix and behaves identically otherwise). New UI milestone pins popover-fits-viewport at 390px, tap-outside dismissal, and ?-button toggling
 - ✅ Undo-safe template replacement: setRecipeText routes through execCommand('insertText') (deprecated but universally supported; the only API that writes the textarea's native undo stack), so Cmd+Z undoes a reciplify click or a dropdown switch. The insertText fires input, so handleTextareaInput runs the pipeline. Replacing text with itself is meaningful (re-selecting the current reciplate resets edited fields -- the cheesepan quals rely on this), so the no-op guard lives in handleReciplify, not setRecipeText. Caveat: field edits share the document undo stack, so undo targets the most recent edit wherever it was
 - ✅ reciplify handles unicode vulgar fractions: "½" -> {(1/2)*x}, "1½"/"1 ½" -> {(1+1/2)*x} (VULGAR map in reciparse.js normalizes glyphs to ASCII inside cellify; previously "1½" mangled to "{1x}½")
 - ✅ Reciplify button: turns a plaintext recipe into a reciplate (bare numbers -> {2x} cells; fractions/mixed numbers -> {(1/2)*x}/{(1+1/2)*x}; appends the crepes-style scale footer). reciplify() lives in reciparse.js; idempotent (existing cells skipped, footer appended only if absent). Lives in the toolbar row next to the template dropdown. Note: a "gray out when clicking would be a no-op" state was tried and killed by human decision (too puzzling why it's sometimes disabled); its 2 UI asserts were removed accordingly

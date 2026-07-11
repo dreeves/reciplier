@@ -327,6 +327,7 @@ button:disabled {
 }
 
 .help-popover {
+  box-sizing: border-box;  /* so padding+border fit inside the 100vw calc */
   position: absolute;
   right: 0;
   top: 3rem;
