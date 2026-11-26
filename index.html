@@ -113,16 +113,10 @@ for an example of some prior art.
   <h1 class="text-2xl font-bold mb-4">Reciplier</h1>
   
   <div class="mb-6">
-    <div class="mb-2 flex items-center justify-between flex-wrap gap-2">
+    <div class="mb-2">
       <select id="recipeSelect" class="p-2 border rounded text-gray-700">
         <!-- Options will be populated dynamically from script.js -->
       </select>
-
-      <button
-        id="reciplifyButton"
-        type="button"
-        data-tip="Turn bare numbers like 2 into scalable cells like {2x}"
-      >Reciplify</button>
     </div>
 
     <details id="recipeSource">
@@ -133,6 +127,11 @@ for an example of some prior art.
         placeholder="Recipe syntax is like {2x} cups flour, scaled by {x:1}"
         spellcheck="false" autocapitalize="off" autocomplete="off"
       ></textarea>
+      <button
+        id="reciplifyButton"
+        type="button"
+        data-tip="Turn bare numbers like 2 into scalable cells like {2x}"
+      >Reciplify</button>
     </details>
   </div>
 
@@ -152,21 +151,20 @@ for an example of some prior art.
   
   <div class="text-center text-gray-400 text-sm mt-4">
     <div class="text-gray-300 text-xs mt-1">
-      v2026.11.25-f
+      v2026.11.25-g
     </div>
   </div>
 
 <!-- BEGIN DEBUG PANEL
      Add "open", without quotes, as a boolean attribute on <details> to
      default to expanded rather than collapsed.
--->
 <details id="debugPanel" class="debug-panel">
   <summary class="debug-header">Debug Panel & UI Experiments ⚠️ (normal users ignore this)</summary>
   <div class="debug-content">
     <div class="debug-section">
       <div class="debug-label">Variable assignments:</div>
       <div id="varAssignments" class="var-assignments" style="font-family: monospace; font-size: 12px; background: #f5f5f5; padding: 8px; border-radius: 4px; max-height: 150px; overflow-y: auto;">
-        <!-- Populated dynamically by updateVarAssignments() -->
+        < ! -- Populated dynamically by updateVarAssignments() -- >
       </div>
     </div>
     <div class="debug-section">
@@ -209,7 +207,6 @@ for an example of some prior art.
     </div>
   </div>
 </details>
-<!-- 
 END DEBUG PANEL -->
 </div>
 

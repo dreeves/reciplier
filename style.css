@@ -139,7 +139,13 @@ textarea {
   color: var(--ink-soft);
 }
 #recipeSource > textarea {
+  display: block;  /* no inline baseline gap above the Reciplify button */
   margin-top: 0.5rem;
+}
+/* Reciplify sits right-aligned under the text it converts */
+#reciplifyButton {
+  display: block;
+  margin: 0.5rem 0 0 auto;
 }
 
 select {

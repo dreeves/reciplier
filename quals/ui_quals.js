@@ -2601,7 +2601,10 @@ async function main() {
     assert.equal(await getInputValue(page, 'input.recipe-field[data-label="phi"]'), '-0.5', 'gratio: the edited field should keep the typed value')
     pass('gratio reciplate')
 
-    // Qual: the reciplify button turns a plaintext recipe into a reciplate
+    // Qual: the reciplify button turns a plaintext recipe into a reciplate.
+    // Reciplify lives in the collapsed-by-default editor, so open it first;
+    // it stays open through the undo and tooltip quals below.
+    await page.click('#recipeSource > summary')
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
@@ -2753,18 +2756,21 @@ async function main() {
     pass('local JS/CSS URLs carry the deploy stamp')
 
     // Qual: the recipe source (the template textarea) starts collapsed in a
-    // <details>, so the rendered recipe leads. The dropdown and Reciplify
-    // still work while it's collapsed and leave it collapsed, even though
-    // setRecipeText needs the textarea focusable for execCommand.
+    // <details>, so the rendered recipe leads. The dropdown still works while
+    // it's collapsed and leaves it collapsed, even though setRecipeText needs
+    // the textarea focusable for execCommand. Reciplify only makes sense with
+    // the editor open, so it's inside the <details> too.
     await page.goto(baseUrl)
     await page.waitForSelector('#recipeOutput', { visible: true })
     const sourceState = () => page.evaluate(() => ({
       open: document.querySelector('#recipeSource')?.open,
-      visible: document.querySelector('#recipeTextarea').checkVisibility(),
+      textarea: document.querySelector('#recipeTextarea').checkVisibility(),
+      reciplify: document.querySelector('#reciplifyButton').checkVisibility(),
     }))
-    const collapsed = { open: false, visible: false }
+    const collapsed = { open: false, textarea: false, reciplify: false }
+    const expanded = { open: true, textarea: true, reciplify: true }
     assert.deepEqual(await sourceState(), collapsed,
-      'source: should start collapsed with the textarea hidden')
+      'source: should start collapsed with the textarea and Reciplify hidden')
     await selectReciplate('cookies')
     assert.equal(await getInputValue(page, '#recipeTextarea'),
       await page.evaluate(() => reciplates.cookies),
@@ -2773,6 +2779,9 @@ async function main() {
       'source: switching reciplates while collapsed should render it')
     assert.deepEqual(await sourceState(), collapsed,
       'source: switching reciplates should leave it collapsed')
+    await page.click('#recipeSource > summary')
+    assert.deepEqual(await sourceState(), expanded,
+      'source: clicking the summary should show the textarea and Reciplify')
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
@@ -2781,15 +2790,12 @@ async function main() {
     await waitForNextFrame(page)
     assert.equal(await getInputValue(page, '#recipeTextarea'),
       'Fry {2x} eggs.\n\nScaled by a factor of {x : 1} \n{.1 <= x <= 10}\n',
-      'source: Reciplify while collapsed should convert the template')
-    assert.deepEqual(await sourceState(), collapsed,
-      'source: Reciplify should leave it collapsed')
-    await page.click('#recipeSource > summary')
-    assert.deepEqual(await sourceState(), { open: true, visible: true },
-      'source: clicking the summary should show the textarea')
+      'source: Reciplify should convert the template')
+    assert.deepEqual(await sourceState(), expanded,
+      'source: Reciplify should leave the editor open')
     await page.click('#recipeSource > summary')
     assert.deepEqual(await sourceState(), collapsed,
-      'source: clicking the summary again should hide the textarea')
+      'source: clicking the summary again should hide the textarea and Reciplify')
     pass('recipe source starts collapsed')
 
     console.log(`\n=== UI Quals Summary ===\nPassed: ${TOTAL_QUALS}/${TOTAL_QUALS} (${milestonesCompleted} milestones)\nFailed: 0`)
