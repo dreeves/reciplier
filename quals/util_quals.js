@@ -631,27 +631,32 @@ function runUtilQuals() {
   // ==========================================================================
   // Link-preview image quals
   // ==========================================================================
-  // X's large card (summary_large_image), Facebook, and LinkedIn show the
-  // link-preview image at ~1.91:1 and crop any other shape, which would cut off
-  // the ends of the disclosure written down the pancake stack. So og:image must
-  // already be ~1.91:1, and its declared size must be the file's real size.
+  // Discord shows og:image at the image's own shape, so og:image is the square
+  // art with nothing padding it out. X's large card (summary_large_image)
+  // prefers twitter:image and crops anything that isn't ~1.91:1, which would
+  // cut off the ends of the disclosure written down the pancake stack, so
+  // twitter:image is the square art padded out to ~1.91:1. The declared
+  // og:image size must be the file's real size.
   console.log('\n=== Link-preview image quals ===')
 
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8')
   const meta = prop =>
     html.match(new RegExp(`<meta property="${prop}" content="([^"]*)"`))?.[1]
   const SITE = 'https://reciplier.dreev.es/'
-  const ogImage = meta('og:image')
-  assert.ok(ogImage?.startsWith(SITE), `og:image not on ${SITE}: ${ogImage}`)
-  const png = fs.readFileSync(path.join(root, ogImage.slice(SITE.length)))
-  assert.equal(png.toString('latin1', 12, 16), 'IHDR', `not a PNG: ${ogImage}`)
-  const pngW = png.readUInt32BE(16) // IHDR holds width then height
-  const pngH = png.readUInt32BE(20)
-  check('og:image:width is the file width', meta('og:image:width'), String(pngW))
-  check('og:image:height is the file height', meta('og:image:height'), String(pngH))
-  check('twitter:image is og:image', meta('twitter:image'), ogImage)
-  check('og:image is ~1.91:1 so link previews need no crop',
-    pngW / pngH, 1.91, 0.01)
+  const pngSize = url => { // [width, height] of one of this site's PNGs
+    assert.ok(url?.startsWith(SITE), `not on ${SITE}: ${url}`)
+    const png = fs.readFileSync(path.join(root, url.slice(SITE.length)))
+    assert.equal(png.toString('latin1', 12, 16), 'IHDR', `not a PNG: ${url}`)
+    return [png.readUInt32BE(16), png.readUInt32BE(20)] // IHDR: width, height
+  }
+  const [ogW, ogH] = pngSize(meta('og:image'))
+  const [twW, twH] = pngSize(meta('twitter:image'))
+  check('og:image:width is the file width', meta('og:image:width'), String(ogW))
+  check('og:image:height is the file height', meta('og:image:height'), String(ogH))
+  check('og:image is square so Discord shows the art without padding',
+    ogW / ogH, 1)
+  check("twitter:image is ~1.91:1 so X's large card needs no crop",
+    twW / twH, 1.91, 0.01)
 
   // ==========================================================================
   // Summary
