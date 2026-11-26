@@ -629,6 +629,31 @@ function runUtilQuals() {
     isCellViolated({ cval: 5, ceqn: ['2x'] }, { x: 3 }), true)
 
   // ==========================================================================
+  // Link-preview image quals
+  // ==========================================================================
+  // X's large card (summary_large_image), Facebook, and LinkedIn show the
+  // link-preview image at ~1.91:1 and crop any other shape, which would cut off
+  // the ends of the disclosure written down the pancake stack. So og:image must
+  // already be ~1.91:1, and its declared size must be the file's real size.
+  console.log('\n=== Link-preview image quals ===')
+
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8')
+  const meta = prop =>
+    html.match(new RegExp(`<meta property="${prop}" content="([^"]*)"`))?.[1]
+  const SITE = 'https://reciplier.dreev.es/'
+  const ogImage = meta('og:image')
+  assert.ok(ogImage?.startsWith(SITE), `og:image not on ${SITE}: ${ogImage}`)
+  const png = fs.readFileSync(path.join(root, ogImage.slice(SITE.length)))
+  assert.equal(png.toString('latin1', 12, 16), 'IHDR', `not a PNG: ${ogImage}`)
+  const pngW = png.readUInt32BE(16) // IHDR holds width then height
+  const pngH = png.readUInt32BE(20)
+  check('og:image:width is the file width', meta('og:image:width'), String(pngW))
+  check('og:image:height is the file height', meta('og:image:height'), String(pngH))
+  check('twitter:image is og:image', meta('twitter:image'), ogImage)
+  check('og:image is ~1.91:1 so link previews need no crop',
+    pngW / pngH, 1.91, 0.01)
+
+  // ==========================================================================
   // Summary
   // ==========================================================================
   console.log('\n=== Utility Quals Summary ===')

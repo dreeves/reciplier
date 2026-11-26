@@ -19,16 +19,20 @@ content="Paste in a recipe and scale it up or down. Also a constraint satisfacti
 <meta property="og:url" content="https://reciplier.dreev.es/" />
 <meta property="og:title" content="Reciplier - Recipe multiplier and Calculator Calculator" />
 <meta property="og:description" content="Paste in a recipe and scale it up or down. Also a constraint satisfaction solver, why not." />
-<meta property="og:image" content="https://reciplier.dreev.es/assets/reciplier-robot.png" />
-<meta property="og:image:width" content="1024" />
-<meta property="og:image:height" content="1024" />
+<!-- Link previews (X's large card, Facebook, LinkedIn) are ~1.91:1 and crop
+other shapes, so og:image is the square art centered on --blue-soft:
+magick assets/reciplier-robot.png -resize 630x630 -background '#dbeafe'
+-gravity center -extent 1200x630 -strip assets/reciplier-robot-wide.png -->
+<meta property="og:image" content="https://reciplier.dreev.es/assets/reciplier-robot-wide.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
 
 <!-- Twitter -->
 <meta property="twitter:card" content="summary_large_image" />
 <meta property="twitter:url" content="https://reciplier.dreev.es/" />
 <meta property="twitter:title" content="Reciplier - Recipe multiplier" />
 <meta property="twitter:description" content="Paste in a recipe and scale it up or down. Also a constraint satisfaction solver, why not." />
-<meta property="twitter:image" content="https://reciplier.dreev.es/assets/reciplier-robot.png" />
+<meta property="twitter:image" content="https://reciplier.dreev.es/assets/reciplier-robot-wide.png" />
 
 <link rel="stylesheet" href="style.css" />
 
@@ -134,7 +138,7 @@ for an example of some prior art.
   
   <div class="text-center text-gray-400 text-sm mt-4">
     <div class="text-gray-300 text-xs mt-1">
-      v2026.07.10-e
+      v2026.11.25-a
     </div>
   </div>
 

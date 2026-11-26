@@ -1,4 +1,4 @@
-[This document is strictly human-written and human-edited.]
+*This document is strictly human-written and human-edited.*
 
 # Reciplier
 

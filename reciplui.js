@@ -397,7 +397,8 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
     slider.classList.toggle('at-bass', Math.abs(c.cval - bassVal) < 0.005)
 
     // Always update out-of-bounds classes (even during drag)
-    // TODO: it's only when you start dragging that it may need updating...
+    // dreevnotes: 
+    // But it's only when you start dragging that it may need updating...
     // ...not sure if that's worth optimizing.
     const bounds = sliderBounds(c)
     const isBelowMin = bounds && c.cval < bounds.min
