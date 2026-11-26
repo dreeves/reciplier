@@ -847,10 +847,16 @@ function attachPegTrigger(input) {
 function setRecipeText(text) {
   const refocus = document.activeElement
   const ta = $('recipeTextarea')
+  // A collapsed recipe source hides the textarea and hidden elements can't
+  // take focus, so open it for the insert, then put it back how it was
+  const source = $('recipeSource')
+  const wasOpen = source.open
+  source.open = true
   ta.focus()
   ta.select()
   const ok = document.execCommand('insertText', false, text)
   if (!ok) throw new Error('setRecipeText: execCommand insertText failed')
+  source.open = wasOpen
   refocus.focus()
 }
 

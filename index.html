@@ -125,12 +125,15 @@ for an example of some prior art.
       >Reciplify</button>
     </div>
 
-    <textarea
-      id="recipeTextarea"
-      class="w-full p-3 border rounded h-40"
-      placeholder="Recipe syntax is like {2x} cups flour, scaled by {x:1}"
-      spellcheck="false" autocapitalize="off" autocomplete="off"
-    ></textarea>
+    <details id="recipeSource">
+      <summary>Editor</summary>
+      <textarea
+        id="recipeTextarea"
+        class="w-full p-3 border rounded h-40"
+        placeholder="Recipe syntax is like {2x} cups flour, scaled by {x:1}"
+        spellcheck="false" autocapitalize="off" autocomplete="off"
+      ></textarea>
+    </details>
   </div>
 
   <div id="recipeOutput" class="bg-gray-50 p-4 rounded recipe-output mb-4" style="display: none;">

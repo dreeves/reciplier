@@ -131,6 +131,17 @@ textarea {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+/* The recipe source: a <details> holding the template textarea, collapsed by
+   default so the rendered recipe leads */
+#recipeSource > summary {
+  cursor: pointer;
+  user-select: none;
+  color: var(--ink-soft);
+}
+#recipeSource > textarea {
+  margin-top: 0.5rem;
+}
+
 select {
   padding: 0.5rem 0.75rem;
   max-width: 100%;

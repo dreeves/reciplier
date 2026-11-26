@@ -19,7 +19,7 @@ function fileUrl(p) {
 
 // Track and display qual progress
 // Individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 187
+const TOTAL_QUALS = 195
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -2751,6 +2751,46 @@ async function main() {
     assert.ok(assets.urls.includes(`reciplier.js?v=${assets.stamp}`),
       `reciplier.js should load with the deploy stamp, got: ${assets.urls.join(', ')}`)
     pass('local JS/CSS URLs carry the deploy stamp')
+
+    // Qual: the recipe source (the template textarea) starts collapsed in a
+    // <details>, so the rendered recipe leads. The dropdown and Reciplify
+    // still work while it's collapsed and leave it collapsed, even though
+    // setRecipeText needs the textarea focusable for execCommand.
+    await page.goto(baseUrl)
+    await page.waitForSelector('#recipeOutput', { visible: true })
+    const sourceState = () => page.evaluate(() => ({
+      open: document.querySelector('#recipeSource')?.open,
+      visible: document.querySelector('#recipeTextarea').checkVisibility(),
+    }))
+    const collapsed = { open: false, visible: false }
+    assert.deepEqual(await sourceState(), collapsed,
+      'source: should start collapsed with the textarea hidden')
+    await selectReciplate('cookies')
+    assert.equal(await getInputValue(page, '#recipeTextarea'),
+      await page.evaluate(() => reciplates.cookies),
+      'source: switching reciplates while collapsed should load the template')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="54x"]'), '54',
+      'source: switching reciplates while collapsed should render it')
+    assert.deepEqual(await sourceState(), collapsed,
+      'source: switching reciplates should leave it collapsed')
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, 'Fry 2 eggs.')
+    await page.click('#reciplifyButton')
+    await waitForNextFrame(page)
+    assert.equal(await getInputValue(page, '#recipeTextarea'),
+      'Fry {2x} eggs.\n\nScaled by a factor of {x : 1} \n{.1 <= x <= 10}\n',
+      'source: Reciplify while collapsed should convert the template')
+    assert.deepEqual(await sourceState(), collapsed,
+      'source: Reciplify should leave it collapsed')
+    await page.click('#recipeSource > summary')
+    assert.deepEqual(await sourceState(), { open: true, visible: true },
+      'source: clicking the summary should show the textarea')
+    await page.click('#recipeSource > summary')
+    assert.deepEqual(await sourceState(), collapsed,
+      'source: clicking the summary again should hide the textarea')
+    pass('recipe source starts collapsed')
 
     console.log(`\n=== UI Quals Summary ===\nPassed: ${TOTAL_QUALS}/${TOTAL_QUALS} (${milestonesCompleted} milestones)\nFailed: 0`)
   } catch (e) {
