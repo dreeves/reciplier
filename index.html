@@ -19,6 +19,9 @@ content="Paste in a recipe and scale it up or down. Also a constraint satisfacti
 <meta property="og:url" content="https://reciplier.dreev.es/" />
 <meta property="og:title" content="Reciplier - Recipe multiplier and Calculator Calculator" />
 <meta property="og:description" content="Paste in a recipe and scale it up or down. Also a constraint satisfaction solver, why not." />
+<!-- One square image for every link preview: Discord shows it whole, and X,
+Facebook, and LinkedIn center-crop it to ~1.91:1 or 2:1, so the disclosure on
+the pancakes stays inside the middle band every such crop keeps (y 256-768). -->
 <meta property="og:image" content="https://reciplier.dreev.es/assets/reciplier-robot.png" />
 <meta property="og:image:width" content="1024" />
 <meta property="og:image:height" content="1024" />
@@ -28,13 +31,7 @@ content="Paste in a recipe and scale it up or down. Also a constraint satisfacti
 <meta property="twitter:url" content="https://reciplier.dreev.es/" />
 <meta property="twitter:title" content="Reciplier - Recipe multiplier" />
 <meta property="twitter:description" content="Paste in a recipe and scale it up or down. Also a constraint satisfaction solver, why not." />
-<!-- X's large card crops images to ~1.91:1, which would cut off the ends of
-the disclosure on the pancakes, so X gets the square art centered on
---blue-soft. Discord shows og:image at its own shape, so og:image stays the
-unpadded square. Made with: magick assets/reciplier-robot.png -resize 630x630
--background '#dbeafe' -gravity center -extent 1200x630 -strip
-assets/reciplier-robot-wide.png -->
-<meta property="twitter:image" content="https://reciplier.dreev.es/assets/reciplier-robot-wide.png" />
+<meta property="twitter:image" content="https://reciplier.dreev.es/assets/reciplier-robot.png" />
 
 <script>
 // Deploy stamp: the digits of this page's Last-Modified time, appended to our
@@ -150,7 +147,7 @@ for an example of some prior art.
   
   <div class="text-center text-gray-400 text-sm mt-4">
     <div class="text-gray-300 text-xs mt-1">
-      v2026.11.25-d
+      v2026.11.25-e
     </div>
   </div>
 
