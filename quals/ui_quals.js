@@ -19,7 +19,7 @@ function fileUrl(p) {
 
 // Track and display qual progress
 // Individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 195
+const TOTAL_QUALS = 196
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -2782,6 +2782,22 @@ async function main() {
     await page.click('#recipeSource > summary')
     assert.deepEqual(await sourceState(), expanded,
       'source: clicking the summary should show the textarea and Reciplify')
+    // Under the textarea, Reciplify looked like a submit button, so it sits at
+    // the right end of the summary line like a toolbar button
+    const reciplifySpot = await page.evaluate(() => {
+      const box = sel => document.querySelector(sel).getBoundingClientRect()
+      const s = box('#recipeSource > summary')
+      const b = box('#reciplifyButton')
+      const t = box('#recipeTextarea')
+      return {
+        sameLineAsSummary: Math.abs((s.top + s.bottom) / 2 - (b.top + b.bottom) / 2) <= 2,
+        aboveTextarea: b.bottom <= t.top,
+        flushRightWithTextarea: Math.abs(b.right - t.right) <= 1,
+      }
+    })
+    assert.deepEqual(reciplifySpot,
+      { sameLineAsSummary: true, aboveTextarea: true, flushRightWithTextarea: true },
+      'source: Reciplify should sit at the right end of the summary line, above the textarea')
     await page.$eval('#recipeTextarea', (el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))

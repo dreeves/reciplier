@@ -133,19 +133,27 @@ textarea {
 
 /* The recipe source: a <details> holding the template textarea, collapsed by
    default so the rendered recipe leads */
+#recipeSource {
+  position: relative;     /* anchors Reciplify to the summary line */
+  --editor-bar: 2.25rem;  /* height of the summary line and of Reciplify */
+}
 #recipeSource > summary {
   cursor: pointer;
   user-select: none;
   color: var(--ink-soft);
+  line-height: var(--editor-bar);
 }
 #recipeSource > textarea {
-  display: block;  /* no inline baseline gap above the Reciplify button */
   margin-top: 0.5rem;
 }
-/* Reciplify sits right-aligned under the text it converts */
+/* Reciplify sits at the right end of the summary line like a toolbar button
+   (under the textarea it looked like a submit button). It's in the <details>
+   body, so it hides with the editor. */
 #reciplifyButton {
-  display: block;
-  margin: 0.5rem 0 0 auto;
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: var(--editor-bar);
 }
 
 select {
