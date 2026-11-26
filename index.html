@@ -34,7 +34,17 @@ magick assets/reciplier-robot.png -resize 630x630 -background '#dbeafe'
 <meta property="twitter:description" content="Paste in a recipe and scale it up or down. Also a constraint satisfaction solver, why not." />
 <meta property="twitter:image" content="https://reciplier.dreev.es/assets/reciplier-robot-wide.png" />
 
-<link rel="stylesheet" href="style.css" />
+<script>
+// Deploy stamp: the digits of this page's Last-Modified time, appended to our
+// own JS/CSS URLs. GitHub Pages serves every file with Cache-Control:
+// max-age=600 (not configurable) and a reload only rechecks this HTML file, so
+// browsers kept running stale JS for up to 10 minutes after a deploy. Pages
+// sets every file's Last-Modified to the deploy time, so each deploy gives the
+// JS/CSS new URLs. document.write keeps the tags parser-inserted, so they load
+// in order and run before DOMContentLoaded, same as plain tags.
+const DEPLOY_STAMP = document.lastModified.replace(/\D/g, '')
+document.write(`<link rel="stylesheet" href="style.css?v=${DEPLOY_STAMP}" />`)
+</script>
 
 <title>Reciplier</title>
 
@@ -138,7 +148,7 @@ for an example of some prior art.
   
   <div class="text-center text-gray-400 text-sm mt-4">
     <div class="text-gray-300 text-xs mt-1">
-      v2026.11.25-b
+      v2026.11.25-c
     </div>
   </div>
 
@@ -201,13 +211,11 @@ END DEBUG PANEL -->
 
 <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
-<script src="matheval.js"></script>
-<script src="csolver.js"></script>
-<script src="reciparse.js"></script>
-<script src="reciplogic.js"></script>
-<script src="reciplates.js"></script>
-<script src="reciplui.js"></script>
-<script src="reciplier.js"></script>
+<script>
+for (const js of ['matheval.js', 'csolver.js', 'reciparse.js', 'reciplogic.js',
+                  'reciplates.js', 'reciplui.js', 'reciplier.js'])
+  document.write(`<script src="${js}?v=${DEPLOY_STAMP}"><\/script>`)
+</script>
 
 <script>
 // -----------------------------------------------------------------------------

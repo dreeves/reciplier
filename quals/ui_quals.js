@@ -19,7 +19,7 @@ function fileUrl(p) {
 
 // Track and display qual progress
 // Individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 184
+const TOTAL_QUALS = 187
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -2494,7 +2494,7 @@ async function main() {
     // off the flour field, but not the chill time or the water increment
     const pieOption = await page.$$eval('#recipeSelect option', os =>
       os.filter(o => o.value === 'piecrust').map(o => o.textContent))
-    assert.deepEqual(pieOption, ['Pie Crust'], 'piecrust: dropdown should list "Pie Crust"')
+    assert.deepEqual(pieOption, ["Bee's Miss American Pie Crust"], `piecrust: dropdown should list "Bee's Miss American Pie Crust"`)
     await selectReciplate('piecrust')
     assert.equal(await getInputValue(page, 'input.recipe-field[data-label="315x"]'), '315', 'piecrust: flour should start at 315g')
     assert.equal(await getInputValue(page, 'input.recipe-field[data-label="(2+1/2)*x"]'), '2.5', 'piecrust: flour should start at 2.5 C')
@@ -2732,6 +2732,25 @@ async function main() {
       'help popover should close on a second tap of the ? button')
     await page.setViewport(priorViewport)
     pass('help popover on mobile')
+
+    // Qual: every local JS/CSS URL carries the deploy stamp. GitHub Pages
+    // serves every file with Cache-Control: max-age=600 and stamps each file's
+    // Last-Modified with the deploy time, so without a per-deploy URL, browsers
+    // run stale JS for up to 10 minutes after a deploy, even across reloads.
+    await page.goto(baseUrl)
+    await page.waitForSelector('#recipeSelect')
+    const assets = await page.evaluate(() => ({
+      stamp: document.lastModified.replace(/\D/g, ''),
+      urls: [...document.querySelectorAll('script[src], link[rel="stylesheet"]')]
+        .map(e => e.getAttribute('src') ?? e.getAttribute('href'))
+        .filter(u => !/^https?:/.test(u)),
+    }))
+    assert.match(assets.stamp, /^\d{14}$/, 'deploy stamp should be the 14 digits of document.lastModified')
+    assert.deepEqual(assets.urls.filter(u => !u.endsWith(`?v=${assets.stamp}`)), [],
+      `local JS/CSS URLs should all end with ?v=${assets.stamp}`)
+    assert.ok(assets.urls.includes(`reciplier.js?v=${assets.stamp}`),
+      `reciplier.js should load with the deploy stamp, got: ${assets.urls.join(', ')}`)
+    pass('local JS/CSS URLs carry the deploy stamp')
 
     console.log(`\n=== UI Quals Summary ===\nPassed: ${TOTAL_QUALS}/${TOTAL_QUALS} (${milestonesCompleted} milestones)\nFailed: 0`)
   } catch (e) {
