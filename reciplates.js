@@ -114,7 +114,7 @@ Scaled by a factor of {x : 1}
 `,
 // -----------------------------------------------------------------------------
 piecrust: `\
-use all ingredients really cold
+_use all ingredients really cold_ 🥶
 
 {315x} g flour ({(2+1/2)*x} C)
 {15x} g sugar ({1x} tbsp)
