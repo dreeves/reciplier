@@ -19,7 +19,7 @@ function fileUrl(p) {
 
 // Track and display qual progress
 // Individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 172
+const TOTAL_QUALS = 184
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -2489,6 +2489,27 @@ async function main() {
     assert.equal(await getInputValue(page, 'input.recipe-field[data-label="9x"]'), '18', 'shortcake: doubling flour should double pan size')
     assert.equal(await getInputValue(page, 'input.recipe-field[data-label="3/4*x"]'), '1.5', 'shortcake: doubling flour should double milk')
     pass('shortcake reciplate')
+
+    // Qual: piecrust (transcribed from a handwritten card) scales everything
+    // off the flour field, but not the chill time or the water increment
+    const pieOption = await page.$$eval('#recipeSelect option', os =>
+      os.filter(o => o.value === 'piecrust').map(o => o.textContent))
+    assert.deepEqual(pieOption, ['Pie Crust'], 'piecrust: dropdown should list "Pie Crust"')
+    await selectReciplate('piecrust')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="315x"]'), '315', 'piecrust: flour should start at 315g')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="(2+1/2)*x"]'), '2.5', 'piecrust: flour should start at 2.5 C')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="(1/4)*x"]'), '0.25', 'piecrust: extra water should start at 0.25 C')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="2x"]'), '2', 'piecrust: yield should start at 2 crusts')
+    await setInputValue(page, 'input.recipe-field[data-label="315x"]', '630')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="225x"]'), '450', 'piecrust: doubling flour should double butter')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="(2+1/2)*x"]'), '5', 'piecrust: doubling flour should double flour cups')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="(1/4)*x"]'), '0.5', 'piecrust: doubling flour should double extra water')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="2x"]'), '4', 'piecrust: doubling flour should double yield')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="x"]'), '2', 'piecrust: doubling flour should set x to 2')
+    const pieText = await page.$eval('#recipeOutput', el => el.textContent)
+    assert.ok(pieText.includes('at least 30 minutes before'), 'piecrust: chill time should stay 30 minutes')
+    assert.ok(pieText.includes('more 1 tbsp at a time'), 'piecrust: water increment should stay 1 tbsp')
+    pass('piecrust reciplate')
 
     // Qual: breakaway chase math (peloton speed to catch the break)
     await selectReciplate('breakaway')

@@ -4,9 +4,10 @@
 // this hash are (will be) used in the URL query string.
 const recipeDropdown = {
 crepes:    "Soule-Reeves Crepes",
-pyzza:     "Pythagorean Triple Pizza",
 cookies:   "Camelot Chocolate Chip Cookies",
+piecrust:  "Bee's Miss American Pie Crust",
 shortcake: "Shut-the-fork-up Shortcake",
+pyzza:     "Pythagorean Triple Pizza",
 simeq:     "Simultaneous Equation Soufflé",
 pancakes:  "Pancakes according to Claude",
 breakaway: "Breakaway Biscuits",
@@ -110,6 +111,29 @@ Bake 30 to 40 minutes @ 325°F
 
 Scaled by a factor of {x : 1}
 {.1 <= x <= 10}
+`,
+// -----------------------------------------------------------------------------
+piecrust: `\
+use all ingredients really cold
+
+{315x} g flour ({(2+1/2)*x} C)
+{15x} g sugar ({1x} tbsp)
+{5x} g table salt ({1x} tsp)
+{225x}g very cold butter ({8x}oz, {1x} C)
+{1x} C ice water
+Dice the butter into small pieces and add to the dry ingredients.
+Cut it in with a pastry cutter or two paring knives until size of peas. Doesn't have to be super uniform.
+Add water. Start with half a cup, then add more 1 tbsp at a time. Will probably have to use at least {(1/4)*x} C more.
+Don't overmix once it starts to stick together.
+Use your hands to form it into two equal size discs. Wrap in wax paper and let it chill in the fridge, ideally at least 30 minutes before you roll it out.
+
+Makes {2x} crusts (i.e. top + bottom for {1x} pie or bottoms for {2x} open pies)
+
+Scaled by a factor of {x : 1}
+{.1 <= x <= 10}
+
+PS: Bee usually puts a tablespoon of apple cider vinegar in the water. But that might just amount to superstition, she says.
+Also Nana always used to say that you can't just linearly scale a pie crust recipe, but Bee has no idea why she thought that.
 `,
 // -----------------------------------------------------------------------------
 pancakes: `\
