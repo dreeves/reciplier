@@ -11,6 +11,7 @@ Usage:
 */
 
 const assert = require('node:assert/strict')
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
@@ -636,15 +637,20 @@ function runUtilQuals() {
   // Facebook, and LinkedIn center-crop to ~1.91:1 or 2:1, so the disclosure on
   // the pancake stack sits inside the middle band every such crop keeps (y
   // 256-768 of 1024). The declared og:image size must be the file's real size.
+  // Preview caches (Discord's image proxy, X, Facebook) key on the image URL
+  // and keep old copies long after the file changes (Discord showed the
+  // pre-disclosure art after the new image was live), so the URL ends with
+  // ?v= and the first 8 hex digits of the file's SHA-256.
   console.log('\n=== Link-preview image quals ===')
 
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8')
   const meta = prop =>
     html.match(new RegExp(`<meta property="${prop}" content="([^"]*)"`))?.[1]
-  const SITE = 'https://reciplier.dreev.es/'
+  const SITE = 'https://reciplier.dreev.es'
   const ogImage = meta('og:image')
-  assert.ok(ogImage?.startsWith(SITE), `og:image not on ${SITE}: ${ogImage}`)
-  const png = fs.readFileSync(path.join(root, ogImage.slice(SITE.length)))
+  const ogUrl = new URL(ogImage)
+  assert.equal(ogUrl.origin, SITE, `og:image not on ${SITE}: ${ogImage}`)
+  const png = fs.readFileSync(path.join(root, ogUrl.pathname))
   assert.equal(png.toString('latin1', 12, 16), 'IHDR', `not a PNG: ${ogImage}`)
   const pngW = png.readUInt32BE(16) // IHDR holds width then height
   const pngH = png.readUInt32BE(20)
@@ -652,6 +658,8 @@ function runUtilQuals() {
   check('og:image:height is the file height', meta('og:image:height'), String(pngH))
   check('og:image is square so Discord shows the art without padding',
     pngW / pngH, 1)
+  check('og:image URL ends with ?v= and the file hash so caches refetch',
+    ogUrl.search, '?v=' + crypto.createHash('sha256').update(png).digest('hex').slice(0, 8))
   check('twitter:image is og:image', meta('twitter:image'), ogImage)
 
   // ==========================================================================

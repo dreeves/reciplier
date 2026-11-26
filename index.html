@@ -21,8 +21,10 @@ content="Paste in a recipe and scale it up or down. Also a constraint satisfacti
 <meta property="og:description" content="Paste in a recipe and scale it up or down. Also a constraint satisfaction solver, why not." />
 <!-- One square image for every link preview: Discord shows it whole, and X,
 Facebook, and LinkedIn center-crop it to ~1.91:1 or 2:1, so the disclosure on
-the pancakes stays inside the middle band every such crop keeps (y 256-768). -->
-<meta property="og:image" content="https://reciplier.dreev.es/assets/reciplier-robot.png" />
+the pancakes stays inside the middle band every such crop keeps (y 256-768).
+Preview caches key on the image URL, so ?v= is the first 8 hex digits of the
+file's SHA-256 (quals/util_quals.js says the right value if the image changes). -->
+<meta property="og:image" content="https://reciplier.dreev.es/assets/reciplier-robot.png?v=9640bc95" />
 <meta property="og:image:width" content="1024" />
 <meta property="og:image:height" content="1024" />
 
@@ -31,7 +33,7 @@ the pancakes stays inside the middle band every such crop keeps (y 256-768). -->
 <meta property="twitter:url" content="https://reciplier.dreev.es/" />
 <meta property="twitter:title" content="Reciplier - Recipe multiplier" />
 <meta property="twitter:description" content="Paste in a recipe and scale it up or down. Also a constraint satisfaction solver, why not." />
-<meta property="twitter:image" content="https://reciplier.dreev.es/assets/reciplier-robot.png" />
+<meta property="twitter:image" content="https://reciplier.dreev.es/assets/reciplier-robot.png?v=9640bc95" />
 
 <script>
 // Deploy stamp: the digits of this page's Last-Modified time, appended to our
@@ -147,7 +149,7 @@ for an example of some prior art.
   
   <div class="text-center text-gray-400 text-sm mt-4">
     <div class="text-gray-300 text-xs mt-1">
-      v2026.11.25-e
+      v2026.11.25-f
     </div>
   </div>
 
