@@ -19,7 +19,7 @@ function fileUrl(p) {
 
 // Track and display qual progress
 // Individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 196
+const TOTAL_QUALS = 197
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -2601,6 +2601,63 @@ async function main() {
     assert.equal(await getInputValue(page, 'input.recipe-field[data-label="phi"]'), '-0.5', 'gratio: the edited field should keep the typed value')
     pass('gratio reciplate')
 
+    // Qual: a template with no cells renders in the output section like any
+    // other template.
+    // Replicata: with a reciplate's fields showing (gratio, above), replace
+    //   the template with plaintext that has no cells, then with an empty
+    //   template.
+    // Expectata: the output section and the Copy button stay on the page.
+    //   The output shows the template's text with no fields and no banner,
+    //   and the snapshot to copy is that same text. An empty template gives
+    //   an empty output box.
+    // Resultata (before the fix): the output section and the Copy button both
+    //   vanished (display: none) whenever a template had no cells and no
+    //   errors.
+    const setTemplate = async (text) => {
+      await page.$eval('#recipeTextarea', (el, v) => {
+        el.value = v
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      }, text)
+      await waitForNextFrame(page)
+    }
+    const hasHeight = sel => page.$eval(sel, el => el.getBoundingClientRect().height > 0)
+    const renderedText = () => page.$eval('#recipeOutput .recipe-rendered', el => el.textContent.trim())
+    const visibleBanners = () => page.$$eval('#recipeOutput .error-display:not([hidden])', els => els.length)
+    const cellessTemplate = 'Fry 2 eggs in 1/2 tbsp butter.'
+    await setTemplate(cellessTemplate)
+    assert.equal(await hasHeight('#recipeOutput'), true,
+      'celless: the output section should stay on the page')
+    assert.equal(await renderedText(), cellessTemplate,
+      'celless: the output should show the template text')
+    assert.equal((await page.$$('#recipeOutput input')).length, 0,
+      'celless: the output should have no fields or sliders (none left over from gratio either)')
+    assert.equal(await visibleBanners(), 0,
+      'celless: no banner should show')
+    assert.equal(await hasHeight('#copyButton'), true,
+      'celless: the Copy button should stay on the page')
+    assert.equal(await page.$eval('#copyButton', el => el.disabled), false,
+      'celless: the Copy button should be enabled')
+    assert.equal(await page.evaluate(() => scaledRecipeText()), cellessTemplate,
+      'celless: the snapshot to copy should be the template text')
+    assert.equal(await page.$eval('#recipeSelect', el => el.value), 'custom',
+      'celless: dropdown should show custom')
+    await setTemplate('')
+    assert.equal(await hasHeight('#recipeOutput'), true,
+      'empty template: the output section should stay on the page')
+    assert.equal(await renderedText(), '',
+      'empty template: the output box should be empty')
+    assert.equal((await page.$$('#recipeOutput input')).length, 0,
+      'empty template: the output should have no fields or sliders')
+    assert.equal(await visibleBanners(), 0,
+      'empty template: no banner should show')
+    assert.equal(await hasHeight('#copyButton'), true,
+      'empty template: the Copy button should stay on the page')
+    // Cells come back when the template gets them back
+    await setTemplate('{2x} eggs, scaled by {x:1}')
+    assert.equal(await getInputValue(page, 'input.recipe-field[data-label="2x"]'), '2',
+      'celless: giving the template cells again should render their fields')
+    pass('celless template renders')
+
     // Qual: the reciplify button turns a plaintext recipe into a reciplate.
     // Reciplify lives in the collapsed-by-default editor, so open it first;
     // it stays open through the undo and tooltip quals below.
@@ -2659,8 +2716,10 @@ async function main() {
     assert.equal(await getInputValue(page, '#recipeTextarea'),
       'Fry 2 eggs in 1/2 tbsp butter.',
       'undo: should restore the pre-reciplify plaintext')
-    assert.equal(await page.$eval('#recipeOutput', el => el.style.display), 'none',
-      'undo: restored plaintext should hide the rendered output')
+    assert.equal(await renderedText(), 'Fry 2 eggs in 1/2 tbsp butter.',
+      'undo: restored plaintext should show in the rendered output')
+    assert.equal((await page.$$('#recipeOutput input')).length, 0,
+      'undo: restored plaintext should render with no fields')
     await undoTextarea('redo')
     assert.equal(await getInputValue(page, '#recipeTextarea'),
       'Fry {2x} eggs in {(1/2)*x} tbsp butter.\n\nScaled by a factor of {x : 1} \n{.1 <= x <= 10}\n',

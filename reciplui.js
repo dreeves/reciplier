@@ -241,13 +241,7 @@ function renderRecipe() {
 
   const nonCriticalBanners = `<div id="nonCriticalBanners">${solveBanner}${invalidExplainBanner}</div>`
   const errorAssignments = assignErrorsToCells(criticalErrors, state.cells)
-  
-  if (state.cells.length === 0 && state.errors.length === 0) {
-    output.style.display = 'none'
-    copySection.style.display = 'none'
-    return
-  }
-  
+
   output.innerHTML = `${nonCriticalBanners}${renderRecipeBody({ disableInputs: false, invalidCellIds })}`
   output.style.display = 'block'
   copySection.style.display = 'block'

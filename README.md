@@ -611,6 +611,12 @@ minimally to keep the constraints satisfied.
 
 ## Future Work
 
+* [PRN] Superfluous parens: The Reciplify button should turn `1/2` into `1/2*x`
+rather than `(1/2)*x`.
+
+* [SPC] It's weird that `6x` is allowed but `6 x` isn't. Relatedly, `1/2x` is
+problematic since people really want to read it as `1/(2x)`.
+
 * [ZSR] Let's see if we can address this solver failure:
 ```
 solvem([["a","3x"],["b","4x"],["c",5],["a^2 + b^2","c^2"]], {"x":null,"a":null,"b":null,"c":null})
