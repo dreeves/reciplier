@@ -279,9 +279,10 @@ function renderRecipe() {
   // value it began at fires no change event, and the other numbers needn't
   // have come back to where they began. And not pointer events: on a touch
   // screen Chrome (in its phone emulation, at least) sends pointercancel as
-  // soon as a drag on a slider gets going, since a sideways drag there could
-  // also be the start of a pan, and then never sends pointerup, while the drag
-  // itself carries on by touch events.
+  // soon as a drag on a slider gets going, since the touch-action in effect
+  // there (manipulation) leaves a sideways drag free to be the start of a pan
+  // as well, and then never sends pointerup, while the drag itself carries on
+  // by touch events.
   output.querySelectorAll('input.recipe-slider').forEach(input => {
     input.addEventListener('input', handleInlineSliderInput)
     for (const letGo of ['mouseup', 'touchend', 'touchcancel', 'change']) {

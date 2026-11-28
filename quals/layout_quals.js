@@ -675,9 +675,10 @@ const slideXs = (stops, left, width) => between(stops, SLIDE_STEPS).map(f => lef
 // Drag the i-th slider on the page through some stops, noting the moment
 // before the press, every moment while it's held, and the moment after it's
 // let go (see slideMoment in the probes). The moments are asked for from out
-// here, with no event listeners put on the slider: a touch listener on it
-// changes how Chrome treats a touch that starts there (it stops canceling the
-// drag's pointer events, which it otherwise does).
+// here, with no event listeners put on the slider: a touchstart or touchmove
+// listener on it (unless passive) changes how Chrome treats a finger's drag
+// there. It stops canceling the drag's pointer events, which it otherwise
+// does as soon as the drag gets going.
 async function slide(page, vp, i, stops) {
   const slider = (await page.$$('input.recipe-slider'))[i]
   const s = await slider.evaluate(el => {
