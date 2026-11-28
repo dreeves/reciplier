@@ -111,6 +111,14 @@ const STRESS = {
     'Solo slider\n{0 <= a <= 100}\n\n' +
     'In a sentence: set {0 <= b <= 1} to taste, then {a : 50} and {b : 0.5}.\n\n' +
     'Two on a line {1 <= c <= 9} and {1 <= d <= 9} with {c : 2} and {d : 3}',
+  // Every number here starts out as 0, gets long as soon as the slider leaves
+  // its bottom end, and stays long when the slider comes back there: once a
+  // has pushed b up, nothing makes b come down again (b = max(a, b) is true
+  // of any b that's at least a).
+  'numbers that stay long':
+    Array.from({ length: 24 }, (_, i) => `{${100001 + i}.37b}`).join(' ') +
+    '\n\nThe most the slider has been is {b : 0}, kept there by {b = max(a, b)}, and it is now at {a : 0}\n' +
+    '{0 <= a <= 10}',
   'errors':
     'Contradiction {1 = z} {2 = z}\n\nBare {5}\n\nUnclosed {q\n\n' +
     `Lonely {l${'o'.repeat(50)}ngname : 5}`,
@@ -187,6 +195,19 @@ function installProbes(K) {
   const sliders = () => all('input.recipe-slider').filter(shown)
   const standalone = () => all('button, select, summary').filter(shown)
   const controls = () => [...fields(), ...sliders(), ...standalone()]
+
+  // Is a field's value cut off by the edge of the field?
+  const cutOff = f => f.scrollWidth > f.clientWidth + 1 || f.scrollHeight > f.clientHeight + 1
+
+  // One moment in the life of a slider: where it is on the screen, what it's
+  // set to, what every field shows, and which fields (by label) have their
+  // value cut off
+  const slideMoment = slider => {
+    const r = rect(slider)
+    return { left: r.left, top: r.top, width: r.width, height: r.height, value: slider.value,
+             shown: fields().map(f => f.value),
+             cut: fields().filter(cutOff).map(f => f.dataset.label) }
+  }
 
   // Where a control visibly is. A <summary> is a full-width block, so its
   // footprint is its label, not its box.
@@ -351,7 +372,7 @@ function installProbes(K) {
 
     add('every field shows its whole value',
       'no field value is cut off by the edge of its field',
-      fields().filter(f => f.scrollWidth > f.clientWidth + 1 || f.scrollHeight > f.clientHeight + 1)
+      fields().filter(cutOff)
         .map(f => `${nameOf(f)} showing "${f.value}" needs ` +
                   `${f.scrollWidth}x${f.scrollHeight}px but has ${f.clientWidth}x${f.clientHeight}px`))
 
@@ -539,7 +560,7 @@ function installProbes(K) {
   // Which of those properties differ between two looks
   const lookDiff = (a, b) => LOOK.filter(p => a[p] !== b[p])
 
-  window.__probe = { sweep, look, lookDiff, nameOf, contrastOn, backdrop, bluesOf }
+  window.__probe = { sweep, look, lookDiff, nameOf, contrastOn, backdrop, bluesOf, slideMoment }
 }
 
 // -----------------------------------------------------------------------------
@@ -602,22 +623,112 @@ async function neutral(page, vp) {
   await nextFrame(page)
 }
 
-// Press at one point of the screen and drag to another, by finger or mouse
-async function drag(page, vp, x0, y, x1) {
-  const STEPS = 8
-  const xs = Array.from({ length: STEPS }, (_, i) => x0 + (x1 - x0) * (i + 1) / STEPS)
-  if (vp.touch) {
-    await page.touchscreen.touchStart(x0, y)
-    for (const x of xs) await page.touchscreen.touchMove(x, y)
-    await page.touchscreen.touchEnd()
-  } else {
-    await page.mouse.move(x0, y)
-    await page.mouse.down()
-    for (const x of xs) await page.mouse.move(x, y)
-    await page.mouse.up()
+// The stops of a path with `steps` evenly spaced points on the way to each
+// next stop
+const between = (stops, steps) => [stops[0], ...stops.slice(1).flatMap((to, i) =>
+  Array.from({ length: steps }, (_, k) => stops[i] + (to - stops[i]) * (k + 1) / steps))]
+
+// Press at the first of some points along a row of the screen and drag
+// through the rest, by finger or mouse. whileHeld runs after the press and
+// after each move, before letting go.
+async function dragAlong(page, vp, y, xs, whileHeld = async () => {}) {
+  const pointer = vp.touch
+    ? { down: x => page.touchscreen.touchStart(x, y),
+        move: x => page.touchscreen.touchMove(x, y),
+        up: () => page.touchscreen.touchEnd() }
+    : { down: async x => { await page.mouse.move(x, y); await page.mouse.down() },
+        move: x => page.mouse.move(x, y),
+        up: () => page.mouse.up() }
+  await pointer.down(xs[0])
+  await whileHeld()
+  for (const x of xs.slice(1)) {
+    await pointer.move(x)
+    await whileHeld()
   }
+  await pointer.up()
   await nextFrame(page)
 }
+
+// Press at one point of the screen and drag to another, by finger or mouse
+const drag = (page, vp, x0, y, x1) => dragAlong(page, vp, y, between([x0, x1], 8))
+
+// Two ways to drag a slider, as stops along its track (0 is one end, 1 the
+// other). The second ends at the value it began at, which is the one kind of
+// drag browsers don't follow with a change event.
+const SLIDES = {
+  'wandering': {
+    stops: [0.5, 0.95, 0.1, 0.3],
+    told: 'press the middle of its track, drag nearly to the far end, back nearly to the near end, ' +
+          'and let go a third of the way along',
+  },
+  'there and back': {
+    stops: [0, 1, 0],
+    told: 'press the near end of its track, drag to the far end, and come back to let go where the press was',
+  },
+}
+const SLIDE_STEPS = 6  // moves between one stop and the next
+// The points of the screen a slide passes through, on a track that starts at
+// `left` and is `width` wide. They stop a pixel short of either end, so a
+// press at an end still lands on the slider.
+const slideXs = (stops, left, width) => between(stops, SLIDE_STEPS).map(f => left + 1 + (width - 2) * f)
+
+// Drag the i-th slider on the page through some stops, noting the moment
+// before the press, every moment while it's held, and the moment after it's
+// let go (see slideMoment in the probes). The moments are asked for from out
+// here, with no event listeners put on the slider: a touch listener on it
+// changes how Chrome treats a touch that starts there (it stops canceling the
+// drag's pointer events, which it otherwise does).
+async function slide(page, vp, i, stops) {
+  const slider = (await page.$$('input.recipe-slider'))[i]
+  const s = await slider.evaluate(el => {
+    el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' })
+    const r = el.getBoundingClientRect()
+    return { left: r.left, y: r.top + r.height / 2, width: r.width }
+  })
+  const moment = () => slider.evaluate(el => window.__probe.slideMoment(el))
+  const before = await moment()
+  const held = []
+  await dragAlong(page, vp, s.y, slideXs(stops, s.left, s.width), async () => {
+    await nextFrame(page)
+    held.push(await moment())
+  })
+  return { before, held, after: await moment() }
+}
+
+// A check that no field's value is cut off at some moment (see slideMoment)
+const readable = (moment, when) =>
+  ck(`every number can be read ${when}`, moment.cut.length === 0,
+    'no field value is cut off by the edge of its field',
+    `cut off: ${moment.cut.slice(0, 4).map(label => `{${label}}`).join(', ')}` +
+    (moment.cut.length > 4 ? `, and ${moment.cut.length - 4} more` : ''))
+
+// What has to be true of any slider that was just dragged. (The last check is
+// made on the moment right after letting go, before anything else is touched:
+// a sweep comes after the pointer is parked, which moves the focus.)
+function slideChecks({ before, held, after }) {
+  const values = [...new Set(held.map(m => m.value))]
+  const shift = m => Math.max(...['left', 'top', 'width', 'height'].map(k => Math.abs(m[k] - before[k])))
+  const worst = held.reduce((a, b) => shift(b) > shift(a) ? b : a)
+  const round = x => Math.round(x * 10) / 10
+  const spot = m => `at (${round(m.left)}, ${round(m.top)}), ${round(m.width)}x${round(m.height)}px`
+  return [
+    ck('the slider follows the drag', values.length > 2,
+      'the slider takes on several values over the course of the drag',
+      `it took on ${values.length}: ${values.slice(0, 6).join(', ')}`),
+    ck('a slider stays where it is while it\'s held', shift(worst) <= 0.5,
+      'from the press until it\'s let go, the slider is where it was before the press and the same size',
+      `before the press it was ${spot(before)}; set to ${worst.value} it was ${spot(worst)}`),
+    readable(after, 'as soon as the slider is let go'),
+  ]
+}
+
+// What has to be true after the slider of the "numbers that stay long"
+// template is moved, for the checks made then to say anything about long
+// numbers
+const stayedLong = ({ before, after }) =>
+  ck('moving the slider leaves the numbers long', after.shown[0].length > before.shown[0].length,
+    'the first number has more characters after the slider is moved than before',
+    `it showed "${before.shown[0]}" before and "${after.shown[0]}" after`)
 
 // Press and hold a point of the screen
 async function hold(page, vp, x, y, ms) {
@@ -815,6 +926,49 @@ async function interactions(page, vp) {
           'away from the thumb, the stretch above and below the track that takes a tap is no taller than the thumb looks',
           `taps land up to ${s.tapsAbove}px above and ${s.tapsBelow}px below the middle of the track; ` +
           `the thumb shows from ${thumbAbove}px above to ${thumbBelow}px below`),
+      ]
+    })
+
+  // Every slider of every reciplate, held and dragged
+  for (const key of await page.evaluate(() => Object.keys(recipeDropdown))) {
+    await selectReciplate(page, key)
+    const count = (await page.$$('input.recipe-slider')).length
+    for (let i = 0; i < count; i++) {
+      await group(vp, `holding slider ${i + 1} of "${key}"`,
+        `choose "${key}" and, on slider ${i + 1} of its ${count}, ${SLIDES['wandering'].told}`,
+        async () => {
+          await selectReciplate(page, key)
+          const slid = await slide(page, vp, i, SLIDES['wandering'].stops)
+          await neutral(page, vp)
+          return [...slideChecks(slid), ...during('once the slider is let go', await sweep(page, vp))]
+        })
+    }
+  }
+
+  for (const [name, { stops, told }] of Object.entries(SLIDES)) {
+    await group(vp, `holding a slider that makes numbers long (${name})`,
+      'set the template to one where every number is 0 until the slider moves and long from then on, ' +
+      `then, on its slider, ${told}`,
+      async () => {
+        await setTemplate(page, STRESS['numbers that stay long'])
+        const slid = await slide(page, vp, 0, stops)
+        await neutral(page, vp)
+        return [...slideChecks(slid), stayedLong(slid),
+                ...during('once the slider is let go', await sweep(page, vp))]
+      })
+  }
+
+  await group(vp, 'reading the numbers while a slider is held',
+    `choose "crepes" and, on its slider, ${SLIDES['wandering'].told}`,
+    async () => {
+      await selectReciplate(page, 'crepes')
+      const { held } = await slide(page, vp, 0, SLIDES['wandering'].stops)
+      const cut = held.filter(m => m.cut.includes('x') || m.cut.includes('12x'))
+      return [
+        ck('the scale factor and the eggs can be read while the slider is held', cut.length === 0,
+          'at every step of the drag, the scale-factor field and the eggs field show their whole values',
+          `cut off at ${cut.length} of ${held.length} steps: ` +
+          cut.slice(0, 3).map(m => `with the slider at ${m.value}, {${m.cut.join('}, {')}}`).join('; ')),
       ]
     })
 
@@ -1379,6 +1533,22 @@ async function interactions(page, vp) {
         ]
       })
 
+    await group(vp, 'making numbers long from the keyboard',
+      'set the template to one where every number is 0 until the slider moves and long from then on, ' +
+      'focus its slider, and press the right arrow key',
+      async () => {
+        await setTemplate(page, STRESS['numbers that stay long'])
+        const moment = () => page.$eval('input.recipe-slider', el => window.__probe.slideMoment(el))
+        const before = await moment()
+        await page.focus('input.recipe-slider')
+        await page.keyboard.press('ArrowRight')
+        await nextFrame(page)
+        const after = await moment()
+        await neutral(page, vp)
+        return [stayedLong({ before, after }), readable(after, 'as soon as the key is pressed'),
+                ...during('after the key press', await sweep(page, vp))]
+      })
+
     await group(vp, 'enlarged text',
       `choose "dial" and enlarge all text to ${K.textEnlargePct}%`,
       async () => {
@@ -1562,7 +1732,8 @@ function summarize(suite) {
 
 // The probes, the lists of what to sweep, and the reporting, for the engine
 // quals (quals/engine_quals.js), which run the sweep in other browsers
-module.exports = { K, VIEWPORTS, STRESS, installProbes, ck, group, during, summarize }
+module.exports = { K, VIEWPORTS, STRESS, SLIDES, installProbes, ck, group, during, summarize,
+                   slideXs, slideChecks, stayedLong, readable }
 
 // Run the quals when this file is the script, not when it's require()d.
 // process.exit, not exitCode: a browser that had to be killed can leave

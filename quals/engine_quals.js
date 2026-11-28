@@ -23,7 +23,8 @@ const fs = require('node:fs')
 const http = require('node:http')
 const path = require('node:path')
 const playwright = require('playwright')
-const { K, VIEWPORTS, STRESS, installProbes, ck, group, during, summarize } = require('./layout_quals.js')
+const { K, VIEWPORTS, STRESS, SLIDES, installProbes, ck, group, during, summarize,
+        slideXs, slideChecks, stayedLong, readable } = require('./layout_quals.js')
 
 const ENGINES = ['webkit', 'firefox']
 
@@ -87,6 +88,42 @@ async function visit(engine, vp, baseUrl) {
   const choose = async key => {
     await page.selectOption('#recipeSelect', key)
     await nextFrame()
+  }
+  // Park the pointer and the focus somewhere neutral so no control is hovered
+  // or focused (as neutral() does in the layout quals): a field that's hovered
+  // shows its pin, and on a touch screen the hover stays wherever the last tap
+  // was, whatever has since moved under it
+  const neutral = async () => {
+    await page.evaluate(() => document.activeElement && document.activeElement.blur())
+    await (vp.touch ? page.tap('h1') : page.mouse.move(1, 1))
+    await nextFrame()
+  }
+  // Drag the first slider on the page through some stops by mouse, noting the
+  // moment before the press, every moment while it's held, and the moment
+  // after it's let go (as slide() does in the layout quals)
+  const slide = async stops => {
+    const slider = page.locator('input.recipe-slider').first()
+    const s = await slider.evaluate(el => {
+      el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' })
+      const r = el.getBoundingClientRect()
+      return { left: r.left, y: r.top + r.height / 2, width: r.width }
+    })
+    const moment = () => slider.evaluate(el => window.__probe.slideMoment(el))
+    const before = await moment()
+    const held = []
+    const [x0, ...xs] = slideXs(stops, s.left, s.width)
+    await page.mouse.move(x0, s.y)
+    await page.mouse.down()
+    await nextFrame()
+    held.push(await moment())
+    for (const x of xs) {
+      await page.mouse.move(x, s.y)
+      await nextFrame()
+      held.push(await moment())
+    }
+    await page.mouse.up()
+    await nextFrame()
+    return { before, held, after: await moment() }
   }
 
   const keys = await page.evaluate(() => Object.keys(recipeDropdown))
@@ -206,6 +243,38 @@ async function visit(engine, vp, baseUrl) {
             `the scale-factor field shows the slider's value (${dragged})`, `it shows ${x}`))
       }
       return checks
+    })
+
+  // By mouse only, for the same reason as above
+  if (!vp.touch) {
+    for (const [name, { stops, told }] of Object.entries(SLIDES)) {
+      await group(at, `holding a slider that makes numbers long (${name})`,
+        'set the template to one where every number is 0 until the slider moves and long from then on, ' +
+        `then, on its slider, ${told}`,
+        async () => {
+          await setTemplate(STRESS['numbers that stay long'])
+          const slid = await slide(stops)
+          await neutral()
+          return [...slideChecks(slid), stayedLong(slid),
+                  ...during('once the slider is let go', await sweep())]
+        })
+    }
+  }
+
+  await group(at, 'making numbers long from the keyboard',
+    'set the template to one where every number is 0 until the slider moves and long from then on, ' +
+    'focus its slider, and press the right arrow key',
+    async () => {
+      await setTemplate(STRESS['numbers that stay long'])
+      const moment = () => page.$eval('input.recipe-slider', el => window.__probe.slideMoment(el))
+      const before = await moment()
+      await page.focus('input.recipe-slider')
+      await page.keyboard.press('ArrowRight')
+      await nextFrame()
+      const after = await moment()
+      await neutral()
+      return [stayedLong({ before, after }), readable(after, 'as soon as the key is pressed'),
+              ...during('after the key press', await sweep())]
     })
 
   await group(at, 'the editor',

@@ -440,10 +440,12 @@ button:disabled {
   box-sizing: border-box;
   /* As wide as its value: --value-width is the measured width of the value's
      text, kept current by fitFields() in reciplui.js. The rest is padding,
-     border, and 2px of slack. The floor keeps short and blank fields big
-     enough to tap. */
+     border, and 2px of slack. The floor is the width every field had before
+     fields sized themselves to their values. Fields hold still while a slider
+     is being dragged (see reciplui.js), so the floor is their room for the
+     longer numbers a drag gives them. */
   width: calc(var(--value-width) + 0.875rem);
-  min-width: 2.75rem;
+  min-width: 5rem;
   max-width: 100%;
   height: 1.8125rem;
   margin: 0 0.125rem;

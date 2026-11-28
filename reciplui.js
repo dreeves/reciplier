@@ -269,8 +269,24 @@ function renderRecipe() {
   })
 
   // Attach event handlers to slider inputs
+  // While a slider is being dragged the fields keep the widths they had when
+  // the drag began: resizing them mid-drag re-wraps the lines above the slider
+  // and moves it out from under the finger. So a slider's input event (every
+  // step of a drag) leaves the widths alone, and they catch up when the slider
+  // is let go. The events for that are the ones a browser's own slider ends a
+  // drag on (mouseup, touchend, touchcancel) plus change, which is what follows
+  // a step made from the keyboard. Not change alone: a drag that ends at the
+  // value it began at fires no change event, and the other numbers needn't
+  // have come back to where they began. And not pointer events: on a touch
+  // screen Chrome (in its phone emulation, at least) sends pointercancel as
+  // soon as a drag on a slider gets going, since a sideways drag there could
+  // also be the start of a pan, and then never sends pointerup, while the drag
+  // itself carries on by touch events.
   output.querySelectorAll('input.recipe-slider').forEach(input => {
     input.addEventListener('input', handleInlineSliderInput)
+    for (const letGo of ['mouseup', 'touchend', 'touchcancel', 'change']) {
+      input.addEventListener(letGo, fitAllFields)
+    }
   })
 
   syncAfterSolve(invalidCellIds)
@@ -346,9 +362,11 @@ function repositionBanners() {
 // in its own field's font (how wide a digit or a letter is depends on the
 // typeface, so counting characters isn't enough), and style.css adds the
 // field's padding to --value-width. Every place a field's value changes calls
-// this. All the measuring comes before any of the resizing so the browser
-// works out the styles once, not once per field. The widths are in ems so
-// they follow the text if the reader's font size changes after the fact.
+// this, except a slider on the move, which waits until it's let go (see where
+// the sliders get their event handlers). All the measuring comes before any
+// of the resizing so the browser works out the styles once, not once per
+// field. The widths are in ems so they follow the text if the reader's font
+// size changes after the fact.
 const fieldRuler = document.createElement('canvas').getContext('2d')
 function fitFields(fields) {
   const widths = fields.map(field => {
@@ -358,6 +376,7 @@ function fitFields(fields) {
   })
   fields.forEach((field, i) => field.style.setProperty('--value-width', widths[i] + 'em'))
 }
+const fitAllFields = () => fitFields([...$('recipeOutput').querySelectorAll('input.recipe-field')])
 
 // Update slider fill gradient based on current value and bounds
 function updateSliderFill(slider) {
@@ -386,29 +405,29 @@ function updateSliderFill(slider) {
   }
 }
 
-function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
+// Show the outcome of a solve everywhere on the page except in how wide the
+// fields are (that's fitFields)
+function syncValues(invalidCellIds, editedFieldEl = null) {
   updateSolveBannerInDom()
   updateInvalidExplainBannerInDom()
   updateVarAssignments()
 
   const output = $('recipeOutput')
   // Sync text fields
-  const fields = [...output.querySelectorAll('input.recipe-field')]
-  fields.forEach(field => {
+  output.querySelectorAll('input.recipe-field').forEach(field => {
     const isEdited = editedFieldEl && field === editedFieldEl
     const c = state.cells.find(x => x.id === field.dataset.cellId)
-    if (!c) throw new Error(`syncAfterSolve: no cell found for field id "${field.dataset.cellId}"`)
+    if (!c) throw new Error(`syncValues: no cell found for field id "${field.dataset.cellId}"`)
     if (!isEdited && !state.invalidInputCellIds.has(field.dataset.cellId)) {
       field.value = formatNum(c.cval)
     }
     field.classList.toggle('invalid', invalidCellIds.has(field.dataset.cellId))
   })
-  fitFields(fields)
 
   // Sync inline sliders
   output.querySelectorAll('input.recipe-slider').forEach(slider => {
     const c = state.cells.find(x => x.id === slider.dataset.cellId)
-    if (!c) throw new Error(`syncAfterSolve: no cell found for slider id "${slider.dataset.cellId}"`)
+    if (!c) throw new Error(`syncValues: no cell found for slider id "${slider.dataset.cellId}"`)
 
     const isBeingEdited = editedFieldEl && slider === editedFieldEl
 
@@ -437,6 +456,11 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
   })
 
   repositionBanners()
+}
+
+function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
+  syncValues(invalidCellIds, editedFieldEl)
+  fitAllFields()
 }
 
 function markInvalidInput(input, cellId, message) {
@@ -536,7 +560,9 @@ function handleInlineSliderInput(e) {
   // Update fill gradient immediately for visual feedback
   updateSliderFill(input)
 
-  syncAfterSolve(solveResult.invalidCellIds, input)
+  // The values, not the widths: the fields hold still until the slider is let
+  // go (see where the sliders get their event handlers)
+  syncValues(solveResult.invalidCellIds, input)
 }
 
 // =============================================================================
