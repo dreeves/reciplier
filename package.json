@@ -5,10 +5,13 @@
   "scripts": {
     "quals": "node quals/quals.js",
     "quals:solver": "node quals/solver_quals.js",
-    "quals:ui": "node quals/ui_quals.js"
+    "quals:ui": "node quals/ui_quals.js",
+    "quals:layout": "node quals/layout_quals.js",
+    "quals:engines": "node quals/engine_quals.js"
   },
 
   "devDependencies": {
+    "playwright": "^1.65.1",
     "puppeteer": "^24.34.0"
   }
 }

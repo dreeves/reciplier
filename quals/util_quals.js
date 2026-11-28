@@ -663,6 +663,60 @@ function runUtilQuals() {
   check('twitter:image is og:image', meta('twitter:image'), ogImage)
 
   // ==========================================================================
+  // Stylesheet and page-file quals
+  // ==========================================================================
+  // Replicata: read style.css, reciplui.js, index.html, and
+  //   assets/site.webmanifest off disk.
+  // Expectata: every CSS variable that's used is defined (in the stylesheet,
+  //   or by the UI code setting it) and every one that's defined is used (by
+  //   the stylesheet, or by the UI code reading it); the page color is the
+  //   same in the three files that have to spell it out; and every local file
+  //   the page or the manifest points at exists.
+  // Resultata (what these are for): a var() whose name is misspelled doesn't
+  //   error, it silently drops the declaration it's in; a browser's toolbar
+  //   takes its color from the meta tag and the manifest, which no stylesheet
+  //   can reach; and a missing icon is a silent 404.
+  console.log('\n=== Stylesheet and page-file quals ===')
+
+  const css = fs.readFileSync(path.join(root, 'style.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+  const uiCode = fs.readFileSync(path.join(root, 'reciplui.js'), 'utf8')
+  const names = (text, re) => new Set([...text.matchAll(re)].map(m => m[1]))
+  const cssDefined = names(css, /(--[\w-]+)\s*:/g)
+  const cssUsed = names(css, /var\((--[\w-]+)/g)
+  const codeSet = names(uiCode, /setProperty\('(--[\w-]+)'/g)
+  const codeRead = names(uiCode, /getPropertyValue\('(--[\w-]+)'/g)
+  check('every CSS variable that is used is defined',
+    [...cssUsed].filter(v => !cssDefined.has(v) && !codeSet.has(v)), [])
+  check('every CSS variable that is defined is used',
+    [...cssDefined].filter(v => !cssUsed.has(v) && !codeRead.has(v)), [])
+  check('every CSS variable the UI code reads is defined',
+    [...codeRead].filter(v => !cssDefined.has(v)), [])
+  check('every CSS variable the UI code sets is used',
+    [...codeSet].filter(v => !cssUsed.has(v)), [])
+
+  const pageColor = css.match(/--page:\s*(#[0-9a-fA-F]{6})\b/)[1].toLowerCase()
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(root, 'assets', 'site.webmanifest'), 'utf8'))
+  check('the theme-color meta tag is the page color',
+    html.match(/<meta name="theme-color" content="([^"]*)"/)[1].toLowerCase(), pageColor)
+  check('the manifest theme color is the page color',
+    manifest.theme_color.toLowerCase(), pageColor)
+  check('the manifest background color is the page color',
+    manifest.background_color.toLowerCase(), pageColor)
+
+  const onDisk = ref => fs.existsSync(path.join(root, ref.split(/[?#]/)[0]))
+  // (Not the "${js}" script tags the page writes at load time: their names are
+  // computed, and the UI quals check that those load.)
+  const pageRefs = [...html.matchAll(/\s(?:href|src)="([^"]+)"/g)].map(m => m[1])
+    .filter(ref => !/^(https?:|data:|mailto:|#|\$\{)/.test(ref))
+  check('index.html points at local files', pageRefs.length > 0, true)
+  check('every local file index.html points at exists',
+    pageRefs.filter(ref => !onDisk(ref)), [])
+  check('every icon in the manifest exists',
+    manifest.icons.map(icon => icon.src).filter(src => !onDisk(src)), [])
+
+  // ==========================================================================
   // Summary
   // ==========================================================================
   console.log('\n=== Utility Quals Summary ===')

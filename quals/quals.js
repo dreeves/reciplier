@@ -6,6 +6,8 @@ Top-level runner that executes:
 - parser quals (reciparse.js)
 - solver quals (csolver.js)
 - UI quals (Puppeteer)
+- layout quals (Puppeteer)
+- engine quals (Playwright: WebKit and Firefox)
 */
 
 const { spawn } = require('node:child_process')
@@ -92,17 +94,21 @@ function runNode(scriptRelPath) {
 }
 
 async function main() {
-  console.log("Running util, parser, solver, and UI quals...\n")
+  console.log("Running util, parser, solver, UI, layout, and engine quals...\n")
   const util = await runNode('util_quals.js')
   const parser = await runNode('parser_quals.js')
   const solver = await runNode('solver_quals.js')
   const ui = await runNode('ui_quals.js')
+  const layout = await runNode('layout_quals.js')
+  const engines = await runNode('engine_quals.js')
 
   const results = [
     { name: 'Utility', result: util, counts: parseCounts(util.output) },
     { name: 'Parser', result: parser, counts: parseCounts(parser.output) },
     { name: 'Solver', result: solver, counts: parseCounts(solver.output) },
     { name: 'UI', result: ui, counts: parseCounts(ui.output) },
+    { name: 'Layout', result: layout, counts: parseCounts(layout.output) },
+    { name: 'Engines', result: engines, counts: parseCounts(engines.output) },
   ]
 
   const failed = results.filter(r => r.result.status !== 0)

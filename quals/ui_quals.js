@@ -19,7 +19,7 @@ function fileUrl(p) {
 
 // Track and display qual progress
 // Individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 230
+const TOTAL_QUALS = 234
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -2803,6 +2803,41 @@ async function main() {
     assert.equal(await page.$eval('#recipeSelect', el => el.value), 'custom',
       'undo: dropdown should flip back to custom after undoing the switch')
     pass('undo history')
+
+    // Qual: a programmatic template change updates the URL once.
+    // Replicata: count calls to history.replaceState while choosing "cookies"
+    //   from the dropdown.
+    // Expectata: one call, leaving the URL at ?recipe=cookies.
+    // Resultata (before the fix): one call per line of the template (35 for
+    //   cookies), since execCommand inserts a multi-line template line by
+    //   line and every line's input event rewrote the URL. WebKit throws a
+    //   SecurityError past 100 rewrites in 10 seconds (see the source link in
+    //   setRecipeText), so a few quick
+    //   switches could leave the URL stale.
+    await page.evaluate(() => {
+      window.__urlRewrites = 0
+      const replaceState = history.replaceState.bind(history)
+      history.replaceState = (...args) => { window.__urlRewrites++; replaceState(...args) }
+    })
+    await selectReciplate('cookies')
+    assert.equal(await page.evaluate(() => window.__urlRewrites), 1,
+      'url: choosing a reciplate should rewrite the URL exactly once')
+    assert.equal(await page.evaluate(() => location.search), '?recipe=cookies',
+      'url: choosing a reciplate should leave its key in the URL')
+    await page.$eval('#recipeTextarea', (el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, 'Fry 2 eggs\nin 1/2 tbsp butter.\nServe hot.')
+    await page.evaluate(() => { window.__urlRewrites = 0 })
+    await page.click('#reciplifyButton')
+    await waitForNextFrame(page)
+    assert.equal(await page.evaluate(() => window.__urlRewrites), 1,
+      'url: Reciplify should rewrite the URL exactly once')
+    assert.equal(await page.evaluate(() =>
+      LZString.decompressFromEncodedURIComponent(new URLSearchParams(location.search).get('rawcipe'))),
+      await getInputValue(page, '#recipeTextarea'),
+      'url: after Reciplify the URL should hold the reciplified template')
+    pass('one URL rewrite per template change')
 
     // Qual: shared tooltip appears on focus and hover (native title tooltips
     // never show on touch screens; focus is the mobile path since tapping a

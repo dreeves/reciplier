@@ -176,11 +176,7 @@ function reciplify(text) {
 // (same BARENUM_RE), so the suggestion to hit Reciplify shows exactly when
 // Reciplify would convert something. '' means no headsup.
 
-// TODO: (exact copy from the human) the template has no cells but does have
-// numbers Reciplify would convert, so suggest the Reciplify button
 const HEADSUP_BARENUMS = 'There are no cells in that recipe template; try hitting the Reciplify button?'
-// TODO: (exact copy from the human) the template has no cells and no numbers
-// to make cells from, so Reciplier may have nothing to offer it
 const HEADSUP_NUMLESS = 'Your recipe seems to not have any numbers so might not make sense for Reciplier'
 
 function headsup(text) {

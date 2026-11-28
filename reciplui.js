@@ -245,9 +245,8 @@ function renderRecipe() {
   // Headsup: see headsup() in reciparse.js. Dismissing only hides this
   // element, so the next render (any template change) builds it afresh.
   const headsupMsg = headsup(state.recipeText)
-  // TODO: aria-label on the headsup's dismiss button, meaning "Dismiss"
   const headsupBanner = `<div id="headsupBanner" class="headsup-display"${headsupMsg ? '' : ' hidden'}>
-        <div class="headsup-message"><span class="headsup-text">${escapeHtml(headsupMsg)}</span><button id="headsupDismiss" type="button" class="headsup-dismiss" aria-label="Dimitte">×</button></div>
+        <div class="headsup-message"><span class="headsup-text">${escapeHtml(headsupMsg)}</span><button id="headsupDismiss" type="button" class="headsup-dismiss" aria-label="Dismiss">×</button></div>
       </div>`
 
   output.innerHTML = `${headsupBanner}${nonCriticalBanners}${renderRecipeBody({ disableInputs: false, invalidCellIds })}`
@@ -343,6 +342,23 @@ function repositionBanners() {
   rendered.insertBefore(banners, refNode)
 }
 
+// Make fields as wide as the values they're showing. Each value is measured
+// in its own field's font (how wide a digit or a letter is depends on the
+// typeface, so counting characters isn't enough), and style.css adds the
+// field's padding to --value-width. Every place a field's value changes calls
+// this. All the measuring comes before any of the resizing so the browser
+// works out the styles once, not once per field. The widths are in ems so
+// they follow the text if the reader's font size changes after the fact.
+const fieldRuler = document.createElement('canvas').getContext('2d')
+function fitFields(fields) {
+  const widths = fields.map(field => {
+    const css = getComputedStyle(field)
+    fieldRuler.font = `${css.fontStyle} ${css.fontWeight} ${css.fontSize} ${css.fontFamily}`
+    return Math.ceil(fieldRuler.measureText(field.value).width) / parseFloat(css.fontSize)
+  })
+  fields.forEach((field, i) => field.style.setProperty('--value-width', widths[i] + 'em'))
+}
+
 // Update slider fill gradient based on current value and bounds
 function updateSliderFill(slider) {
   try {
@@ -355,11 +371,15 @@ function updateSliderFill(slider) {
     if (!isFinite(min) || !isFinite(max) || !isFinite(value)) return
 
     const percentage = ((value - min) / (max - min)) * 100
-    const atBass = slider.classList.contains('at-bass')
 
-    // Use green fill when at base value, blue otherwise
-    const fillColor = atBass ? '#10b981' : '#3b82f6'
-    const trackColor = '#e5e7eb'
+    // Use green fill when at base value, blue otherwise. Which color that is
+    // lives in style.css (--fill-color and --track-color on .recipe-slider).
+    const css = getComputedStyle(slider)
+    const fillColor = css.getPropertyValue('--fill-color').trim()
+    const trackColor = css.getPropertyValue('--track-color').trim()
+    if (!fillColor || !trackColor) {
+      throw new Error('updateSliderFill: style.css must set --fill-color and --track-color on sliders')
+    }
     slider.style.background = `linear-gradient(to right, ${fillColor} 0%, ${fillColor} ${percentage}%, ${trackColor} ${percentage}%, ${trackColor} 100%)`
   } catch (err) {
     console.error('updateSliderFill error:', err)
@@ -373,7 +393,8 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
 
   const output = $('recipeOutput')
   // Sync text fields
-  output.querySelectorAll('input.recipe-field').forEach(field => {
+  const fields = [...output.querySelectorAll('input.recipe-field')]
+  fields.forEach(field => {
     const isEdited = editedFieldEl && field === editedFieldEl
     const c = state.cells.find(x => x.id === field.dataset.cellId)
     if (!c) throw new Error(`syncAfterSolve: no cell found for field id "${field.dataset.cellId}"`)
@@ -382,6 +403,7 @@ function syncAfterSolve(invalidCellIds, editedFieldEl = null) {
     }
     field.classList.toggle('invalid', invalidCellIds.has(field.dataset.cellId))
   })
+  fitFields(fields)
 
   // Sync inline sliders
   output.querySelectorAll('input.recipe-slider').forEach(slider => {
@@ -431,6 +453,7 @@ function clearInvalidInput(cellId) {
 
 function handleFieldInput(e) {
   const input = e.target
+  fitFields([input])
   const cellId = input.dataset.cellId
   const cell = state.cells.find(c => c.id === cellId)
   if (!cell) throw new Error(`handleFieldInput: no cell found for id "${cellId}"`)
@@ -480,6 +503,7 @@ function handleFieldBlur(e) {
   if (!cell) throw new Error(`handleFieldBlur: no cell found for id "${cellId}"`)
   if (state.invalidInputCellIds.has(cellId)) return
   input.value = formatNum(cell.cval)
+  fitFields([input])
 }
 
 function handleFieldKeypress(e) {
@@ -858,8 +882,17 @@ function setRecipeText(text) {
   source.open = true
   ta.focus()
   ta.select()
+  // execCommand inserts a multi-line template a line at a time, with an input
+  // event (so a run of the whole pipeline) per line. The URL holds still
+  // until the last line is in: WebKit throws a SecurityError past 100 URL
+  // rewrites in 10 seconds (updateAndCheckStateObjectQuota in
+  // https://github.com/WebKit/WebKit/blob/main/Source/WebCore/page/History.cpp)
+  // and a rewrite per line gets there in three dropdown switches.
+  urlUpdateEnabled = false
   const ok = document.execCommand('insertText', false, text)
+  urlUpdateEnabled = true
   if (!ok) throw new Error('setRecipeText: execCommand insertText failed')
+  updateUrl()
   source.open = wasOpen
   refocus.focus()
 }
