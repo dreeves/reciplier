@@ -50,6 +50,7 @@ function runParserQuals() {
     parseInequalities,
     parseCell,
     reciplify,
+    headsup,
   } = ctx
 
   const results = { passed: 0, failed: 0, errors: [] }
@@ -403,6 +404,52 @@ function runParserQuals() {
   check('reciplify: multi-line recipe',
     reciplify('1 cup flour\n2 tablespoons sugar\nMakes 8 pancakes, 120 calories each.'),
     '{1x} cup flour\n{2x} tablespoons sugar\nMakes {8x} pancakes, {120x} calories each.' + FOOT)
+
+  // ==========================================================================
+  // headsup quals
+  // ==========================================================================
+  // Replicata: call headsup on a template.
+  // Expectata: '' if the template has cells. Otherwise one of two notices,
+  //   depending on whether the template has bare numbers, meaning numbers
+  //   that reciplify would wrap in cells.
+  // Resultata (before the feature): headsup didn't exist.
+
+  console.log('\n=== headsup quals ===')
+
+  // Exact copy as specified by the human
+  const HEADSUP_BARENUMS = 'There are no cells in that recipe template; try hitting the Reciplify button?'
+  const HEADSUP_NUMLESS = 'Your recipe seems to not have any numbers so might not make sense for Reciplier'
+
+  check('headsup: numbers but no cells',
+    headsup('Fry 2 eggs in 1/2 tbsp butter.'), HEADSUP_BARENUMS)
+  check('headsup: no numbers and no cells',
+    headsup('Fry eggs in butter.'), HEADSUP_NUMLESS)
+  check('headsup: none for a template with cells',
+    headsup('Fry {2x} eggs, scaled by {x:1}'), '')
+  check('headsup: none for a template with cells and bare numbers',
+    headsup('Fry {2x} eggs and 3 strips of bacon'), '')
+  check('headsup: none for a template with a cell and no numbers at all',
+    headsup('Scale by {x}'), '')
+  check('headsup: empty template has no numbers and no cells',
+    headsup(''), HEADSUP_NUMLESS)
+  check('headsup: whitespace-only template has no numbers and no cells',
+    headsup(' \n '), HEADSUP_NUMLESS)
+  check('headsup: vulgar-fraction glyph counts as a number',
+    headsup('add ½ cup milk'), HEADSUP_BARENUMS)
+  check('headsup: leading-dot decimal counts as a number',
+    headsup('add .5 tsp salt'), HEADSUP_BARENUMS)
+  check('headsup: numbers glued to letters are not bare numbers',
+    headsup('225g flour in a 9x13 pan'), HEADSUP_NUMLESS)
+  check('headsup: same answer on repeated calls',
+    [headsup('add 2 eggs'), headsup('add 2 eggs'), headsup('add 2 eggs')],
+    [HEADSUP_BARENUMS, HEADSUP_BARENUMS, HEADSUP_BARENUMS])
+  // The Reciplify suggestion shows exactly when reciplify would wrap a number
+  // (as opposed to only appending its footer)
+  for (const t of ['Fry 2 eggs', 'Fry eggs', '', '225g flour', 'add 1½ cups',
+                   'v1.2.3 on 10/12/2024', 'bake 30 min at 350.']) {
+    check(`headsup: suggests Reciplify iff reciplify would wrap a number in ${JSON.stringify(t)}`,
+      headsup(t) === HEADSUP_BARENUMS, reciplify(t) !== t.trimEnd() + FOOT)
+  }
 
   // ==========================================================================
   // Summary

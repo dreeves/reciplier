@@ -242,7 +242,15 @@ function renderRecipe() {
   const nonCriticalBanners = `<div id="nonCriticalBanners">${solveBanner}${invalidExplainBanner}</div>`
   const errorAssignments = assignErrorsToCells(criticalErrors, state.cells)
 
-  output.innerHTML = `${nonCriticalBanners}${renderRecipeBody({ disableInputs: false, invalidCellIds })}`
+  // Headsup: see headsup() in reciparse.js. Dismissing only hides this
+  // element, so the next render (any template change) builds it afresh.
+  const headsupMsg = headsup(state.recipeText)
+  // TODO: aria-label on the headsup's dismiss button, meaning "Dismiss"
+  const headsupBanner = `<div id="headsupBanner" class="headsup-display"${headsupMsg ? '' : ' hidden'}>
+        <div class="headsup-message"><span class="headsup-text">${escapeHtml(headsupMsg)}</span><button id="headsupDismiss" type="button" class="headsup-dismiss" aria-label="Dimitte">×</button></div>
+      </div>`
+
+  output.innerHTML = `${headsupBanner}${nonCriticalBanners}${renderRecipeBody({ disableInputs: false, invalidCellIds })}`
   output.style.display = 'block'
   copySection.style.display = 'block'
 
@@ -250,7 +258,9 @@ function renderRecipe() {
   criticalErrorBanners(rendered, errorAssignments)
 
   $('copyButton').disabled = criticalErrors.length > 0
-  
+
+  $('headsupDismiss').addEventListener('click', () => { $('headsupBanner').hidden = true })
+
   // Attach event handlers to text field inputs
   output.querySelectorAll('input.recipe-field').forEach(input => {
     input.addEventListener('input', handleFieldInput)

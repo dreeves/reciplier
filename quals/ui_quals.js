@@ -19,7 +19,7 @@ function fileUrl(p) {
 
 // Track and display qual progress
 // Individual quals grouped into milestones for progress display
-const TOTAL_QUALS = 197
+const TOTAL_QUALS = 230
 let milestonesCompleted = 0
 function pass(name) {
   milestonesCompleted++
@@ -2632,7 +2632,7 @@ async function main() {
     assert.equal((await page.$$('#recipeOutput input')).length, 0,
       'celless: the output should have no fields or sliders (none left over from gratio either)')
     assert.equal(await visibleBanners(), 0,
-      'celless: no banner should show')
+      'celless: no error banner should show')
     assert.equal(await hasHeight('#copyButton'), true,
       'celless: the Copy button should stay on the page')
     assert.equal(await page.$eval('#copyButton', el => el.disabled), false,
@@ -2649,7 +2649,7 @@ async function main() {
     assert.equal((await page.$$('#recipeOutput input')).length, 0,
       'empty template: the output should have no fields or sliders')
     assert.equal(await visibleBanners(), 0,
-      'empty template: no banner should show')
+      'empty template: no error banner should show')
     assert.equal(await hasHeight('#copyButton'), true,
       'empty template: the Copy button should stay on the page')
     // Cells come back when the template gets them back
@@ -2657,6 +2657,68 @@ async function main() {
     assert.equal(await getInputValue(page, 'input.recipe-field[data-label="2x"]'), '2',
       'celless: giving the template cells again should render their fields')
     pass('celless template renders')
+
+    // Qual: a template with no cells gets a dismissable headsup at the top of
+    // the output section.
+    // Replicata: load a template with bare numbers but no cells; dismiss the
+    //   headsup; change the template to one with no numbers; empty it; give
+    //   it cells; switch to a reciplate.
+    // Expectata: with numbers, the headsup suggests the Reciplify button.
+    //   With no numbers (the empty template included), it says the recipe
+    //   might not make sense for Reciplier. With cells, no headsup. The
+    //   dismiss button hides the headsup and nothing else, and the next
+    //   template change brings back whichever headsup applies.
+    // Resultata (before the feature): no headsup existed.
+    // Exact copy as specified by the human
+    const HEADSUP_BARENUMS = 'There are no cells in that recipe template; try hitting the Reciplify button?'
+    const HEADSUP_NUMLESS = 'Your recipe seems to not have any numbers so might not make sense for Reciplier'
+    const headsupShown = () => page.$eval('#headsupBanner',
+      el => !el.hidden && el.getBoundingClientRect().height > 0)
+    const headsupText = () => page.$eval('#headsupBanner .headsup-text', el => el.textContent)
+    await setTemplate(cellessTemplate)
+    assert.equal(await headsupShown(), true,
+      'headsup: a template with numbers but no cells should show the headsup')
+    assert.equal(await headsupText(), HEADSUP_BARENUMS,
+      'headsup: numbers but no cells should suggest the Reciplify button')
+    assert.equal(await page.evaluate(() =>
+      document.querySelector('#headsupBanner').getBoundingClientRect().bottom <=
+      document.querySelector('#recipeOutput .recipe-rendered').getBoundingClientRect().top), true,
+      'headsup: should sit above the rendered recipe text')
+    assert.equal(await page.evaluate(() => {
+      const banner = document.querySelector('#headsupBanner').getBoundingClientRect()
+      const output = document.querySelector('#recipeOutput').getBoundingClientRect()
+      return banner.top >= output.top && banner.bottom <= output.bottom
+    }), true, 'headsup: should sit inside the output section')
+    assert.ok((await page.$eval('#headsupDismiss', el => el.getAttribute('aria-label'))).length > 0,
+      'headsup: the dismiss button should have an accessible name')
+    await page.click('#headsupDismiss')
+    assert.equal(await headsupShown(), false,
+      'headsup: clicking dismiss should hide the headsup')
+    assert.equal(await renderedText(), cellessTemplate,
+      'headsup: dismissing should leave the rendered recipe alone')
+    assert.equal(await hasHeight('#copyButton'), true,
+      'headsup: dismissing should leave the Copy button alone')
+    await setTemplate('Fry eggs in butter.')
+    assert.equal(await headsupShown(), true,
+      'headsup: a changed template should show its headsup even after a dismissal')
+    assert.equal(await headsupText(), HEADSUP_NUMLESS,
+      'headsup: no numbers and no cells should say the recipe might not make sense for Reciplier')
+    await setTemplate('')
+    assert.equal(await headsupShown(), true,
+      'headsup: an empty template has no numbers and no cells, so it should show the headsup')
+    assert.equal(await headsupText(), HEADSUP_NUMLESS,
+      'headsup: an empty template should say the recipe might not make sense for Reciplier')
+    await setTemplate('{2x} eggs, scaled by {x:1}')
+    assert.equal(await headsupShown(), false,
+      'headsup: a template with cells should show no headsup')
+    await selectReciplate('crepes')
+    assert.equal(await headsupShown(), false,
+      'headsup: a reciplate from the dropdown should show no headsup')
+    assert.deepEqual(await page.evaluate(() =>
+      Object.keys(reciplates).filter(k => typeof reciplates[k] === 'string')
+                             .filter(k => headsup(reciplates[k]) !== '')), [],
+      'headsup: no reciplate in the dropdown should warrant a headsup')
+    pass('headsup for celless templates')
 
     // Qual: the reciplify button turns a plaintext recipe into a reciplate.
     // Reciplify lives in the collapsed-by-default editor, so open it first;
@@ -2666,11 +2728,17 @@ async function main() {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }, 'Fry 2 eggs in 1/2 tbsp butter.')
+    assert.equal(await headsupShown(), true,
+      'reciplify: the plaintext recipe should show a headsup before the click')
+    assert.equal(await headsupText(), HEADSUP_BARENUMS,
+      'reciplify: the headsup before the click should suggest the Reciplify button')
     await page.click('#reciplifyButton')
     await waitForNextFrame(page)
     assert.equal(await getInputValue(page, '#recipeTextarea'),
       'Fry {2x} eggs in {(1/2)*x} tbsp butter.\n\nScaled by a factor of {x : 1} \n{.1 <= x <= 10}\n',
       'reciplify: textarea should hold the converted reciplate')
+    assert.equal(await headsupShown(), false,
+      'reciplify: taking the suggestion should clear the headsup')
     assert.equal(await page.$eval('#recipeSelect', el => el.value), 'custom',
       'reciplify: dropdown should flip to custom')
     assert.equal((await page.$$('input.recipe-field')).length, 3,
@@ -2720,6 +2788,8 @@ async function main() {
       'undo: restored plaintext should show in the rendered output')
     assert.equal((await page.$$('#recipeOutput input')).length, 0,
       'undo: restored plaintext should render with no fields')
+    assert.equal(await headsupText(), HEADSUP_BARENUMS,
+      'undo: restored plaintext should bring back the headsup suggesting Reciplify')
     await undoTextarea('redo')
     assert.equal(await getInputValue(page, '#recipeTextarea'),
       'Fry {2x} eggs in {(1/2)*x} tbsp butter.\n\nScaled by a factor of {x : 1} \n{.1 <= x <= 10}\n',

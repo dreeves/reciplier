@@ -167,6 +167,30 @@ function reciplify(text) {
   return scaled.trimEnd() + '\n\n' + SCALE_FOOTER + '\n'
 }
 
+// =============================================================================
+// Headsup: a notice for a template that has no cells
+// =============================================================================
+// "Headsup" (jargon): the dismissable notice at the top of the output section
+// for a template with no cells. Which of the two notices depends on whether
+// the template has bare numbers, meaning numbers reciplify would wrap in cells
+// (same BARENUM_RE), so the suggestion to hit Reciplify shows exactly when
+// Reciplify would convert something. '' means no headsup.
+
+// TODO: (exact copy from the human) the template has no cells but does have
+// numbers Reciplify would convert, so suggest the Reciplify button
+const HEADSUP_BARENUMS = 'There are no cells in that recipe template; try hitting the Reciplify button?'
+// TODO: (exact copy from the human) the template has no cells and no numbers
+// to make cells from, so Reciplier may have nothing to offer it
+const HEADSUP_NUMLESS = 'Your recipe seems to not have any numbers so might not make sense for Reciplier'
+
+function headsup(text) {
+  const celless = extractCells(text).length === 0
+  // search, not test: BARENUM_RE is global, so test would carry lastIndex
+  // from one call to the next
+  const barenums = text.search(BARENUM_RE) !== -1
+  return !celless ? '' : barenums ? HEADSUP_BARENUMS : HEADSUP_NUMLESS
+}
+
 // Parse a single cell's content into cval and ceqn
 // Per spec: ceqn is a list of non-constant expressions split on "=".
 // cval is the constant if there is one, null otherwise.
